@@ -13,7 +13,7 @@ interface MapAssetInspectorProps {
   currentSessionId?: string | null;
 }
 
-type PreviewKind = 'iframe' | 'video' | 'image' | 'none';
+type PreviewKind = 'iframe' | 'video' | 'image' | 'source-data' | 'none';
 
 interface PreviewDescriptor {
   kind: PreviewKind;
@@ -56,6 +56,13 @@ function embedVideoUrl(url: string) {
 }
 
 function describePreview(asset: MapAsset): PreviewDescriptor {
+  if (asset.live) {
+    return {
+      kind: 'source-data',
+      note: 'Live source records are rendered from parsed feed data. Open the source only when you need the provider page.',
+    };
+  }
+
   const sourceUrl = asset.sourceUrl.trim();
   if (!sourceUrl) {
     return { kind: 'none', note: 'Attach a URL or local route to preview this asset here.' };
@@ -110,6 +117,17 @@ function formatObservedAt(value: string | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function sourceDataRows(asset: MapAsset) {
+  return [
+    ['Source', asset.sourceName || asset.sourceId || 'Operator'],
+    ['Status', asset.status || 'Unspecified'],
+    ['Severity', asset.severity || 'Unspecified'],
+    ['Confidence', asset.confidence || 'Unspecified'],
+    ['Observed', formatObservedAt(asset.observedAt) || 'Unspecified'],
+    ['Location', locationLabel(asset)],
+  ].filter(([, value]) => value);
 }
 
 export default function MapAssetInspector({ asset, currentSessionId }: MapAssetInspectorProps) {
@@ -176,6 +194,25 @@ export default function MapAssetInspector({ asset, currentSessionId }: MapAssetI
 
         {preview.kind === 'image' && preview.src ? (
           <img className="ops-asset-image" src={preview.src} alt={asset.title} loading="lazy" />
+        ) : null}
+
+        {preview.kind === 'source-data' ? (
+          <div className="ops-source-data-preview">
+            <div className="ops-source-data-head">
+              <span>{asset.sourceName || 'Live Source'}</span>
+              {asset.observedAt ? <time>{formatObservedAt(asset.observedAt)}</time> : null}
+            </div>
+            <div className="ops-source-data-title">{asset.title}</div>
+            <div className="ops-source-data-grid">
+              {sourceDataRows(asset).map(([label, value]) => (
+                <div key={label} className="ops-source-data-row">
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+            {asset.notes ? <p>{asset.notes}</p> : null}
+          </div>
         ) : null}
 
         {preview.kind === 'none' ? (
