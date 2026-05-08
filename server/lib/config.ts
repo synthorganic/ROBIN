@@ -71,6 +71,11 @@ export const config = {
   gatewayToken: process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || '',
   publicOrigin: process.env.NERVE_PUBLIC_ORIGIN || '',
 
+  // Local OpenAI-compatible chat API (LM Studio, llama.cpp server, vLLM, etc.)
+  localApiBaseUrl: process.env.LOCAL_API_BASE_URL || process.env.LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234',
+  localApiKey: process.env.LOCAL_API_KEY || process.env.LMSTUDIO_API_KEY || '',
+  localApiModel: process.env.LOCAL_API_MODEL || process.env.LMSTUDIO_MODEL || '',
+
   // Agent identity (used in UI)
   agentName: process.env.AGENT_NAME || 'Agent',
 
@@ -94,8 +99,9 @@ export const config = {
     tts: 64 * 1024,                  // 64 KB
     agentLog: 64 * 1024,             // 64 KB
     transcribe: 12 * 1024 * 1024,    // 12 MB
+    documents: 64 * 1024 * 1024,     // 64 MB
     /** Global max request body size (transcribe + 1 MB overhead) */
-    maxBodyBytes: 12 * 1024 * 1024 + 1024 * 1024,  // ~13 MB
+    maxBodyBytes: 64 * 1024 * 1024 + 1024 * 1024,  // ~65 MB
   },
 
   // Agent log

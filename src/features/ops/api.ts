@@ -3,6 +3,14 @@ export interface AgentMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   text: string;
   createdAt: string;
+  reasoning?: string[];
+  toolCalls?: AgentToolCall[];
+}
+
+export interface AgentToolCall {
+  type: string;
+  name: string;
+  arguments?: string;
 }
 
 export interface AgentSession {
@@ -72,18 +80,99 @@ export interface MapLayer {
 }
 
 export interface MapSourceStatus {
-  id: 'gdelt' | 'gdacs' | 'usgs' | 'nws' | 'firms';
+  id:
+    | 'gdelt'
+    | 'gdacs'
+    | 'usgs'
+    | 'nws'
+    | 'firms'
+    | 'radnet'
+    | 'eurdep'
+    | 'safecast'
+    | 'gmcmap'
+    | 'ntad'
+    | 'faf'
+    | 'marinecadastre'
+    | 'mobilitydb'
+    | 'tigerline';
   name: string;
-  category: 'news' | 'disaster' | 'seismic' | 'weather' | 'fire';
+  category: 'news' | 'disaster' | 'seismic' | 'weather' | 'fire' | 'nuclear' | 'transport' | 'freight' | 'maritime' | 'mobility' | 'reference';
   enabled: boolean;
   ok: boolean;
   stale: boolean;
+  catalogOnly?: boolean;
   itemCount: number;
   refreshSeconds: number;
   lastFetchedAt?: string;
   lastError?: string;
   attribution: string;
   requiresKey?: boolean;
+  description?: string;
+}
+
+export interface OpsDocument {
+  id: string;
+  project: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  kind: string;
+  sizeBytes: number;
+  storagePath: string;
+  sourceUrl: string;
+  uploadedAt: string;
+  textPreview?: string;
+}
+
+export interface AgentToolCatalogItem {
+  id: string;
+  directoryName: string;
+  displayName: string;
+  aliases: string[];
+  category: string;
+  description: string;
+  promptExcerpt: string;
+  promptPath?: string;
+  toolPath?: string;
+}
+
+export interface AgentToolCatalog {
+  sourcePath: string;
+  tools: AgentToolCatalogItem[];
+  generatedAt: string;
+}
+
+export interface ApiKeyStatus {
+  openaiKeySet: boolean;
+  replicateKeySet: boolean;
+  xiaomiKeySet: boolean;
+}
+
+export type AgentTransport = 'gateway' | 'local';
+
+export interface LocalApiModel {
+  id: string;
+  name?: string;
+  object?: string;
+  created?: number;
+}
+
+export interface LocalApiStatus {
+  baseUrl: string;
+  apiKeySet: boolean;
+  defaultModelId: string;
+  configuredFrom?: string;
+}
+
+export interface AgentSendOptions {
+  includeDocuments?: boolean;
+  includeToolInstructions?: boolean;
+  documentIds?: string[];
+  toolNames?: string[];
+  transport?: AgentTransport;
+  localModelId?: string;
+  localApiBaseUrl?: string;
+  localApiKey?: string;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -110,18 +199,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function uploadRequest<T>(path: string, body: FormData): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    body,
+  });
+
+  if (!response.ok) {
+    const raw = await response.text();
+    let parsedError = '';
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      parsedError = parsed.error || '';
+    } catch {
+      // Fall back to raw text when the error body is not JSON.
+    }
+    throw new Error(parsedError || raw || `Request failed: ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export const opsApi = {
-  createSession: (sessionKey?: string) =>
+  createSession: (sessionKey?: string, transport?: AgentTransport) =>
     request<{ ok: true; session: AgentSession }>('/api/agent/session', {
       method: 'POST',
-      body: JSON.stringify(sessionKey ? { sessionKey } : {}),
+      body: JSON.stringify({ ...(sessionKey ? { sessionKey } : {}), ...(transport ? { transport } : {}) }),
     }),
   getSession: (sessionId: string) =>
     request<{ ok: true; session: AgentSession }>(`/api/agent/session/${encodeURIComponent(sessionId)}`),
-  sendMessage: (sessionId: string, text: string) =>
+  sendMessage: (sessionId: string, text: string, options?: AgentSendOptions) =>
     request<{ ok: true; session: AgentSession }>(`/api/agent/session/${encodeURIComponent(sessionId)}/message`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, ...options }),
     }),
   abortSession: (sessionId: string) =>
     request<{ ok: true }>(`/api/agent/session/${encodeURIComponent(sessionId)}/abort`, {
@@ -196,5 +307,39 @@ export const opsApi = {
   deleteAsset: (assetId: string) =>
     request<{ ok: true }>(`/api/map/assets/${encodeURIComponent(assetId)}`, {
       method: 'DELETE',
+    }),
+  listDocuments: () =>
+    request<{ ok: true; documents: OpsDocument[] }>('/api/documents'),
+  uploadDocument: (file: File, project: string, title?: string) => {
+    const body = new FormData();
+    body.set('file', file);
+    body.set('project', project);
+    if (title) body.set('title', title);
+    return uploadRequest<{ ok: true; document: OpsDocument; documents: OpsDocument[] }>('/api/documents/upload', body);
+  },
+  deleteDocument: (documentId: string) =>
+    request<{ ok: true; documents: OpsDocument[] }>(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+    }),
+  getAgentToolCatalog: (refresh = false) =>
+    request<{ ok: true; catalog: AgentToolCatalog }>(`/api/agent-tools/catalog${refresh ? '?refresh=true' : ''}`),
+  getApiKeyStatus: () =>
+    request<ApiKeyStatus>('/api/keys'),
+  saveApiKeys: (payload: { openaiKey?: string; replicateToken?: string; mimoApiKey?: string }) =>
+    request<{ ok: true; message: string } & ApiKeyStatus>('/api/keys', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  getLocalApiStatus: () =>
+    request<{ ok: true; localApi: LocalApiStatus }>('/api/agent/local-api'),
+  saveLocalApiConfig: (payload: { baseUrl: string; apiKey?: string; defaultModelId?: string }) =>
+    request<{ ok: true; localApi: LocalApiStatus }>('/api/agent/local-api', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  pollLocalApiModels: (payload: { baseUrl: string; apiKey?: string }) =>
+    request<{ ok: true; connected: true; baseUrl: string; models: LocalApiModel[] }>('/api/agent/local-api/models', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }),
 };

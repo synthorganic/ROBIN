@@ -81,6 +81,10 @@ const SOURCE_COLORS: Record<string, string> = {
   usgs: '#ff8f5d',
   nws: '#76ff9f',
   firms: '#ff6d72',
+  radnet: '#c59cff',
+  eurdep: '#a7b8ff',
+  safecast: '#77f2d9',
+  gmcmap: '#d8ff7f',
   manual: '#d8ff7f',
 };
 

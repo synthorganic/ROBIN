@@ -1,21 +1,37 @@
 import { createHash } from 'node:crypto';
 import type { OpsMapAsset } from './ops-map-store.js';
 
-export type OpsGeoSourceId = 'gdelt' | 'gdacs' | 'usgs' | 'nws' | 'firms';
+export type OpsGeoSourceId =
+  | 'gdelt'
+  | 'gdacs'
+  | 'usgs'
+  | 'nws'
+  | 'firms'
+  | 'radnet'
+  | 'eurdep'
+  | 'safecast'
+  | 'gmcmap'
+  | 'ntad'
+  | 'faf'
+  | 'marinecadastre'
+  | 'mobilitydb'
+  | 'tigerline';
 
 export interface OpsGeoSourceStatus {
   id: OpsGeoSourceId;
   name: string;
-  category: 'news' | 'disaster' | 'seismic' | 'weather' | 'fire';
+  category: 'news' | 'disaster' | 'seismic' | 'weather' | 'fire' | 'nuclear' | 'transport' | 'freight' | 'maritime' | 'mobility' | 'reference';
   enabled: boolean;
   ok: boolean;
   stale: boolean;
+  catalogOnly?: boolean;
   itemCount: number;
   refreshSeconds: number;
   lastFetchedAt?: string;
   lastError?: string;
   attribution: string;
   requiresKey?: boolean;
+  description?: string;
 }
 
 export interface OpsGeoSourceSnapshot {
@@ -31,6 +47,8 @@ interface SourceDefinition {
   refreshSeconds: number;
   attribution: string;
   requiresKey?: boolean;
+  catalogOnly?: boolean;
+  description?: string;
   isEnabled?: () => boolean;
   disabledReason?: string;
   fetch: () => Promise<OpsMapAsset[]>;
@@ -44,6 +62,7 @@ interface SourceRunResult {
 const DEFAULT_TIMEOUT_MS = Number(process.env.INERTIAI_OPS_GEO_TIMEOUT_MS || 12_000);
 const DEFAULT_CACHE_MS = Number(process.env.INERTIAI_OPS_GEO_CACHE_MS || 5 * 60_000);
 const USER_AGENT = process.env.INERTIAI_OPS_USER_AGENT || 'ROBIN/1.5 ops-map (local operator dashboard)';
+const ONE_DAY_SECONDS = 24 * 60 * 60;
 
 function stableId(sourceId: OpsGeoSourceId, parts: Array<string | number | undefined | null>) {
   const hash = createHash('sha1')
@@ -543,6 +562,47 @@ async function fetchFirmsAssets(): Promise<OpsMapAsset[]> {
     .slice(0, limit);
 }
 
+async function fetchRadNetAssets(): Promise<OpsMapAsset[]> {
+  const endpoint = process.env.INERTIAI_OPS_RADNET_URL
+    || 'https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/EPA_Radiation_Air_Monitors/FeatureServer/0/query';
+  const params = new URLSearchParams({
+    where: '1=1',
+    outFields: '*',
+    returnGeometry: 'true',
+    f: 'geojson',
+    resultRecordCount: process.env.INERTIAI_OPS_RADNET_LIMIT || '200',
+  });
+  const payload = await fetchJson(`${endpoint}?${params.toString()}`);
+  const features = isRecord(payload) ? asArray(payload.features) : [];
+
+  return features
+    .map((feature) => {
+      if (!isRecord(feature)) return null;
+      const point = pointFromGeometry(feature.geometry);
+      if (!point || !isRecord(feature.properties)) return null;
+      const props = feature.properties;
+      const city = cleanText(props.city || props.name, 'RadNet monitor');
+      const state = cleanText(props.State_Abbr || props.state);
+      const monitorType = cleanText(props.type, 'Fixed');
+      const sourceUrl = cleanText(props.url || 'https://www.epa.gov/radnet');
+
+      return sourceAsset('radnet', {
+        idParts: [cleanText(props.OBJECTID), city, state, point.lat, point.lng],
+        title: `EPA RadNet: ${city}${state ? `, ${state}` : ''}`,
+        lat: point.lat,
+        lng: point.lng,
+        sourceUrl,
+        notes: `${monitorType} EPA RadNet air monitor. RadNet is used for near-real-time gamma radiation monitoring and higher-than-normal radiation detection during incidents.`,
+        tags: ['nuclear', 'radiation', 'gamma', 'radnet', 'monitor', state.toLowerCase()],
+        status: `${monitorType} monitor`,
+        sourceName: 'EPA RadNet',
+        severity: 'info',
+        confidence: 'high',
+      });
+    })
+    .filter((asset): asset is OpsMapAsset => Boolean(asset));
+}
+
 const SOURCE_DEFINITIONS: SourceDefinition[] = [
   {
     id: 'gdelt',
@@ -586,6 +646,95 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     isEnabled: () => Boolean(firmsMapKey()),
     disabledReason: 'Set FIRMS_MAP_KEY or NASA_FIRMS_MAP_KEY to enable active-fire points.',
     fetch: fetchFirmsAssets,
+  },
+  {
+    id: 'radnet',
+    name: 'EPA RadNet',
+    category: 'nuclear',
+    refreshSeconds: 15 * 60,
+    attribution: 'U.S. Environmental Protection Agency RadNet',
+    description: 'U.S. near-real-time gamma radiation air monitoring network across all 50 states.',
+    fetch: fetchRadNetAssets,
+  },
+  {
+    id: 'eurdep',
+    name: 'EURDEP',
+    category: 'nuclear',
+    refreshSeconds: 15 * 60,
+    attribution: 'European Commission Joint Research Centre EURDEP',
+    catalogOnly: true,
+    description: 'European radiological monitoring exchange with near-real-time data from participating countries.',
+    fetch: async () => [],
+  },
+  {
+    id: 'safecast',
+    name: 'Safecast',
+    category: 'nuclear',
+    refreshSeconds: 15 * 60,
+    attribution: 'Safecast open radiation dataset',
+    catalogOnly: true,
+    description: 'Global community and fixed-sensor radiation measurements released under CC0.',
+    fetch: async () => [],
+  },
+  {
+    id: 'gmcmap',
+    name: 'GMCMap',
+    category: 'nuclear',
+    refreshSeconds: 10 * 60,
+    attribution: 'GQ Electronics GMCMap community Geiger counter network',
+    catalogOnly: true,
+    description: 'Global community Geiger counter map; useful as a weak signal with variable device quality.',
+    fetch: async () => [],
+  },
+  {
+    id: 'ntad',
+    name: 'BTS NTAD',
+    category: 'transport',
+    refreshSeconds: ONE_DAY_SECONDS,
+    attribution: 'Bureau of Transportation Statistics National Transportation Atlas Database',
+    catalogOnly: true,
+    description: 'U.S. multimodal transportation facilities, modal networks, and intermodal terminals.',
+    fetch: async () => [],
+  },
+  {
+    id: 'faf',
+    name: 'BTS FAF',
+    category: 'freight',
+    refreshSeconds: ONE_DAY_SECONDS,
+    attribution: 'Bureau of Transportation Statistics Freight Analysis Framework',
+    catalogOnly: true,
+    description: 'U.S. freight flow estimates by mode, commodity, and origin/destination.',
+    fetch: async () => [],
+  },
+  {
+    id: 'marinecadastre',
+    name: 'MarineCadastre AIS',
+    category: 'maritime',
+    refreshSeconds: ONE_DAY_SECONDS,
+    attribution: 'NOAA Office for Coastal Management / BOEM MarineCadastre.gov AIS',
+    catalogOnly: true,
+    description: 'U.S. vessel traffic AIS downloads for maritime movement and port congestion context.',
+    fetch: async () => [],
+  },
+  {
+    id: 'mobilitydb',
+    name: 'Mobility Database / GTFS',
+    category: 'mobility',
+    refreshSeconds: ONE_DAY_SECONDS,
+    attribution: 'MobilityData Mobility Database and GTFS / GTFS-Realtime feeds',
+    catalogOnly: true,
+    description: 'Global public transit schedules and realtime feeds for urban mobility context.',
+    fetch: async () => [],
+  },
+  {
+    id: 'tigerline',
+    name: 'Census TIGER/Line',
+    category: 'reference',
+    refreshSeconds: ONE_DAY_SECONDS,
+    attribution: 'U.S. Census Bureau TIGER/Line and TIGERweb',
+    catalogOnly: true,
+    description: 'U.S. roads, boundaries, and geographic reference files.',
+    fetch: async () => [],
   },
 ];
 
@@ -637,6 +786,8 @@ class OpsGeoSourceService {
       lastFetchedAt: fetchedAt,
       attribution: definition.attribution,
       requiresKey: definition.requiresKey,
+      catalogOnly: definition.catalogOnly,
+      description: definition.description,
     };
 
     if (!enabled) {

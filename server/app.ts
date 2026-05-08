@@ -18,7 +18,6 @@ import { cacheHeaders } from './middleware/cache-headers.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { authMiddleware } from './middleware/auth.js';
-import { requestLogging } from './middleware/request-logging.js';
 import { config } from './lib/config.js';
 import { resolveCorsOrigin } from './lib/origin-utils.js';
 
@@ -54,6 +53,8 @@ import opsTerminalRoutes from './routes/ops-terminals.js';
 import opsBridgeRoutes from './routes/ops-bridge.js';
 import opsMapRoutes from './routes/ops-map.js';
 import opsWorkspaceRoutes from './routes/ops-workspace.js';
+import opsDocumentsRoutes from './routes/ops-documents.js';
+import opsLocalApiRoutes from './routes/ops-local-api.js';
 // activity routes removed — tab dropped from workspace panel
 
 const app = new Hono();
@@ -98,8 +99,8 @@ const routes = [
   codexLimitsRoutes, claudeCodeLimitsRoutes, versionRoutes, versionCheckRoutes,
   gatewayRoutes, connectDefaultsRoutes,
   workspaceRoutes, cronsRoutes, sessionsRoutes, skillsRoutes, filesRoutes, apiKeysRoutes,
-  voicePhrasesRoutes, fileBrowserRoutes, channelsRoutes, kanbanRoutes,
-  opsAgentRoutes, opsTerminalRoutes, opsBridgeRoutes, opsMapRoutes, opsWorkspaceRoutes, sharedChatRoutes,
+  voicePhrasesRoutes, fileBrowserRoutes, channelsRoutes, kanbanRoutes, agentToolsRoutes,
+  opsAgentRoutes, opsTerminalRoutes, opsBridgeRoutes, opsMapRoutes, opsWorkspaceRoutes, opsDocumentsRoutes, opsLocalApiRoutes, sharedChatRoutes,
 ];
 for (const route of routes) app.route('/', route);
 

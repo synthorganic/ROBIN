@@ -7,8 +7,8 @@ const app = new Hono();
 
 app.post('/api/agent/session', async (c) => {
   try {
-    const body = await c.req.json().catch(() => ({})) as { sessionKey?: string };
-    const session = await opsAgentService.ensureSession(body.sessionKey);
+    const body = await c.req.json().catch(() => ({})) as { sessionKey?: string; transport?: 'gateway' | 'local' };
+    const session = await opsAgentService.ensureSession(body.sessionKey, { transport: body.transport });
     return c.json({ ok: true, session });
   } catch (error) {
     return c.json({ ok: false, error: (error as Error).message }, 503);
@@ -35,12 +35,31 @@ app.get('/api/agent/session/:id/history', async (c) => {
 
 app.post('/api/agent/session/:id/message', async (c) => {
   try {
-    const body = await c.req.json().catch(() => ({})) as { text?: string };
+    const body = await c.req.json().catch(() => ({})) as {
+      text?: string;
+      includeDocuments?: boolean;
+      includeToolInstructions?: boolean;
+      documentIds?: string[];
+      toolNames?: string[];
+      transport?: 'gateway' | 'local';
+      localModelId?: string;
+      localApiBaseUrl?: string;
+      localApiKey?: string;
+    };
     if (!body.text?.trim()) {
       return c.json({ ok: false, error: 'Message text is required' }, 400);
     }
 
-    const session = await opsAgentService.sendMessage(c.req.param('id'), body.text.trim());
+    const session = await opsAgentService.sendMessage(c.req.param('id'), body.text.trim(), {
+      includeDocuments: body.includeDocuments,
+      includeToolInstructions: body.includeToolInstructions,
+      documentIds: Array.isArray(body.documentIds) ? body.documentIds.map(String) : undefined,
+      toolNames: Array.isArray(body.toolNames) ? body.toolNames.map(String) : undefined,
+      transport: body.transport,
+      localModelId: typeof body.localModelId === 'string' ? body.localModelId : undefined,
+      localApiBaseUrl: typeof body.localApiBaseUrl === 'string' ? body.localApiBaseUrl : undefined,
+      localApiKey: typeof body.localApiKey === 'string' ? body.localApiKey : undefined,
+    });
     return c.json({ ok: true, session });
   } catch (error) {
     return c.json({ ok: false, error: (error as Error).message }, 503);

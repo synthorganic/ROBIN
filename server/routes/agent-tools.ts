@@ -5,8 +5,9 @@
  */
 import { Hono } from 'hono';
 import { globTool, type GlobOptions, type GlobResult } from '../lib/tools/tool-glob.js';
-import { grepTool, type GrepOptions, type GrepMatch } from '../lib/tools/tool-grep.js';
+import { grepTool } from '../lib/tools/tool-grep.js';
 import { sleepTool, type SleepOptions } from '../lib/tools/tool-sleep.js';
+import { getOpsAgentToolCatalog } from '../lib/ops-agent-tool-catalog.js';
 
 const app = new Hono();
 
@@ -89,10 +90,18 @@ app.post('/api/agent-tools/sleep', async (c) => {
 // ── Utility Routes ───────────────────────────────────────────────────
 
 app.get('/api/agent-tools', async (c) => {
+  const catalog = await getOpsAgentToolCatalog(c.req.query('refresh') === 'true');
   return c.json({
+    ok: true,
     tools: ['glob', 'grep', 'sleep'],
+    catalog,
     status: 'ready',
   });
+});
+
+app.get('/api/agent-tools/catalog', async (c) => {
+  const catalog = await getOpsAgentToolCatalog(c.req.query('refresh') === 'true');
+  return c.json({ ok: true, catalog });
 });
 
 export default app;

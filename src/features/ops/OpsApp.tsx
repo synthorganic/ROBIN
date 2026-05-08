@@ -5,18 +5,24 @@ import {
   BarChart3,
   Biohazard,
   Bot,
+  Brain,
+  ChevronRight,
   Code2,
   CornerDownLeft,
   DatabaseZap,
   FileText,
+  FileUp,
   Flame,
   Folder,
   Globe2,
+  KeyRound,
   Layers3,
   LoaderCircle,
   LogOut,
   MapPinned,
+  Route,
   Orbit,
+  Paperclip,
   Play,
   RadioTower,
   RefreshCw,
@@ -25,20 +31,32 @@ import {
   ShieldCheck,
   Square,
   TerminalSquare,
+  Trash2,
+  Upload,
+  Wrench,
 } from 'lucide-react';
+import AnimatedTraceList, { type AnimatedTraceItem } from './AnimatedTraceList';
 import BridgeWorkflowPanel from './BridgeWorkflowPanel';
 import FuzzyText from './FuzzyText';
 import LeafletMap from './LeafletMap';
 import MapAssetInspector from './MapAssetInspector';
-import TerminalPane from './TerminalPane';
+import TextType from './TextType';
 import {
   opsApi,
   type AgentMessage,
   type AgentSession,
+  type AgentToolCall,
+  type AgentToolCatalog,
+  type AgentToolCatalogItem,
+  type AgentTransport,
+  type ApiKeyStatus,
   type BridgeStatus,
+  type LocalApiModel,
+  type LocalApiStatus,
   type MapAsset,
   type MapLayer,
   type MapSourceStatus,
+  type OpsDocument,
   type TerminalState,
 } from './api';
 import './ops.css';
@@ -202,6 +220,24 @@ function sourceIcon(sourceId: string) {
       return <ShieldCheck size={16} />;
     case 'firms':
       return <Flame size={16} />;
+    case 'radnet':
+      return <Orbit size={16} />;
+    case 'eurdep':
+      return <Globe2 size={16} />;
+    case 'safecast':
+      return <RadioTower size={16} />;
+    case 'gmcmap':
+      return <RadioTower size={16} />;
+    case 'ntad':
+      return <Route size={16} />;
+    case 'faf':
+      return <Folder size={16} />;
+    case 'marinecadastre':
+      return <Satellite size={16} />;
+    case 'mobilitydb':
+      return <RadioTower size={16} />;
+    case 'tigerline':
+      return <MapPinned size={16} />;
     default:
       return <Folder size={16} />;
   }
@@ -209,9 +245,91 @@ function sourceIcon(sourceId: string) {
 
 function sourceStatusTone(source: MapSourceStatus | undefined) {
   if (!source) return 'idle';
+  if (source.catalogOnly) return 'catalog';
   if (!source.enabled) return 'muted';
   if (source.ok) return source.stale ? 'stale' : 'ok';
   return source.stale ? 'stale' : 'error';
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function groupDocumentsByProject(documents: OpsDocument[]) {
+  const groups = new Map<string, OpsDocument[]>();
+  for (const document of documents) {
+    const project = document.project || 'General';
+    groups.set(project, [...(groups.get(project) ?? []), document]);
+  }
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([project, items]) => ({
+      project,
+      documents: items.sort((left, right) => right.uploadedAt.localeCompare(left.uploadedAt)),
+    }));
+}
+
+function groupToolsByCategory(tools: AgentToolCatalogItem[]) {
+  const groups = new Map<string, AgentToolCatalogItem[]>();
+  for (const tool of tools) {
+    groups.set(tool.category, [...(groups.get(tool.category) ?? []), tool]);
+  }
+  return Array.from(groups.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, items]) => ({
+      category,
+      tools: items.sort((left, right) => left.displayName.localeCompare(right.displayName)),
+    }));
+}
+
+const THINK_TAG_PATTERN = /<\s*think\s*>([\s\S]*?)<\s*\/\s*think\s*>/gi;
+
+function clampTraceText(value: string) {
+  return value.trim().replace(/\n{3,}/g, '\n\n').slice(0, 2400);
+}
+
+function splitInlineReasoning(rawText: string) {
+  const reasoning: string[] = [];
+  const reply = String(rawText || '')
+    .replace(THINK_TAG_PATTERN, (_match, body) => {
+      const text = clampTraceText(String(body || ''));
+      if (text) reasoning.push(text);
+      return '';
+    })
+    .trim();
+  return { reply, reasoning };
+}
+
+function reasoningToTraceItems(reasoning: string[] = []): AnimatedTraceItem[] {
+  return reasoning
+    .map(clampTraceText)
+    .filter(Boolean)
+    .map((text, index) => ({
+      id: `reasoning-${index}`,
+      label: `Reasoning ${index + 1}`,
+      text,
+    }));
+}
+
+function toolCallsToTraceItems(toolCalls: AgentToolCall[] = []): AnimatedTraceItem[] {
+  return toolCalls.map((call, index) => {
+    const name = call.name || 'tool';
+    const type = call.type || 'tool';
+    const args = call.arguments?.trim();
+    return {
+      id: `tool-${index}`,
+      label: `${type} ${index + 1}`,
+      text: clampTraceText(args ? `${name}\n${args}` : name),
+    };
+  });
 }
 
 export default function OpsApp({ onLogout }: OpsAppProps) {
@@ -231,6 +349,26 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [layers, setLayers] = useState<MapLayer[]>([]);
   const [sourceStatuses, setSourceStatuses] = useState<MapSourceStatus[]>([]);
   const [sourceRefreshing, setSourceRefreshing] = useState(false);
+  const [documents, setDocuments] = useState<OpsDocument[]>([]);
+  const [documentProject, setDocumentProject] = useState('General');
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentDragActive, setDocumentDragActive] = useState(false);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [toolCatalog, setToolCatalog] = useState<AgentToolCatalog | null>(null);
+  const [selectedToolNames, setSelectedToolNames] = useState<string[]>([]);
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeySaving, setApiKeySaving] = useState(false);
+  const [agentTransport, setAgentTransport] = useState<AgentTransport>(() => (
+    localStorage.getItem('ops-agent-transport') === 'local' ? 'local' : 'gateway'
+  ));
+  const [localApiStatus, setLocalApiStatus] = useState<LocalApiStatus | null>(null);
+  const [localApiBaseUrl, setLocalApiBaseUrl] = useState('http://127.0.0.1:1234');
+  const [localApiKeyInput, setLocalApiKeyInput] = useState('');
+  const [localApiModel, setLocalApiModel] = useState('');
+  const [localApiModels, setLocalApiModels] = useState<LocalApiModel[]>([]);
+  const [localApiSaving, setLocalApiSaving] = useState(false);
+  const [localApiPolling, setLocalApiPolling] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MapAsset | null>(null);
   const [mapQuery, setMapQuery] = useState('');
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -248,6 +386,15 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     usgs: true,
     nws: true,
     firms: true,
+    radnet: true,
+    eurdep: true,
+    safecast: true,
+    gmcmap: true,
+    ntad: true,
+    faf: true,
+    marinecadastre: true,
+    mobilitydb: true,
+    tigerline: true,
   });
   const [error, setError] = useState('');
   const [bridgeBusyAction, setBridgeBusyAction] = useState<'handoff' | 'return' | 'cancel' | null>(null);
@@ -285,13 +432,28 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     setLoading(mode === 'bootstrap');
     try {
       const activeSessionId = sessionIdRef.current;
-      const [sessionResult, terminalResult, bridgeResult, assetsResult, layersResult, sourcesResult] = await Promise.allSettled([
-        activeSessionId ? opsApi.getSession(activeSessionId) : opsApi.createSession(),
+      const [
+        sessionResult,
+        terminalResult,
+        bridgeResult,
+        assetsResult,
+        layersResult,
+        sourcesResult,
+        documentsResult,
+        toolsResult,
+        keysResult,
+        localApiResult,
+      ] = await Promise.allSettled([
+        activeSessionId ? opsApi.getSession(activeSessionId) : opsApi.createSession(undefined, agentTransport),
         opsApi.listTerminals(),
         opsApi.getBridgeStatus(),
         opsApi.listAssets(),
         opsApi.listLayers(),
         opsApi.listSources(),
+        opsApi.listDocuments(),
+        opsApi.getAgentToolCatalog(),
+        opsApi.getApiKeyStatus(),
+        opsApi.getLocalApiStatus(),
       ]);
 
       if (sessionResult.status === 'fulfilled') {
@@ -318,6 +480,24 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         setSourceStatuses(sourcesResult.value.sources);
       }
 
+      if (documentsResult.status === 'fulfilled') {
+        setDocuments(documentsResult.value.documents);
+      }
+
+      if (toolsResult.status === 'fulfilled') {
+        setToolCatalog(toolsResult.value.catalog);
+      }
+
+      if (keysResult.status === 'fulfilled') {
+        setApiKeyStatus(keysResult.value);
+      }
+
+      if (localApiResult.status === 'fulfilled') {
+        setLocalApiStatus(localApiResult.value.localApi);
+        setLocalApiBaseUrl(localApiResult.value.localApi.baseUrl);
+        setLocalApiModel(localApiResult.value.localApi.defaultModelId);
+      }
+
       const bootErrors = [
         sessionResult.status === 'rejected' ? `Central agent unavailable: ${formatError(sessionResult.reason)}` : '',
         terminalResult.status === 'rejected' ? `Terminal bus unavailable: ${formatError(terminalResult.reason)}` : '',
@@ -325,12 +505,16 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         assetsResult.status === 'rejected' ? `Map assets unavailable: ${formatError(assetsResult.reason)}` : '',
         layersResult.status === 'rejected' ? `Map layers unavailable: ${formatError(layersResult.reason)}` : '',
         sourcesResult.status === 'rejected' ? `Map sources unavailable: ${formatError(sourcesResult.reason)}` : '',
+        documentsResult.status === 'rejected' ? `Documents unavailable: ${formatError(documentsResult.reason)}` : '',
+        toolsResult.status === 'rejected' ? `Agent tools unavailable: ${formatError(toolsResult.reason)}` : '',
+        keysResult.status === 'rejected' ? `API key status unavailable: ${formatError(keysResult.reason)}` : '',
+        localApiResult.status === 'rejected' ? `Local API config unavailable: ${formatError(localApiResult.reason)}` : '',
       ].filter(Boolean);
       setError(bootErrors.join(' | '));
     } finally {
       if (mode === 'bootstrap') setLoading(false);
     }
-  }, [applyTerminalStates]);
+  }, [agentTransport, applyTerminalStates]);
 
   useEffect(() => {
     let mounted = true;
@@ -342,16 +526,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       mounted = false;
     };
   }, [loadShellData]);
-
-  useEffect(() => {
-    setVisibleSources((current) => {
-      const next: Record<string, boolean> = { manual: current.manual ?? true };
-      for (const source of sourceStatuses) {
-        next[source.id] = current[source.id] ?? true;
-      }
-      return next;
-    });
-  }, [sourceStatuses]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -411,6 +585,10 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         });
       }
     });
+    eventSource.addEventListener('ops.documents.updated', (event: MessageEvent) => {
+      const payload = JSON.parse(event.data) as { data?: { documents?: OpsDocument[] } };
+      if (payload.data?.documents) setDocuments(payload.data.documents);
+    });
     return () => eventSource.close();
   }, []);
 
@@ -464,71 +642,37 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [applyTerminalState, clearError, handleError],
   );
 
-  const writeTerminalInput = useCallback(
-    async (terminalId: 'cli' | 'support', input: string) => {
-      try {
-        if (!terminals[terminalId].running) {
-          const startResponse = await opsApi.startTerminal(terminalId);
-          applyTerminalState(startResponse.terminal);
-        }
-        const writeResponse = await opsApi.writeTerminal(terminalId, input);
-        applyTerminalState(writeResponse.terminal);
-        clearError();
-      } catch (nextError) {
-        handleError(nextError);
-      }
-    },
-    [applyTerminalState, clearError, handleError, terminals],
-  );
-
-  const resizeTerminal = useCallback(
-    async (terminalId: TerminalState['id'], cols: number, rows: number) => {
-      try {
-        const response = await opsApi.resizeTerminal(terminalId, cols, rows);
-        applyTerminalState(response.terminal);
-        clearError();
-      } catch (nextError) {
-        handleError(nextError);
-      }
-    },
-    [applyTerminalState, clearError, handleError],
-  );
-
-  const cliResizeCallback = useCallback(
-    async (cols: number, rows: number) => {
-      await resizeTerminal('cli', cols, rows);
-    },
-    [resizeTerminal],
-  );
-
-  const supportResizeCallback = useCallback(
-    async (cols: number, rows: number) => {
-      await resizeTerminal('support', cols, rows);
-    },
-    [resizeTerminal],
-  );
-
-  const cliInputCallback = useCallback(
-    async (input: string) => {
-      await writeTerminalInput('cli', input);
-    },
-    [writeTerminalInput],
-  );
-
-  const supportInputCallback = useCallback(
-    async (input: string) => {
-      await writeTerminalInput('support', input);
-    },
-    [writeTerminalInput],
-  );
-
   const sendPrompt = useCallback(async () => {
-    if (!sessionId || !prompt.trim() || sending) return;
+    if (!prompt.trim() || sending) return;
+    const gatewaySessionId = sessionId && !sessionId.startsWith('local:') ? sessionId : '';
+    if (agentTransport === 'gateway' && !gatewaySessionId) return;
+    if (agentTransport === 'local' && (!localApiBaseUrl.trim() || !localApiModel.trim())) {
+      handleError(new Error('Select a local API model before sending.'));
+      return;
+    }
+
     const nextPrompt = prompt.trim();
     setPrompt('');
     setSending(true);
     try {
-      const response = await opsApi.sendMessage(sessionId, nextPrompt);
+      let targetSessionId = agentTransport === 'gateway' ? gatewaySessionId : sessionId;
+      if (agentTransport === 'local' && !targetSessionId?.startsWith('local:')) {
+        const created = await opsApi.createSession(undefined, 'local');
+        setSession(created.session);
+        targetSessionId = created.session.id;
+      }
+      if (!targetSessionId) throw new Error('Agent session is unavailable.');
+
+      const response = await opsApi.sendMessage(targetSessionId, nextPrompt, {
+        includeDocuments: true,
+        includeToolInstructions: true,
+        documentIds: selectedDocumentIds,
+        toolNames: selectedToolNames,
+        transport: agentTransport,
+        localModelId: agentTransport === 'local' ? localApiModel : undefined,
+        localApiBaseUrl: agentTransport === 'local' ? localApiBaseUrl : undefined,
+        localApiKey: agentTransport === 'local' ? localApiKeyInput.trim() || undefined : undefined,
+      });
       setSession(response.session);
       clearError();
     } catch (nextError) {
@@ -536,7 +680,19 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     } finally {
       setSending(false);
     }
-  }, [clearError, handleError, prompt, sending, sessionId]);
+  }, [
+    agentTransport,
+    clearError,
+    handleError,
+    localApiBaseUrl,
+    localApiKeyInput,
+    localApiModel,
+    prompt,
+    selectedDocumentIds,
+    selectedToolNames,
+    sending,
+    sessionId,
+  ]);
 
   const handoffToCli = useCallback(async (handoffPrompt: string, handoffContext: string) => {
     if (!sessionId) {
@@ -604,11 +760,129 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     }
   }, [clearError, handleError]);
 
-  useEffect(() => {
-    if (activeTab !== 'agent' || terminals.cli.running) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentionally auto-start CLI lane when opening agent tab
-    void startTerminal('cli');
-  }, [activeTab, startTerminal, terminals.cli.running]);
+  const uploadDocuments = useCallback(async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((file) => file.size > 0);
+    if (files.length === 0 || documentUploading) return;
+
+    setDocumentUploading(true);
+    try {
+      let nextDocuments = documents;
+      for (const file of files) {
+        const response = await opsApi.uploadDocument(file, documentProject || 'General');
+        nextDocuments = response.documents;
+      }
+      setDocuments(nextDocuments);
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    } finally {
+      setDocumentUploading(false);
+      setDocumentDragActive(false);
+    }
+  }, [clearError, documentProject, documentUploading, documents, handleError]);
+
+  const deleteDocument = useCallback(async (documentId: string) => {
+    try {
+      const response = await opsApi.deleteDocument(documentId);
+      setDocuments(response.documents);
+      setSelectedDocumentIds((current) => current.filter((id) => id !== documentId));
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    }
+  }, [clearError, handleError]);
+
+  const toggleDocumentContext = useCallback((documentId: string) => {
+    setSelectedDocumentIds((current) => (
+      current.includes(documentId)
+        ? current.filter((id) => id !== documentId)
+        : [...current, documentId]
+    ));
+  }, []);
+
+  const toggleToolFocus = useCallback((tool: AgentToolCatalogItem) => {
+    setSelectedToolNames((current) => (
+      current.includes(tool.id)
+        ? current.filter((id) => id !== tool.id)
+        : [...current, tool.id]
+    ));
+  }, []);
+
+  const saveOpenAiKey = useCallback(async () => {
+    if (!apiKeyInput.trim() || apiKeySaving) return;
+    setApiKeySaving(true);
+    try {
+      const response = await opsApi.saveApiKeys({ openaiKey: apiKeyInput });
+      setApiKeyStatus({
+        openaiKeySet: response.openaiKeySet,
+        replicateKeySet: response.replicateKeySet,
+        xiaomiKeySet: response.xiaomiKeySet,
+      });
+      setApiKeyInput('');
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    } finally {
+      setApiKeySaving(false);
+    }
+  }, [apiKeyInput, apiKeySaving, clearError, handleError]);
+
+  const chooseAgentTransport = useCallback(async (nextTransport: AgentTransport) => {
+    setAgentTransport(nextTransport);
+    localStorage.setItem('ops-agent-transport', nextTransport);
+    if (nextTransport === 'local' && sessionId?.startsWith('local:')) return;
+    if (nextTransport === 'gateway' && sessionId && !sessionId.startsWith('local:')) return;
+    try {
+      const response = await opsApi.createSession(undefined, nextTransport);
+      setSession(response.session);
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    }
+  }, [clearError, handleError, sessionId]);
+
+  const pollLocalApiModels = useCallback(async () => {
+    if (!localApiBaseUrl.trim() || localApiPolling) return;
+    setLocalApiPolling(true);
+    try {
+      const response = await opsApi.pollLocalApiModels({
+        baseUrl: localApiBaseUrl,
+        apiKey: localApiKeyInput.trim() || undefined,
+      });
+      setLocalApiModels(response.models);
+      setLocalApiBaseUrl(response.baseUrl);
+      if (!localApiModel && response.models[0]) {
+        setLocalApiModel(response.models[0].id);
+      }
+      clearError();
+    } catch (nextError) {
+      setLocalApiModels([]);
+      handleError(nextError);
+    } finally {
+      setLocalApiPolling(false);
+    }
+  }, [clearError, handleError, localApiBaseUrl, localApiKeyInput, localApiModel, localApiPolling]);
+
+  const saveLocalApiConfig = useCallback(async () => {
+    if (!localApiBaseUrl.trim() || localApiSaving) return;
+    setLocalApiSaving(true);
+    try {
+      const response = await opsApi.saveLocalApiConfig({
+        baseUrl: localApiBaseUrl,
+        apiKey: localApiKeyInput.trim() || undefined,
+        defaultModelId: localApiModel,
+      });
+      setLocalApiStatus(response.localApi);
+      setLocalApiBaseUrl(response.localApi.baseUrl);
+      setLocalApiModel(response.localApi.defaultModelId);
+      setLocalApiKeyInput('');
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    } finally {
+      setLocalApiSaving(false);
+    }
+  }, [clearError, handleError, localApiBaseUrl, localApiKeyInput, localApiModel, localApiSaving]);
 
   const handleMapClick = useCallback(
     (lat: number, lng: number) => {
@@ -676,8 +950,18 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   }, [assets, sourceCounts, sourceStatuses]);
 
   const liveSourceCount = useMemo(
-    () => sourceStatuses.filter((source) => source.enabled && source.ok).length,
+    () => sourceStatuses.filter((source) => !source.catalogOnly && source.enabled && source.ok).length,
     [sourceStatuses],
+  );
+
+  const catalogSourceCount = useMemo(
+    () => sourceStatuses.filter((source) => source.catalogOnly).length,
+    [sourceStatuses],
+  );
+
+  const visibleMapLayerCount = useMemo(
+    () => activeLayerCount(layers, filteredAssets),
+    [filteredAssets, layers],
   );
 
   const activeThreatCount = useMemo(
@@ -816,7 +1100,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         id: 'sources',
         label: 'Sources',
         value: liveSourceCount,
-        detail: `${sourceStatuses.length || 5} configured geospatial feeds; ${assets.filter((asset) => asset.live).length} live points loaded.`,
+        detail: `${sourceStatuses.length || 10} configured sources; ${assets.filter((asset) => asset.live).length} live points loaded.`,
         icon: <Satellite size={16} />,
       },
       {
@@ -829,7 +1113,20 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         icon: <FileText size={16} />,
       },
     ],
-    [activeThreatCount, analyticsCount, assets, bridge.recentJobs.length, familyCounts.logistics, layers.length, liveSourceCount, reportCount, sourceStatuses.length],
+    [
+      activeThreatCount,
+      analyticsCount,
+      assets,
+      bridge.recentJobs.length,
+      familyCounts.biological,
+      familyCounts.logistics,
+      familyCounts.nuclear,
+      familyCounts.ordnance,
+      layers.length,
+      liveSourceCount,
+      reportCount,
+      sourceStatuses.length,
+    ],
   );
 
   const messageFeed = useMemo(
@@ -843,6 +1140,82 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       : filteredAssets;
     return ordered.slice(0, 4);
   }, [filteredAssets, selectedAsset]);
+
+  const documentGroups = useMemo(() => groupDocumentsByProject(documents), [documents]);
+  const toolGroups = useMemo(() => groupToolsByCategory(toolCatalog?.tools ?? []), [toolCatalog]);
+  const localModelOptions = useMemo(() => {
+    const byId = new Map<string, LocalApiModel>();
+    for (const model of localApiModels) byId.set(model.id, model);
+    if (localApiModel && !byId.has(localApiModel)) byId.set(localApiModel, { id: localApiModel });
+    return Array.from(byId.values()).sort((left, right) => left.id.localeCompare(right.id));
+  }, [localApiModel, localApiModels]);
+  const selectedDocuments = useMemo(
+    () => documents.filter((document) => selectedDocumentIds.includes(document.id)),
+    [documents, selectedDocumentIds],
+  );
+  const agentSendDisabled = sending
+    || !prompt.trim()
+    || (agentTransport === 'gateway' && (!sessionId || sessionId.startsWith('local:')))
+    || (agentTransport === 'local' && (!localApiBaseUrl.trim() || !localApiModel.trim()));
+  const agentChatFeed = useMemo(
+    () => session?.history.filter((message) => message.role !== 'system').slice(-80) ?? [],
+    [session?.history],
+  );
+
+  function renderAgentTrace(reasoning: string[], toolCalls: AgentToolCall[]) {
+    const reasoningItems = reasoningToTraceItems(reasoning);
+    const toolItems = toolCallsToTraceItems(toolCalls);
+    if (!reasoningItems.length && !toolItems.length) return null;
+
+    return (
+      <div className="ops-agent-trace-stack">
+        {reasoningItems.length ? (
+          <details className="ops-agent-trace-panel">
+            <summary>
+              <Brain size={14} />
+              Reasoning trace
+              <span>{reasoningItems.length}</span>
+            </summary>
+            <AnimatedTraceList items={reasoningItems} className="ops-agent-trace-list reasoning" />
+          </details>
+        ) : null}
+        {toolItems.length ? (
+          <details className="ops-agent-trace-panel tool">
+            <summary>
+              <Wrench size={14} />
+              Tool calls
+              <span>{toolItems.length}</span>
+            </summary>
+            <AnimatedTraceList items={toolItems} className="ops-agent-trace-list tool" />
+          </details>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderAgentChatMessage(message: AgentMessage) {
+    const inline = splitInlineReasoning(message.text);
+    const reasoning = Array.from(new Set([...(message.reasoning ?? []), ...inline.reasoning]));
+    const toolCalls = message.role === 'tool'
+      ? (message.toolCalls?.length ? message.toolCalls : [{ type: 'tool', name: 'Tool result', arguments: message.text }])
+      : (message.toolCalls ?? []);
+    const visibleText = inline.reply || (message.role === 'assistant' && reasoning.length ? 'Reasoning trace received without final answer.' : message.text);
+
+    return (
+      <article key={message.id} className="ops-agent-message" data-role={message.role}>
+        <div className="ops-agent-message-head">
+          <strong>{message.role === 'assistant' ? 'ROBIN' : message.role === 'tool' ? 'Tool' : 'Operator'}</strong>
+          <time>{formatClock(message.createdAt)}</time>
+        </div>
+        {message.role === 'assistant' ? (
+          <TextType key={message.id} text={visibleText} as="div" className="ops-agent-message-text" />
+        ) : message.role === 'tool' ? null : (
+          <div className="ops-agent-message-text">{visibleText}</div>
+        )}
+        {renderAgentTrace(reasoning, toolCalls)}
+      </article>
+    );
+  }
 
   return (
     <div className="ops-app">
@@ -983,7 +1356,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     <div className="ops-source-card-head">
                       <div>
                         <div className="ops-section-kicker">Data Sources</div>
-                        <strong>{liveSourceCount}/{sourceStatuses.length || 5} live feeds healthy</strong>
+                        <strong>{liveSourceCount} live feeds · {catalogSourceCount} reference sources</strong>
                       </div>
                       <button
                         type="button"
@@ -1009,15 +1382,19 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                               [source.id]: !(current[source.id] ?? true),
                             }));
                           }}
-                          title={source.status?.lastError || source.status?.attribution || source.label}
+                          title={source.status?.lastError || source.status?.description || source.status?.attribution || source.label}
                         >
                           <span className="ops-layer-label">
                             {sourceIcon(source.id)}
-                            {source.label}
+                            <span className="ops-source-copy">
+                              <strong>{source.label}</strong>
+                              {source.status?.description ? <small>{source.status.description}</small> : null}
+                            </span>
                           </span>
                           <span className="ops-source-meta">
                             <span>{source.count}</span>
                             {source.status?.requiresKey && !source.status.enabled ? <span>key</span> : null}
+                            {source.status?.catalogOnly ? <span>ref</span> : null}
                           </span>
                         </button>
                       ))}
@@ -1078,7 +1455,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         placeholder="Filter signals by title, notes, tags, or source..."
                       />
                       <span className="ops-mini-badge">
-                        <Layers3 size={14} /> {activeLayerCount(layers)} active map layers
+                        <Layers3 size={14} /> {visibleMapLayerCount} visible map layers
                       </span>
                       <span className="ops-mini-badge">
                         <DatabaseZap size={14} /> {assets.filter((asset) => asset.live).length} live source points
@@ -1257,6 +1634,109 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                   ))}
                 </div>
 
+                <div className="ops-panel ops-documents-panel">
+                  <div className="ops-panel-header">
+                    <h3>Documents</h3>
+                    <span className="ops-mini-badge">{documents.length} uploaded docs</span>
+                  </div>
+                  <div className="ops-panel-body ops-documents-body">
+                    <div
+                      className="ops-upload-drop"
+                      data-active={documentDragActive}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setDocumentDragActive(true);
+                      }}
+                      onDragLeave={() => setDocumentDragActive(false)}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        void uploadDocuments(event.dataTransfer.files);
+                      }}
+                    >
+                      <div className="ops-upload-copy">
+                        <FileUp size={22} />
+                        <div>
+                          <strong>Drop documents here</strong>
+                          <span>Text, markdown, CSV, JSON, PDF, Word, and reference files.</span>
+                        </div>
+                      </div>
+                      <div className="ops-upload-controls">
+                        <input
+                          className="ops-input"
+                          value={documentProject}
+                          onChange={(event) => setDocumentProject(event.target.value)}
+                          placeholder="Project"
+                        />
+                        <label className="ops-button primary ops-file-picker">
+                          <Upload size={16} />
+                          {documentUploading ? 'Uploading...' : 'Upload'}
+                          <input
+                            type="file"
+                            multiple
+                            accept=".txt,.md,.markdown,.pdf,.doc,.docx,.rtf,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.log"
+                            onChange={(event) => {
+                              const files = event.currentTarget.files;
+                              if (files) void uploadDocuments(files);
+                              event.currentTarget.value = '';
+                            }}
+                            disabled={documentUploading}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="ops-document-groups">
+                      {documentGroups.length === 0 ? (
+                        <div className="ops-helper">No project documents uploaded yet.</div>
+                      ) : (
+                        documentGroups.map((group) => (
+                          <details key={group.project} className="ops-document-project" open>
+                            <summary>
+                              <ChevronRight size={15} />
+                              <strong>{group.project}</strong>
+                              <span>{group.documents.length}</span>
+                            </summary>
+                            <div className="ops-document-table">
+                              {group.documents.map((document) => {
+                                const selected = selectedDocumentIds.includes(document.id);
+                                return (
+                                  <div key={document.id} className="ops-document-row" data-selected={selected}>
+                                    <button
+                                      type="button"
+                                      className="ops-document-ref"
+                                      onClick={() => toggleDocumentContext(document.id)}
+                                      title={selected ? 'Remove from agent context' : 'Add to agent context'}
+                                    >
+                                      <Paperclip size={14} />
+                                    </button>
+                                    <div className="ops-document-row-main">
+                                      <strong>{document.title}</strong>
+                                      <small>
+                                        {document.kind.toUpperCase()} · {formatBytes(document.sizeBytes)} · {formatRelative(document.uploadedAt)} · {document.id}
+                                      </small>
+                                    </div>
+                                    <a className="ops-document-path" href={document.sourceUrl} download title={document.storagePath}>
+                                      {document.fileName}
+                                    </a>
+                                    <button
+                                      type="button"
+                                      className="ops-icon-button"
+                                      onClick={() => { void deleteDocument(document.id); }}
+                                      title="Delete document"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="ops-status-columns">
                   <div className="ops-panel">
                     <div className="ops-panel-header">
@@ -1349,32 +1829,296 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
             )}
 
             {activeTab === 'agent' && (
-              <section className="ops-terminals-layout">
+              <section className="ops-agent-layout">
                 <div className="ops-panel">
                   <div className="ops-panel-body">
                     <div className="ops-terminal-topbar">
                       <div>
                         <div className="ops-section-kicker">Agent Workspace</div>
-                        <h2>CLI-code lane, bridge control, and operator shell</h2>
+                        <h2>Chat lane with document and tool context</h2>
                         <p className="ops-terminal-topbar-copy">
-                          The primary lane launches the embedded coding agent when available, with a support shell and bridge log beside it.
+                          Messages can run through the gateway session or a local OpenAI-compatible API with uploaded documents and mapped Claude Code tool instructions attached as context.
                         </p>
                       </div>
                       <div className="ops-agent-kpis">
-                        <span className="ops-mini-badge"><Code2 size={14} /> {terminals.cli.running ? 'CLI live' : 'CLI idle'}</span>
-                        <span className="ops-mini-badge"><Bot size={14} /> {session?.label ?? 'No session'}</span>
-                        <span className="ops-mini-badge"><DatabaseZap size={14} /> {liveSourceCount} feeds</span>
+                        <span className="ops-mini-badge"><Bot size={14} /> {agentTransport === 'local' ? 'Local API' : session?.label ?? 'No session'}</span>
+                        <span className="ops-mini-badge"><Code2 size={14} /> {agentTransport === 'local' ? localApiModel || 'No local model' : 'Gateway'}</span>
+                        <span className="ops-mini-badge"><Paperclip size={14} /> {selectedDocuments.length || documents.length} docs</span>
+                        <span className="ops-mini-badge"><Wrench size={14} /> {toolCatalog?.tools.length ?? 0} tools</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="ops-terminal-grid">
-                  <div className="ops-terminal-stack">
+                <div className="ops-agent-chat-layout">
+                  <div className="ops-panel ops-agent-chat-panel">
+                    <div className="ops-panel-header">
+                      <h2>ROBIN Agent Chat</h2>
+                      <div className="ops-action-row">
+                        <span className="ops-mini-badge">{session?.status ?? 'offline'}</span>
+                        <button className="ops-button ghost" onClick={() => { void refreshShell(); }} type="button">
+                          <RefreshCw size={16} /> Refresh
+                        </button>
+                      </div>
+                    </div>
+                    <div className="ops-panel-body ops-agent-chat-body">
+                      <div className="ops-agent-chat-log" ref={chatScrollerRef}>
+                        {agentChatFeed.length === 0 ? (
+                          <div className="ops-agent-empty">
+                            <Bot size={22} />
+                            <span>No agent messages yet.</span>
+                          </div>
+                        ) : (
+                          agentChatFeed.map((message) => renderAgentChatMessage(message))
+                        )}
+                      </div>
+
+                      {selectedDocuments.length > 0 ? (
+                        <div className="ops-agent-context-strip">
+                          {selectedDocuments.map((document) => (
+                            <button
+                              key={document.id}
+                              type="button"
+                              onClick={() => toggleDocumentContext(document.id)}
+                              title={document.storagePath}
+                            >
+                              <Paperclip size={13} /> {document.title}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <form
+                        className="ops-agent-compose"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void sendPrompt();
+                        }}
+                      >
+                        <textarea
+                          value={prompt}
+                          onChange={(event) => setPrompt(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                              event.preventDefault();
+                              void sendPrompt();
+                            }
+                          }}
+                          placeholder="Ask the agent to inspect documents, use a mapped tool, or brief the current project..."
+                          className="ops-chat-textarea ops-agent-textarea"
+                          disabled={sending || (agentTransport === 'gateway' && (!sessionId || sessionId.startsWith('local:')))}
+                        />
+                        <div className="ops-compose-footer">
+                          <span>
+                            {agentTransport === 'local' ? 'Local API' : 'Gateway'} · {documents.length} docs and {toolCatalog?.tools.length ?? 0} tools are included as agent context.
+                          </span>
+                          <button
+                            onClick={sendPrompt}
+                            disabled={agentSendDisabled}
+                            className="ops-button primary"
+                            type="button"
+                          >
+                            {sending ? <LoaderCircle className="spinning" size={16} /> : <Send size={16} />}
+                            {sending ? 'Sending...' : 'Send'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+
+                  <aside className="ops-agent-sidebar">
                     <div className="ops-panel">
                       <div className="ops-panel-header">
-                        <h2>{terminals.cli.label}</h2>
-                        <div className="ops-action-row">
+                        <h3>Quick API Setup</h3>
+                        <span className="ops-mini-badge">
+                          <KeyRound size={14} /> {agentTransport === 'local' ? localApiStatus?.apiKeySet ? 'Local key set' : 'Local key optional' : apiKeyStatus?.openaiKeySet ? 'OpenAI set' : 'OpenAI missing'}
+                        </span>
+                      </div>
+                      <div className="ops-panel-body ops-sidebar-stack">
+                        <div className="ops-segmented-control">
+                          <button
+                            type="button"
+                            data-active={agentTransport === 'gateway'}
+                            onClick={() => { void chooseAgentTransport('gateway'); }}
+                          >
+                            Gateway
+                          </button>
+                          <button
+                            type="button"
+                            data-active={agentTransport === 'local'}
+                            onClick={() => { void chooseAgentTransport('local'); }}
+                          >
+                            Local API
+                          </button>
+                        </div>
+
+                        <div className="ops-local-api-grid">
+                          <label>
+                            <span>Local IP / endpoint</span>
+                            <input
+                              className="ops-input"
+                              value={localApiBaseUrl}
+                              onChange={(event) => setLocalApiBaseUrl(event.target.value)}
+                              onBlur={() => { if (agentTransport === 'local') void pollLocalApiModels(); }}
+                              placeholder="127.0.0.1:1234"
+                            />
+                          </label>
+                          <label>
+                            <span>LM Studio API key</span>
+                            <input
+                              className="ops-input"
+                              type="password"
+                              value={localApiKeyInput}
+                              onChange={(event) => setLocalApiKeyInput(event.target.value)}
+                              placeholder={localApiStatus?.apiKeySet ? 'Saved key set' : 'lm-studio'}
+                            />
+                          </label>
+                        </div>
+
+                        <label className="ops-local-model-field">
+                          <span>Local model</span>
+                          <div className="ops-model-select-row">
+                            <select
+                              className="ops-input ops-select"
+                              value={localApiModel}
+                              onFocus={() => { void pollLocalApiModels(); }}
+                              onChange={(event) => setLocalApiModel(event.target.value)}
+                            >
+                              {!localApiModel && <option value="">Poll models...</option>}
+                              {localModelOptions.map((model) => (
+                                <option key={model.id} value={model.id}>
+                                  {model.name || model.id}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="ops-button ghost"
+                              onClick={() => { void pollLocalApiModels(); }}
+                              disabled={localApiPolling}
+                            >
+                              {localApiPolling ? <LoaderCircle className="spinning" size={14} /> : <RefreshCw size={14} />}
+                              Poll
+                            </button>
+                          </div>
+                        </label>
+
+                        <button
+                          type="button"
+                          className="ops-button primary"
+                          disabled={!localApiBaseUrl.trim() || localApiSaving}
+                          onClick={saveLocalApiConfig}
+                        >
+                          {localApiSaving ? <LoaderCircle className="spinning" size={16} /> : <KeyRound size={16} />}
+                          {localApiSaving ? 'Saving...' : 'Save local wire'}
+                        </button>
+
+                        <input
+                          className="ops-input"
+                          type="password"
+                          value={apiKeyInput}
+                          onChange={(event) => setApiKeyInput(event.target.value)}
+                          placeholder="Paste OPENAI_API_KEY"
+                        />
+                        <button
+                          type="button"
+                          className="ops-button primary"
+                          disabled={!apiKeyInput.trim() || apiKeySaving}
+                          onClick={saveOpenAiKey}
+                        >
+                          {apiKeySaving ? <LoaderCircle className="spinning" size={16} /> : <KeyRound size={16} />}
+                          {apiKeySaving ? 'Saving...' : 'Save key'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="ops-panel">
+                      <div className="ops-panel-header">
+                        <h3>Project Documents</h3>
+                        <span className="ops-mini-badge">{selectedDocumentIds.length || 'all'} in context</span>
+                      </div>
+                      <div className="ops-panel-body ops-agent-doc-list">
+                        {documentGroups.length === 0 ? (
+                          <div className="ops-helper">Upload documents from Status Overview.</div>
+                        ) : (
+                          documentGroups.map((group) => (
+                            <details key={group.project} className="ops-agent-side-details" open>
+                              <summary>
+                                <ChevronRight size={14} />
+                                {group.project}
+                                <span>{group.documents.length}</span>
+                              </summary>
+                              {group.documents.map((document) => (
+                                <button
+                                  key={document.id}
+                                  type="button"
+                                  className="ops-agent-doc-button"
+                                  data-selected={selectedDocumentIds.includes(document.id)}
+                                  onClick={() => toggleDocumentContext(document.id)}
+                                  title={document.storagePath}
+                                >
+                                  <FileText size={14} />
+                                  <span>{document.title}</span>
+                                  <small>{document.kind} · {formatBytes(document.sizeBytes)}</small>
+                                </button>
+                              ))}
+                            </details>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="ops-panel">
+                      <div className="ops-panel-header">
+                        <h3>Agent Tools</h3>
+                        <button
+                          type="button"
+                          className="ops-button ghost"
+                          onClick={() => {
+                            void opsApi.getAgentToolCatalog(true).then((response) => setToolCatalog(response.catalog)).catch(handleError);
+                          }}
+                        >
+                          <RefreshCw size={14} /> Scan
+                        </button>
+                      </div>
+                      <div className="ops-panel-body ops-agent-tool-list">
+                        {toolGroups.length === 0 ? (
+                          <div className="ops-helper">Tool catalog unavailable.</div>
+                        ) : (
+                          toolGroups.map((group) => (
+                            <details key={group.category} className="ops-agent-side-details" open={group.category === 'workspace'}>
+                              <summary>
+                                <ChevronRight size={14} />
+                                {group.category}
+                                <span>{group.tools.length}</span>
+                              </summary>
+                              {group.tools.map((tool) => (
+                                <button
+                                  key={tool.id}
+                                  type="button"
+                                  className="ops-agent-tool-button"
+                                  data-selected={selectedToolNames.includes(tool.id)}
+                                  onClick={() => toggleToolFocus(tool)}
+                                  title={tool.promptPath || tool.toolPath || tool.id}
+                                >
+                                  <Wrench size={14} />
+                                  <span>{tool.displayName}</span>
+                                  <small>{tool.description}</small>
+                                </button>
+                              ))}
+                            </details>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="ops-panel">
+                      <div className="ops-panel-header">
+                        <h3>Bridge Control</h3>
+                        <span className="ops-mini-badge"><Code2 size={14} /> {terminals.cli.running ? 'CLI live' : 'CLI idle'}</span>
+                      </div>
+                      <div className="ops-panel-body">
+                        <div className="ops-action-row ops-bridge-actions">
                           <button className="ops-button ghost" onClick={() => { void startTerminal('cli'); }} type="button">
                             <Play size={16} /> Start
                           </button>
@@ -1385,67 +2129,18 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                             <Square size={16} /> Ctrl-C
                           </button>
                         </div>
-                      </div>
-                      <div className="ops-panel-body">
-                        <div className="ops-terminal-meta">
-                          <span className="ops-terminal-desc">Primary CLI-code lane for implementation and investigation tasks.</span>
-                          <span className="ops-terminal-desc">Bridge handoffs are injected here with session context.</span>
-                        </div>
-                        <TerminalPane terminal={terminals.cli} onInput={cliInputCallback} onResize={cliResizeCallback} />
-                      </div>
-                    </div>
-
-                    <div className="ops-terminal-bottom">
-                      <div className="ops-panel">
-                        <div className="ops-panel-header">
-                          <h3>{terminals.support.label}</h3>
-                          <div className="ops-action-row">
-                            <button className="ops-button ghost" onClick={() => { void startTerminal('support'); }} type="button">
-                              <Play size={16} /> Start
-                            </button>
-                            <button className="ops-button ghost" onClick={() => { void stopTerminal('support'); }} type="button">
-                              <Square size={16} /> Stop
-                            </button>
-                          </div>
-                        </div>
-                        <div className="ops-panel-body">
-                          <div className="ops-terminal-meta">
-                            <span className="ops-terminal-desc">Support shell for diagnostics, probes, and local checks.</span>
-                            <span className="ops-terminal-desc">Launches from the local user home directory.</span>
-                          </div>
-                          <TerminalPane
-                            terminal={terminals.support}
-                            onInput={supportInputCallback}
-                            onResize={supportResizeCallback}
-                          />
-                        </div>
+                        <BridgeWorkflowPanel
+                          bridge={bridge}
+                          sessionId={sessionId}
+                          assistantSeed={assistantSeed}
+                          busyAction={bridgeBusyAction}
+                          onHandoff={handoffToCli}
+                          onReturn={returnToAgent}
+                          onCancel={cancelBridge}
+                        />
                       </div>
                     </div>
-                  </div>
-
-                  <div className="ops-panel">
-                    <div className="ops-panel-header">
-                      <h2>{terminals.logs.label}</h2>
-                    </div>
-                    <div className="ops-panel-body">
-                      <div className="ops-terminal-meta">
-                        <span className="ops-terminal-desc">
-                          Active bridge session: {bridge.activeJob?.sessionId ?? 'none'}
-                        </span>
-                        <span className="ops-terminal-desc">Latest assistant seed: {assistantSeed ? 'available' : 'none'}</span>
-                      </div>
-                      <BridgeWorkflowPanel
-                        bridge={bridge}
-                        sessionId={sessionId}
-                        assistantSeed={assistantSeed}
-                        busyAction={bridgeBusyAction}
-                        onHandoff={handoffToCli}
-                        onReturn={returnToAgent}
-                        onCancel={cancelBridge}
-                      />
-                      <TerminalPane terminal={terminals.logs} />
-                    </div>
-                  </div>
+                  </aside>
                 </div>
               </section>
             )}
@@ -1456,6 +2151,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   );
 }
 
-function activeLayerCount(layers: MapLayer[]) {
-  return layers.filter((layer) => layer.visible).length;
+function activeLayerCount(layers: MapLayer[], assets?: MapAsset[]) {
+  if (!assets) return layers.filter((layer) => layer.visible).length;
+  const visibleAssetIds = new Set(assets.map((asset) => asset.id));
+  return layers.filter((layer) => layer.visible && layer.assetIds.some((assetId) => visibleAssetIds.has(assetId))).length;
 }
