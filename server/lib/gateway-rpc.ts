@@ -7,7 +7,7 @@
  * connections.
  *
  * Used as a fallback when the workspace directory is not locally accessible
- * (e.g. Nerve on DGX host, workspace in OpenShell sandbox).
+ * (e.g. ROBIN on DGX host, workspace in OpenShell sandbox).
  * @module
  */
 
@@ -116,7 +116,7 @@ function buildConnectParams(nonce: string) {
       version: '0.1.0',
       platform: 'web',
       mode: clientMode,
-      instanceId: `nerve-rpc-${randomUUID().slice(0, 8)}`,
+      instanceId: `robin-rpc-${randomUUID().slice(0, 8)}`,
     },
     role,
     scopes,

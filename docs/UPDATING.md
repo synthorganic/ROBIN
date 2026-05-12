@@ -92,7 +92,7 @@ Before making changes, the updater saves:
 - A SHA-256 hash of `.env`
 - A timestamped backup of `.env`
 
-Snapshots are stored in `~/.ROBIN/updater/`. The `.env` file is **never overwritten** during an update — only backed up.
+Snapshots are stored in `~/.robin/updater/`. The `.env` file is **never overwritten** during an update — only backed up.
 
 ### Rollback
 
@@ -128,10 +128,10 @@ If no service manager is found, the updater skips restart and prints manual star
 
 | Path | Purpose |
 |------|---------|
-| `~/.ROBIN/updater/last-good.json` | Last-known-good snapshot |
-| `~/.ROBIN/updater/last-run.json` | Result of the most recent update attempt |
-| `~/.ROBIN/updater/snapshots/<timestamp>/.env` | Backed-up `.env` files |
-| `~/.ROBIN/updater/ROBIN-update.lock` | PID lock file |
+| `~/.robin/updater/last-good.json` | Last-known-good snapshot |
+| `~/.robin/updater/last-run.json` | Result of the most recent update attempt |
+| `~/.robin/updater/snapshots/<timestamp>/.env` | Backed-up `.env` files |
+| `~/.robin/updater/robin-update.lock` | PID lock file |
 
 ## Upgrade notes
 
@@ -142,11 +142,11 @@ On first start after upgrading to 1.5.0, ROBIN automatically migrates legacy Kan
 - `server/data/kanban`
 
 into the canonical runtime location:
-- `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`
+- `${ROBIN_DATA_DIR:-~/.robin}/kanban`
 
 What to do:
 - Let the first post-upgrade start complete before judging the migration
-- Update backup scripts to follow `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`
+- Update backup scripts to follow `${ROBIN_DATA_DIR:-~/.robin}/kanban`
 - Do not keep writing to the old `server-dist` or `server` data paths after upgrade
 
 ## Troubleshooting
@@ -169,13 +169,13 @@ Another update process is running, or a stale lock file exists.
 
 **Fix:** Check if an update is actually running:
 ```bash
-cat ~/.ROBIN/updater/ROBIN-update.lock   # Shows the PID
+cat ~/.robin/updater/robin-update.lock   # Shows the PID
 ps -p <pid>                               # Check if it's alive
 ```
 
 If the process is gone, the lock is stale — delete it:
 ```bash
-rm ~/.ROBIN/updater/ROBIN-update.lock
+rm ~/.robin/updater/robin-update.lock
 ```
 
 ### Health check fails with version mismatch
@@ -198,7 +198,7 @@ curl http://127.0.0.1:3080/api/version
 
 **Fix:** The updater will attempt automatic rollback. If rollback also fails (exit 70), restore manually:
 ```bash
-cat ~/.ROBIN/updater/last-good.json           # Get the snapshot ref
+cat ~/.robin/updater/last-good.json           # Get the snapshot ref
 git checkout --force <ref>
 npm install && npm run build && npm run build:server
 systemctl restart ROBIN

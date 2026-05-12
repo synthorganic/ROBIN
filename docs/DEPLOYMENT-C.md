@@ -21,7 +21,7 @@ Same-host is simpler and has fewer failure points. Use split hosts only if you h
 ## Prerequisites
 
 - Cloud Linux host with Node.js 22+
-- OpenClaw gateway running
+- compatible agent gateway running
 - Domain or stable IP for ROBIN
 - TLS termination plan (reverse proxy or direct certs)
 
@@ -30,7 +30,7 @@ Same-host is simpler and has fewer failure points. Use split hosts only if you h
 ### 1. Install ROBIN
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh | bash
 ```
 
 ### 2. Run setup with network access
@@ -75,7 +75,7 @@ Follow the same-host steps for ROBIN, then add:
 ### Install with remote gateway settings up front
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh \
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh \
   | bash -s -- --gateway-url https://gw.example.com --gateway-token <token> --skip-setup
 ```
 
@@ -86,7 +86,7 @@ In `.env`:
 ```bash
 GATEWAY_URL=<remote-gateway-url>
 WS_ALLOWED_HOSTS=<remote-gateway-hostname-or-ip>
-NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
+ROBIN_PUBLIC_ORIGIN=https://robin.example.com
 ```
 
 ### Patch remote gateway allowed origins
@@ -94,7 +94,7 @@ NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
 On the gateway host, add ROBIN's public origin to `gateway.controlUi.allowedOrigins`:
 
 ```
-https://ROBIN.example.com
+https://robin.example.com
 ```
 
 ### Ensure gateway tools allowlist
@@ -137,7 +137,7 @@ Wrong IP detection affects rate limiting and logs.
 
 ## Security notes
 
-- **Always** enable `NERVE_AUTH=true` for remote access
+- **Always** enable `ROBIN_AUTH=true` for remote access
 - Use HTTPS end-to-end or at least at the edge
 - Keep the gateway on loopback when ROBIN and Gateway share a host
 - Rotate gateway token on access changes

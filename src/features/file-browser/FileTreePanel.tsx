@@ -18,7 +18,7 @@ const DEFAULT_WIDTH = 220;
 /** Sentinel value for width state when collapsed. */
 const COLLAPSED_WIDTH = 0;
 
-const WIDTH_STORAGE_KEY = 'nerve-file-tree-width';
+const WIDTH_STORAGE_KEY = 'robin-file-tree-width';
 const MENU_VIEWPORT_PADDING = 8;
 const MENU_CURSOR_OFFSET = 6;
 const MENU_ROW_TOP_OFFSET = 2;

@@ -71,7 +71,7 @@ export function detectGatewayConfig(): DetectedGateway {
       result.token = config.gateway.auth.token;
     }
 
-    // Derive URL from port — always use 127.0.0.1 since Nerve connects locally
+    // Derive URL from port — always use 127.0.0.1 since ROBIN connects locally
     const port = config.gateway?.port || 18789;
     result.url = `http://127.0.0.1:${port}`;
   } catch {
@@ -174,12 +174,12 @@ export function patchGatewayAllowedOrigins(origin: string): GatewayPatchResult {
 
 const REQUIRED_HTTP_TOOLS = ['cron', 'gateway', 'sessions_spawn'] as const;
 
-// Must match the connect metadata sent by Nerve's browser WS client
+// Must match the connect metadata sent by ROBIN's browser WS client
 // (src/hooks/useWebSocket.ts) to avoid OpenClaw 2026.2.26+ metadata-repair prompts.
-const NERVE_PAIRED_PLATFORM = 'web';
-const NERVE_PAIRED_CLIENT_ID = 'webchat-ui';
-const NERVE_PAIRED_CLIENT_MODE = 'webchat';
-const NERVE_PAIRED_DISPLAY_NAME = 'Nerve UI';
+const ROBIN_PAIRED_PLATFORM = 'web';
+const ROBIN_PAIRED_CLIENT_ID = 'webchat-ui';
+const ROBIN_PAIRED_CLIENT_MODE = 'webchat';
+const ROBIN_PAIRED_DISPLAY_NAME = 'ROBIN UI';
 
 /**
  * Patch the OpenClaw gateway config to allow required HTTP tools.
@@ -263,9 +263,9 @@ function readGatewayDeviceId(): string | null {
   }
 }
 
-function readNerveDeviceIdentity(): DeviceIdentityMatch | null {
-  const nerveDir = process.env.NERVE_DATA_DIR || join(process.env.HOME || HOME, '.nerve');
-  const identityPath = join(nerveDir, 'device-identity.json');
+function readROBINDeviceIdentity(): DeviceIdentityMatch | null {
+  const robinDir = process.env.ROBIN_DATA_DIR || join(process.env.HOME || HOME, '.robin');
+  const identityPath = join(robinDir, 'device-identity.json');
   if (!existsSync(identityPath)) return null;
 
   try {
@@ -512,19 +512,19 @@ export function fixGatewayDeviceScopes(opts: {
 }
 
 /**
- * Approve only the pending pairing request that can be safely matched to Nerve.
+ * Approve only the pending pairing request that can be safely matched to ROBIN.
  * If the request cannot be identified unambiguously, fail closed and require manual approval.
  */
-export function approvePendingNerveDevice(deps: {
+export function approvePendingROBINDevice(deps: {
   exec?: PendingDeviceExec;
 } = {}): { ok: boolean; approved: number; message: string } {
   const run = deps.exec || execSync;
-  const identity = readNerveDeviceIdentity();
+  const identity = readROBINDeviceIdentity();
   if (!identity) {
     return {
       ok: false,
       approved: 0,
-      message: 'Could not identify Nerve device identity, approve manually with `openclaw devices list`',
+      message: 'Could not identify ROBIN device identity, approve manually with `openclaw devices list`',
     };
   }
 
@@ -541,7 +541,7 @@ export function approvePendingNerveDevice(deps: {
         return {
           ok: false,
           approved: 0,
-          message: 'Could not safely inspect pending requests, approve Nerve manually with `openclaw devices list`',
+          message: 'Could not safely inspect pending requests, approve ROBIN manually with `openclaw devices list`',
         };
       }
       pendingItems = parsed.pending;
@@ -549,7 +549,7 @@ export function approvePendingNerveDevice(deps: {
       return {
         ok: false,
         approved: 0,
-        message: 'Could not safely inspect pending requests, approve Nerve manually with `openclaw devices list`',
+        message: 'Could not safely inspect pending requests, approve ROBIN manually with `openclaw devices list`',
       };
     }
 
@@ -566,7 +566,7 @@ export function approvePendingNerveDevice(deps: {
       return {
         ok: false,
         approved: 0,
-        message: 'Could not safely identify the Nerve request, approve manually with `openclaw devices list`',
+        message: 'Could not safely identify the ROBIN request, approve manually with `openclaw devices list`',
       };
     }
 
@@ -574,29 +574,29 @@ export function approvePendingNerveDevice(deps: {
       return {
         ok: false,
         approved: 0,
-        message: 'Could not safely identify a single Nerve request, approve manually with `openclaw devices list`',
+        message: 'Could not safely identify a single ROBIN request, approve manually with `openclaw devices list`',
       };
     }
 
     run(`openclaw devices approve ${matches[0].requestId}`, { timeout: 10000, stdio: 'pipe' });
-    return { ok: true, approved: 1, message: 'Approved Nerve pending device request' };
+    return { ok: true, approved: 1, message: 'Approved ROBIN pending device request' };
   } catch {
-    return { ok: false, approved: 0, message: 'Could not inspect pending requests safely, approve Nerve manually with `openclaw devices list`' };
+    return { ok: false, approved: 0, message: 'Could not inspect pending requests safely, approve ROBIN manually with `openclaw devices list`' };
   }
 }
 
 /**
- * Pre-pair Nerve's device identity in the gateway's paired.json.
+ * Pre-pair ROBIN's device identity in the gateway's paired.json.
  *
- * Generates the Nerve device identity (Ed25519 keypair) if it doesn't exist,
+ * Generates the ROBIN device identity (Ed25519 keypair) if it doesn't exist,
  * then registers it directly in paired.json with full operator scopes.
- * This means Nerve can connect to the gateway immediately on first start
+ * This means ROBIN can connect to the gateway immediately on first start
  * without any manual `openclaw devices approve` step.
  */
-export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; message: string; needsRestart: boolean } {
-  const nerveDir = process.env.NERVE_DATA_DIR
-    || join(process.env.HOME || HOME, '.nerve');
-  const identityPath = join(nerveDir, 'device-identity.json');
+export function prePairROBINDevice(gatewayToken?: string): { ok: boolean; message: string; needsRestart: boolean } {
+  const robinDir = process.env.ROBIN_DATA_DIR
+    || join(process.env.HOME || HOME, '.robin');
+  const identityPath = join(robinDir, 'device-identity.json');
   const pairedPath = join(HOME, '.openclaw', 'devices', 'paired.json');
 
   if (!existsSync(pairedPath)) {
@@ -605,7 +605,7 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
   }
 
   try {
-    // Load or generate Nerve device identity
+    // Load or generate ROBIN device identity
     let deviceId: string;
     let publicKeyB64url: string;
 
@@ -623,8 +623,8 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
       const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
 
       // Persist identity
-      if (!existsSync(nerveDir)) {
-        mkdirSync(nerveDir, { recursive: true, mode: 0o700 });
+      if (!existsSync(robinDir)) {
+        mkdirSync(robinDir, { recursive: true, mode: 0o700 });
       }
       writeFileSync(identityPath, JSON.stringify({
         deviceId,
@@ -637,7 +637,7 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
     // Register in paired.json
     const paired = JSON.parse(readFileSync(pairedPath, 'utf-8')) as Record<string, unknown>;
 
-    // Use the gateway auth token — Nerve's WS proxy forwards the browser's
+    // Use the gateway auth token — ROBIN's WS proxy forwards the browser's
     // connect request which includes this token. The gateway validates that
     // the token in the connect request matches the device's stored token.
     const now = Date.now();
@@ -662,7 +662,7 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
       let changed = false;
       const changedFields: string[] = [];
 
-      // Keep token aligned with gateway auth token used by Nerve
+      // Keep token aligned with gateway auth token used by ROBIN
       if (!existing.tokens) {
         existing.tokens = {};
         changed = true;
@@ -688,37 +688,37 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
       }
 
       // OpenClaw 2026.2.26+ pins platform/device metadata on paired devices.
-      // These must match the browser connect metadata Nerve sends.
-      if (existing.platform !== NERVE_PAIRED_PLATFORM) {
-        existing.platform = NERVE_PAIRED_PLATFORM;
+      // These must match the browser connect metadata ROBIN sends.
+      if (existing.platform !== ROBIN_PAIRED_PLATFORM) {
+        existing.platform = ROBIN_PAIRED_PLATFORM;
         changed = true;
         changedFields.push('platform');
       }
-      if (existing.clientId !== NERVE_PAIRED_CLIENT_ID) {
-        existing.clientId = NERVE_PAIRED_CLIENT_ID;
+      if (existing.clientId !== ROBIN_PAIRED_CLIENT_ID) {
+        existing.clientId = ROBIN_PAIRED_CLIENT_ID;
         changed = true;
         changedFields.push('clientId');
       }
-      if (existing.clientMode !== NERVE_PAIRED_CLIENT_MODE) {
-        existing.clientMode = NERVE_PAIRED_CLIENT_MODE;
+      if (existing.clientMode !== ROBIN_PAIRED_CLIENT_MODE) {
+        existing.clientMode = ROBIN_PAIRED_CLIENT_MODE;
         changed = true;
         changedFields.push('clientMode');
       }
-      if (existing.displayName !== NERVE_PAIRED_DISPLAY_NAME) {
-        existing.displayName = NERVE_PAIRED_DISPLAY_NAME;
+      if (existing.displayName !== ROBIN_PAIRED_DISPLAY_NAME) {
+        existing.displayName = ROBIN_PAIRED_DISPLAY_NAME;
         changed = true;
         changedFields.push('displayName');
       }
 
       if (!changed) {
-        return { ok: true, message: 'Nerve device already paired', needsRestart: false };
+        return { ok: true, message: 'ROBIN device already paired', needsRestart: false };
       }
 
       writeFileSync(pairedPath, JSON.stringify(paired, null, 2) + '\n');
       const fieldsLabel = changedFields.length > 0 ? ` (${[...new Set(changedFields)].join(', ')})` : '';
       return {
         ok: true,
-        message: `Updated Nerve paired device ${deviceId.substring(0, 12)}…${fieldsLabel}`,
+        message: `Updated ROBIN paired device ${deviceId.substring(0, 12)}…${fieldsLabel}`,
         needsRestart: true,
       };
     }
@@ -726,10 +726,10 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
     paired[deviceId] = {
       deviceId,
       publicKey: publicKeyB64url,
-      displayName: NERVE_PAIRED_DISPLAY_NAME,
-      platform: NERVE_PAIRED_PLATFORM,
-      clientId: NERVE_PAIRED_CLIENT_ID,
-      clientMode: NERVE_PAIRED_CLIENT_MODE,
+      displayName: ROBIN_PAIRED_DISPLAY_NAME,
+      platform: ROBIN_PAIRED_PLATFORM,
+      clientId: ROBIN_PAIRED_CLIENT_ID,
+      clientMode: ROBIN_PAIRED_CLIENT_MODE,
       role: 'operator',
       roles: ['operator'],
       scopes: FULL_OPERATOR_SCOPES,
@@ -746,7 +746,7 @@ export function prePairNerveDevice(gatewayToken?: string): { ok: boolean; messag
     };
 
     writeFileSync(pairedPath, JSON.stringify(paired, null, 2) + '\n');
-    return { ok: true, message: `Pre-paired Nerve device ${deviceId.substring(0, 12)}…`, needsRestart: true };
+    return { ok: true, message: `Pre-paired ROBIN device ${deviceId.substring(0, 12)}…`, needsRestart: true };
   } catch (err) {
     return {
       ok: false,
@@ -798,12 +798,12 @@ function needsDeviceScopeFix(): boolean {
 }
 
 /**
- * Detect whether Nerve device pre-pairing is needed.
+ * Detect whether ROBIN device pre-pairing is needed.
  * Returns false when paired.json is absent; device-scope bootstrap will create it first.
  */
 function needsPrePair(gatewayToken?: string): boolean {
-  const nerveDir = process.env.NERVE_DATA_DIR || join(process.env.HOME || HOME, '.nerve');
-  const identityPath = join(nerveDir, 'device-identity.json');
+  const robinDir = process.env.ROBIN_DATA_DIR || join(process.env.HOME || HOME, '.robin');
+  const identityPath = join(robinDir, 'device-identity.json');
   const pairedPath = join(HOME, '.openclaw', 'devices', 'paired.json');
 
   if (!existsSync(pairedPath)) return false;
@@ -811,12 +811,12 @@ function needsPrePair(gatewayToken?: string): boolean {
   try {
     const paired = JSON.parse(readFileSync(pairedPath, 'utf-8')) as Record<string, unknown>;
 
-    if (!existsSync(identityPath)) return true; // No Nerve identity yet
+    if (!existsSync(identityPath)) return true; // No ROBIN identity yet
 
     const stored = JSON.parse(readFileSync(identityPath, 'utf-8'));
     const deviceId = stored.deviceId;
 
-    if (!paired[deviceId]) return true; // Nerve not registered
+    if (!paired[deviceId]) return true; // ROBIN not registered
 
     const existing = paired[deviceId] as {
       scopes?: string[];
@@ -835,10 +835,10 @@ function needsPrePair(gatewayToken?: string): boolean {
     if (!hasFullOperatorScopes(existing.tokens?.operator?.scopes)) return true;
 
     // OpenClaw 2026.2.26+ metadata pinning requires these to match runtime connect metadata.
-    if (existing.platform !== NERVE_PAIRED_PLATFORM) return true;
-    if (existing.clientId !== NERVE_PAIRED_CLIENT_ID) return true;
-    if (existing.clientMode !== NERVE_PAIRED_CLIENT_MODE) return true;
-    if (existing.displayName !== NERVE_PAIRED_DISPLAY_NAME) return true;
+    if (existing.platform !== ROBIN_PAIRED_PLATFORM) return true;
+    if (existing.clientId !== ROBIN_PAIRED_CLIENT_ID) return true;
+    if (existing.clientMode !== ROBIN_PAIRED_CLIENT_MODE) return true;
+    if (existing.displayName !== ROBIN_PAIRED_DISPLAY_NAME) return true;
 
     return false;
   } catch {
@@ -883,8 +883,8 @@ function needsOriginPatch(origin: string): boolean {
  * Returns an array of pending changes with descriptions and apply functions.
  */
 export function detectNeededConfigChanges(opts: {
-  nerveOrigin?: string;
-  nerveHttpsOrigin?: string;
+  robinOrigin?: string;
+  robinHttpsOrigin?: string;
   allowedOrigins?: string[];
   gatewayToken?: string;
 }): ConfigChange[] {
@@ -896,7 +896,7 @@ export function detectNeededConfigChanges(opts: {
   if (deviceScopeFixNeeded) {
     changes.push({
       id: 'device-scopes',
-      description: 'Fix gateway device scopes (required for Nerve to connect)',
+      description: 'Fix gateway device scopes (required for ROBIN to connect)',
       apply: () => fixGatewayDeviceScopes(),
     });
   }
@@ -906,8 +906,8 @@ export function detectNeededConfigChanges(opts: {
   if ((!existsSync(pairedPath) && deviceScopeFixNeeded) || needsPrePair(opts.gatewayToken)) {
     changes.push({
       id: 'pre-pair',
-      description: 'Pre-pair Nerve device identity (skip manual approval step)',
-      apply: () => prePairNerveDevice(opts.gatewayToken),
+      description: 'Pre-pair ROBIN device identity (skip manual approval step)',
+      apply: () => prePairROBINDevice(opts.gatewayToken),
     });
   }
 
@@ -922,21 +922,21 @@ export function detectNeededConfigChanges(opts: {
     });
   }
 
-  const trimmedNerveOrigin = opts.nerveOrigin?.trim() || undefined;
-  const trimmedNerveHttpsOrigin = opts.nerveHttpsOrigin?.trim() || undefined;
+  const trimmedROBINOrigin = opts.robinOrigin?.trim() || undefined;
+  const trimmedROBINHttpsOrigin = opts.robinHttpsOrigin?.trim() || undefined;
 
   const origins = [...new Set([
     ...(opts.allowedOrigins || []),
-    trimmedNerveOrigin,
-    trimmedNerveHttpsOrigin,
+    trimmedROBINOrigin,
+    trimmedROBINHttpsOrigin,
   ].map(origin => origin?.trim()).filter((origin): origin is string => Boolean(origin)))];
 
   for (const origin of origins) {
     if (!needsOriginPatch(origin)) continue;
 
     let id = `allowed-origins:${origin}`;
-    if (origin === trimmedNerveOrigin) id = 'allowed-origins';
-    else if (origin === trimmedNerveHttpsOrigin) id = 'allowed-origins-https';
+    if (origin === trimmedROBINOrigin) id = 'allowed-origins';
+    else if (origin === trimmedROBINHttpsOrigin) id = 'allowed-origins-https';
 
     changes.push({
       id,

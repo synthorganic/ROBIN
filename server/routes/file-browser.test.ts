@@ -38,7 +38,7 @@ describe('file-browser routes', () => {
         memoryDir: path.join(tmpDir, 'memory'),
         fileBrowserRoot: opts?.fileBrowserRoot ?? '',
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
 
     const mod = await import('./file-browser.js');

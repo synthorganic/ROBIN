@@ -231,7 +231,7 @@ describe('useVoiceInput', () => {
     });
 
     it('keeps wake word effectively off on mobile web even when persisted on', () => {
-      localStorage.setItem('nerve:wakeWordEnabled', 'true');
+      localStorage.setItem('robin:wakeWordEnabled', 'true');
       mockWakeWordSupport({ supported: false, reason: 'mobile-web' });
 
       const onTranscription = vi.fn();
@@ -239,7 +239,7 @@ describe('useVoiceInput', () => {
 
       expect(result.current.wakeWordEnabled).toBe(false);
       expect(result.current.voiceState).toBe('idle');
-      expect(localStorage.getItem('nerve:wakeWordEnabled')).toBe('true');
+      expect(localStorage.getItem('robin:wakeWordEnabled')).toBe('true');
     });
 
     it('does not start wake listening on mobile web', () => {

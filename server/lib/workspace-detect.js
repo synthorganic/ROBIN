@@ -2,12 +2,12 @@
  * Workspace locality detection.
  *
  * Determines whether the agent workspace directory exists on the local
- * filesystem. When it doesn't (e.g. Nerve running on DGX host while the
+ * filesystem. When it doesn't (e.g. ROBIN running on DGX host while the
  * workspace lives inside an OpenShell sandbox), route handlers fall back
  * to gateway RPC for file access.
  *
  * The result is cached with a short TTL to avoid probing the filesystem
- * on every HTTP request. Setting `NERVE_WORKSPACE_REMOTE=true` forces
+ * on every HTTP request. Setting `ROBIN_WORKSPACE_REMOTE=true` forces
  * gateway-only mode unconditionally.
  * @module
  */
@@ -19,7 +19,7 @@ const cache = new Map();
  * Check whether the workspace root directory exists locally.
  *
  * Returns `true` when the directory is accessible on the local filesystem,
- * `false` when it isn't (or when `NERVE_WORKSPACE_REMOTE=true` is set).
+ * `false` when it isn't (or when `ROBIN_WORKSPACE_REMOTE=true` is set).
  */
 export async function isWorkspaceLocal(workspaceRoot) {
     // Env override — always treat as remote

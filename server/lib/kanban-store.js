@@ -1,7 +1,7 @@
 /**
  * Kanban task store — JSON file persistence with mutex-protected I/O.
  *
- * Runtime data lives under `${NERVE_DATA_DIR:-~/.nerve}/kanban/tasks.json`.
+ * Runtime data lives under `${ROBIN_DATA_DIR:-~/.robin}/kanban/tasks.json`.
  * Legacy installs may still have data under `server-dist/data/kanban/` or
  * `server/data/kanban/`, so the store performs a one-time migration into the
  * canonical runtime directory on first init. Every mutating operation acquires
@@ -205,8 +205,8 @@ export class KanbanStore {
     legacyCandidatePaths;
     constructor(filePath) {
         const __dirname = path.dirname(fileURLToPath(import.meta.url));
-        const projectRoot = process.env.NERVE_PROJECT_ROOT || path.resolve(__dirname, '..', '..');
-        const dataRoot = process.env.NERVE_DATA_DIR || path.join(os.homedir() || process.cwd(), '.nerve');
+        const projectRoot = process.env.ROBIN_PROJECT_ROOT || path.resolve(__dirname, '..', '..');
+        const dataRoot = process.env.ROBIN_DATA_DIR || path.join(os.homedir() || process.cwd(), '.robin');
         const dataDir = path.join(dataRoot, 'kanban');
         this.filePath = filePath || path.join(dataDir, 'tasks.json');
         this.auditPath = path.join(path.dirname(this.filePath), 'audit.log');

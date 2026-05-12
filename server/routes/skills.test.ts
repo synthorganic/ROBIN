@@ -89,7 +89,7 @@ describe('GET /api/skills', () => {
         memoryPath,
         memoryDir,
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
 
     const mod = await import('./skills.js');

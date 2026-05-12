@@ -13,5 +13,5 @@ export function getWorkspaceRootSessionKey(sessionKey: string): string {
 
 export function getWorkspaceStorageKey(kind: string, agentId: string): string {
   const scopedAgentId = agentId.trim() || DEFAULT_WORKSPACE_AGENT_ID;
-  return `nerve:workspace:${scopedAgentId}:${kind}`;
+  return `robin:workspace:${scopedAgentId}:${kind}`;
 }

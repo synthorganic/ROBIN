@@ -43,7 +43,7 @@ describe('workspace-detect', () => {
     expect(result).toBe(false);
   });
 
-  it('returns false when NERVE_WORKSPACE_REMOTE is true', async () => {
+  it('returns false when ROBIN_WORKSPACE_REMOTE is true', async () => {
     const { isWorkspaceLocal } = await loadModule(true);
     const workspaceRoot = path.join(tmpDir, 'workspace');
     await fs.mkdir(workspaceRoot);

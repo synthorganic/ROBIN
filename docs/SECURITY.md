@@ -53,7 +53,7 @@ ROBIN is designed as a **local-first** web UI for an AI agent. Its security mode
 
 ## Authentication & Access Control
 
-ROBIN includes a built-in session-cookie-based authentication layer that can be enabled via the `NERVE_AUTH` environment variable.
+ROBIN includes a built-in session-cookie-based authentication layer that can be enabled via the `ROBIN_AUTH` environment variable.
 
 ### When Auth is Disabled (default for localhost)
 
@@ -83,7 +83,7 @@ All API endpoints (except `/api/auth/*` and `/health`) require a valid session c
 | `HttpOnly` | `true` | Not accessible via JavaScript (XSS-proof) |
 | `SameSite` | `Strict` | Not sent on cross-origin requests (CSRF-proof) |
 | `Secure` | auto | Only sent over HTTPS when HTTPS is active |
-| Signed | HMAC-SHA256 | Tamper-proof — requires `NERVE_SESSION_SECRET` |
+| Signed | HMAC-SHA256 | Tamper-proof — requires `ROBIN_SESSION_SECRET` |
 | Cookie name | `ROBIN_session_{PORT}` | Port-suffixed to avoid collisions across instances |
 
 **Password storage:**
@@ -280,7 +280,7 @@ The `~` prefix in input paths is expanded to `os.homedir()` before resolution, p
 
 ## WebSocket Proxy Security
 
-The WebSocket proxy (connecting the frontend to the OpenClaw gateway) restricts target hostnames:
+The WebSocket proxy (connecting the frontend to the compatible agent gateway) restricts target hostnames:
 
 **Default allowed hosts:** `localhost`, `127.0.0.1`, `::1`
 
@@ -311,7 +311,7 @@ This keeps the managed gateway token on the server while still allowing explicit
 
 OpenClaw 2026.2.19+ requires a signed device identity (Ed25519 keypair) for WebSocket connections to receive `operator.read` / `operator.write` scopes. Plain token authentication alone grants zero scopes.
 
-ROBIN generates a persistent device identity on first start (stored at `~/.ROBIN/device-identity.json`) and injects it into the connect handshake. The gateway always stays on loopback (`127.0.0.1`) — ROBIN proxies all external connections through its WS proxy.
+ROBIN generates a persistent device identity on first start (stored at `~/.robin/device-identity.json`) and injects it into the connect handshake. The gateway always stays on loopback (`127.0.0.1`) — ROBIN proxies all external connections through its WS proxy.
 
 **Normal setup path:** the setup wizard now pre-pairs ROBIN's device identity while it is configuring the gateway, so a fresh install usually does **not** require a manual `openclaw devices approve` step.
 

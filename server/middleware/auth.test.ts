@@ -9,7 +9,7 @@ vi.mock('../lib/config.js', () => {
       auth: false,
       sessionSecret: 'test-secret-123',
     },
-    SESSION_COOKIE_NAME: 'nerve_session_3080',
+    SESSION_COOKIE_NAME: 'robin_session_3080',
   };
 });
 
@@ -80,7 +80,7 @@ describe('authMiddleware', () => {
       mockedVerifySession.mockReturnValue(null);
       const app = createTestApp();
       const res = await app.request('/api/test', {
-        headers: { Cookie: 'nerve_session_3080=invalid-token' },
+        headers: { Cookie: 'robin_session_3080=invalid-token' },
       });
       expect(res.status).toBe(401);
       const body = (await res.json()) as { error: string };
@@ -91,7 +91,7 @@ describe('authMiddleware', () => {
       mockedVerifySession.mockReturnValue({ exp: Date.now() + 60000, iat: Date.now() });
       const app = createTestApp();
       const res = await app.request('/api/test', {
-        headers: { Cookie: 'nerve_session_3080=valid-token' },
+        headers: { Cookie: 'robin_session_3080=valid-token' },
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
@@ -150,7 +150,7 @@ describe('authMiddleware', () => {
       mockedVerifySession.mockReturnValue({ exp: Date.now() + 60000, iat: Date.now() });
       const app = createTestApp();
       await app.request('/api/test', {
-        headers: { Cookie: 'nerve_session_3080=my-session-token' },
+        headers: { Cookie: 'robin_session_3080=my-session-token' },
       });
       expect(mockedVerifySession).toHaveBeenCalledWith('my-session-token', 'test-secret-123');
     });

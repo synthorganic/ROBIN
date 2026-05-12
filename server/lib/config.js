@@ -1,7 +1,7 @@
 /**
  * Server configuration — all env vars, paths, and constants.
  *
- * Single source of truth for every tuneable value in the Nerve server.
+ * Single source of truth for every tuneable value in the ROBIN server.
  * Validated at startup via {@link validateConfig}. Also exports the
  * startup banner printer and a non-blocking gateway health probe.
  * @module
@@ -17,7 +17,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const HOME = process.env.HOME || os.homedir();
 const SUPPORTED_LANGUAGE_CODES = new Set(SUPPORTED_LANGUAGES.map((l) => l.code));
-const LANGUAGE_ENV_VALUE = process.env.NERVE_LANGUAGE ?? process.env.LANGUAGE;
+const LANGUAGE_ENV_VALUE = process.env.ROBIN_LANGUAGE ?? process.env.LANGUAGE;
 function normalizeLanguagePreference(language) {
     const normalized = (language || DEFAULT_LANGUAGE).trim().toLowerCase();
     if (!normalized || normalized === 'auto')
@@ -38,9 +38,9 @@ export const config = {
     // Speech-to-text
     sttProvider: (process.env.STT_PROVIDER || 'local'),
     whisperModel: process.env.WHISPER_MODEL || WHISPER_DEFAULT_MODEL,
-    whisperModelDir: process.env.WHISPER_MODEL_DIR || path.join(HOME, '.nerve', 'models'),
+    whisperModelDir: process.env.WHISPER_MODEL_DIR || path.join(HOME, '.robin', 'models'),
     // Language preference (ISO 639-1). Invalid/auto values are normalized to English.
-    // Primary env key: NERVE_LANGUAGE. Legacy LANGUAGE is still accepted as fallback.
+    // Primary env key: ROBIN_LANGUAGE. Legacy LANGUAGE is still accepted as fallback.
     language: normalizeLanguagePreference(LANGUAGE_ENV_VALUE),
     edgeVoiceGender: process.env.EDGE_VOICE_GENDER === 'male' || process.env.EDGE_VOICE_GENDER === 'female'
         ? process.env.EDGE_VOICE_GENDER
@@ -48,7 +48,7 @@ export const config = {
     // Gateway connection
     gatewayUrl: process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL,
     gatewayToken: process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || '',
-    publicOrigin: process.env.NERVE_PUBLIC_ORIGIN || '',
+    publicOrigin: process.env.ROBIN_PUBLIC_ORIGIN || '',
     // Agent identity (used in UI)
     agentName: process.env.AGENT_NAME || 'Agent',
     home: HOME,
@@ -60,8 +60,8 @@ export const config = {
     memoryDir: process.env.MEMORY_DIR || path.join(HOME, '.openclaw', 'workspace', 'memory'),
     sessionsDir: process.env.SESSIONS_DIR || path.join(HOME, '.openclaw', 'agents', 'main', 'sessions'),
     usageFile: process.env.USAGE_FILE || path.join(HOME, '.openclaw', 'token-usage.json'),
-    workspaceWatchRecursive: process.env.NERVE_WATCH_WORKSPACE_RECURSIVE === 'true',
-    workspaceRemote: process.env.NERVE_WORKSPACE_REMOTE === 'true',
+    workspaceWatchRecursive: process.env.ROBIN_WATCH_WORKSPACE_RECURSIVE === 'true',
+    workspaceRemote: process.env.ROBIN_WORKSPACE_REMOTE === 'true',
     certPath: path.join(PROJECT_ROOT, 'certs', 'cert.pem'),
     keyPath: path.join(PROJECT_ROOT, 'certs', 'key.pem'),
     bunPath: path.join(HOME, '.bun', 'bin', 'bunx'),
@@ -79,10 +79,10 @@ export const config = {
     ttsCacheTtlMs: Number(process.env.TTS_CACHE_TTL_MS || 3_600_000), // 1 hour
     ttsCacheMax: Number(process.env.TTS_CACHE_MAX || 200),
     // Authentication
-    auth: (process.env.NERVE_AUTH || 'false').toLowerCase() === 'true',
-    passwordHash: process.env.NERVE_PASSWORD_HASH || '',
-    sessionSecret: process.env.NERVE_SESSION_SECRET || '',
-    sessionTtlMs: Number(process.env.NERVE_SESSION_TTL || 30 * 24 * 60 * 60 * 1000), // 30 days
+    auth: (process.env.ROBIN_AUTH || 'false').toLowerCase() === 'true',
+    passwordHash: process.env.ROBIN_PASSWORD_HASH || '',
+    sessionSecret: process.env.ROBIN_SESSION_SECRET || '',
+    sessionTtlMs: Number(process.env.ROBIN_SESSION_TTL || 30 * 24 * 60 * 60 * 1000), // 30 days
 };
 /**
  * Centralized, type-safe config mutation.
@@ -123,7 +123,7 @@ export function updateConfig(key, value) {
     config[key] = value;
 }
 /** Session cookie name — suffixed with port to avoid collisions when running multiple instances. */
-export const SESSION_COOKIE_NAME = `nerve_session_${config.port}`;
+export const SESSION_COOKIE_NAME = `robin_session_${config.port}`;
 /** WebSocket proxy allowed hostnames (extend via WS_ALLOWED_HOSTS env var, comma-separated) */
 export const WS_ALLOWED_HOSTS = new Set([
     'localhost', '127.0.0.1', '::1',
@@ -181,17 +181,17 @@ export function validateConfig() {
     }
     // ── Auth validation ──────────────────────────────────────────────
     if (config.auth && !config.passwordHash && !config.gatewayToken) {
-        console.error('\n  \x1b[31m✗ NERVE_AUTH is enabled but no password or gateway token is configured.\x1b[0m\n' +
+        console.error('\n  \x1b[31m✗ ROBIN_AUTH is enabled but no password or gateway token is configured.\x1b[0m\n' +
             '  Run \x1b[36mnpm run setup\x1b[0m to set a password, or set GATEWAY_TOKEN as a fallback.\n');
     }
     if (config.auth && !config.sessionSecret) {
         // Auto-generate session secret if missing
         const secret = crypto.randomBytes(32).toString('hex');
-        console.warn('[config] ⚠ NERVE_SESSION_SECRET not set — generated ephemeral secret (sessions won\'t survive restarts)');
+        console.warn('[config] ⚠ ROBIN_SESSION_SECRET not set — generated ephemeral secret (sessions won\'t survive restarts)');
         updateConfig('sessionSecret', secret);
     }
     if (config.host === '0.0.0.0' && !config.auth) {
-        if (process.env.NERVE_ALLOW_INSECURE === 'true') {
+        if (process.env.ROBIN_ALLOW_INSECURE === 'true') {
             console.warn('\n  \x1b[33m⚠ INSECURE MODE: Server binds to 0.0.0.0 with authentication DISABLED.\x1b[0m\n' +
                 '  All API endpoints are accessible from the network without a password.\n' +
                 '  This is dangerous. Run \x1b[36mnpm run setup\x1b[0m to enable authentication.\n');
@@ -202,7 +202,7 @@ export function validateConfig() {
                 '  To fix, either:\n' +
                 '    1. Enable auth:  \x1b[36mnpm run setup\x1b[0m\n' +
                 '    2. Bind locally: \x1b[36mHOST=127.0.0.1\x1b[0m in .env\n' +
-                '    3. Override:     \x1b[36mNERVE_ALLOW_INSECURE=true\x1b[0m in .env (NOT recommended)\n');
+                '    3. Override:     \x1b[36mROBIN_ALLOW_INSECURE=true\x1b[0m in .env (NOT recommended)\n');
             process.exit(1);
         }
     }
@@ -213,8 +213,8 @@ export function validateConfig() {
     if (!config.replicateApiToken) {
         console.warn('[config] ⚠ REPLICATE_API_TOKEN not set — Qwen TTS unavailable');
     }
-    if (!process.env.NERVE_LANGUAGE && process.env.LANGUAGE) {
-        console.warn('[config] ⚠ LANGUAGE is deprecated — use NERVE_LANGUAGE instead');
+    if (!process.env.ROBIN_LANGUAGE && process.env.LANGUAGE) {
+        console.warn('[config] ⚠ LANGUAGE is deprecated — use ROBIN_LANGUAGE instead');
     }
     if (config.host === '0.0.0.0' && config.auth) {
         console.warn('[config] ⚠ Server binds to 0.0.0.0 — API is accessible from the network (auth enabled).');

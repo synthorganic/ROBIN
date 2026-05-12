@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { EXIT_CODES, UpdateError } from './types.js';
 
-const STATE_DIR = join(homedir(), '.nerve', 'updater');
+const STATE_DIR = join(homedir(), '.robin', 'updater');
 const LOCK_FILE = join(STATE_DIR, 'update.lock');
 
 /**

@@ -1,6 +1,6 @@
 # Deployment: Remote Gateway + Local ROBIN
 
-ROBIN runs on your laptop, Gateway runs on a cloud host. Good when you want local UI responsiveness but your OpenClaw runtime lives in the cloud.
+ROBIN runs on your laptop, Gateway runs on a cloud host. Good when you want local UI responsiveness but your gateway runtime lives in the cloud.
 
 ## Topology
 
@@ -103,7 +103,7 @@ Connection works but actions fail with scope errors.
 
 - Use private addressing and strict firewall rules
 - Rotate gateway token if it's been shared
-- If you expose local ROBIN to LAN, enable `NERVE_AUTH=true`
+- If you expose local ROBIN to LAN, enable `ROBIN_AUTH=true`
 
 ## Recommendation
 

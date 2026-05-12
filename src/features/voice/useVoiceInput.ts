@@ -44,7 +44,7 @@ export function invalidatePhrasesCache(): void {
   phrasesCache = null;
 }
 
-const WAKE_WORD_KEY = 'nerve:wakeWordEnabled';
+const WAKE_WORD_KEY = 'robin:wakeWordEnabled';
 
 /** Get SpeechRecognition constructor with webkit prefix fallback. */
 function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {

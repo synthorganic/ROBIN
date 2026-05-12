@@ -42,7 +42,7 @@ async function fetchServerInfo(): Promise<{ serverTime?: number; gatewayStartedA
 }
 
 /**
- * Bottom status bar for the Nerve cockpit.
+ * Bottom status bar for the ROBIN cockpit.
  *
  * Shows connection state, server time, session count, gateway uptime,
  * an optional context-window meter, a sparkline, and the app version.

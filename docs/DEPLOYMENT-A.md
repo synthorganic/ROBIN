@@ -11,7 +11,7 @@ Browser (localhost) → ROBIN (127.0.0.1:3080) → Gateway (127.0.0.1:18789)
 ## Prerequisites
 
 - Node.js 22+
-- OpenClaw installed and gateway running
+- gateway runtime installed and gateway running
 - Local shell access
 
 ## Setup
@@ -19,7 +19,7 @@ Browser (localhost) → ROBIN (127.0.0.1:3080) → Gateway (127.0.0.1:18789)
 ### 1. Install ROBIN
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh | bash
 ```
 
 ### 2. Run setup if needed
@@ -57,9 +57,9 @@ All three should succeed. Open `http://localhost:3080` in your browser.
 
 ## Common issues
 
-### Token mismatch after OpenClaw updates
+### Token mismatch after gateway updates
 
-After an OpenClaw update or re-onboard, the connect dialog may fail with auth errors.
+After an gateway update or re-onboard, the connect dialog may fail with auth errors.
 
 **Fix:** Re-run `npm run setup`, restart both services, and open a fresh browser tab.
 
@@ -81,7 +81,7 @@ openclaw devices approve <requestId>
 ## Security notes
 
 - Keep `HOST=127.0.0.1` for local-only deployments
-- If you expose ROBIN (`HOST=0.0.0.0`), enable `NERVE_AUTH=true`
+- If you expose ROBIN (`HOST=0.0.0.0`), enable `ROBIN_AUTH=true`
 - See [Security](SECURITY.md) for the full threat model
 
 ## Recommendation

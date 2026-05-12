@@ -49,7 +49,7 @@ const cronJobSchema = z.object({
     agentId: sessionAgentIdSchema,
     enabled: z.boolean().optional(),
     notify: z.boolean().optional(),
-    // Legacy compat — Nerve may send these flat fields
+    // Legacy compat — ROBIN may send these flat fields
     prompt: z.string().max(10000).optional(),
     model: z.string().max(200).optional(),
     thinkingLevel: z.string().max(50).optional(),
@@ -78,7 +78,7 @@ const cronPatchSchema = z.object({
 const app = new Hono();
 
 const GATEWAY_RUN_TIMEOUT_MS = 60_000;
-const MANUAL_CRON_RUNS_DIR = join(config.home, '.openclaw', 'cron', 'nerve-manual-runs');
+const MANUAL_CRON_RUNS_DIR = join(config.home, '.openclaw', 'cron', 'robin-manual-runs');
 
 interface ManualCronRunEntry {
   ts: number;

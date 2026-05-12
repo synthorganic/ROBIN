@@ -4,7 +4,7 @@
  * OpenClaw 2026.2.19+ requires device identity (Ed25519 keypair + signed challenge)
  * for WS connections to receive `operator.read` / `operator.write` scopes.
  *
- * The keypair is generated once and persisted to `~/.nerve/device-identity.json`.
+ * The keypair is generated once and persisted to `~/.robin/device-identity.json`.
  * On subsequent starts the same identity is reused, avoiding re-pairing.
  * @module
  */
@@ -14,9 +14,9 @@ import path from 'node:path';
 let cached = null;
 /** Path to the identity file (next to the running process) */
 function identityPath() {
-    // Store in the .nerve directory under the user's home, or fallback to cwd
-    const dir = process.env.NERVE_DATA_DIR
-        || path.join(process.env.HOME || process.cwd(), '.nerve');
+    // Store in the .robin directory under the user's home, or fallback to cwd
+    const dir = process.env.ROBIN_DATA_DIR
+        || path.join(process.env.HOME || process.cwd(), '.robin');
     if (!fs.existsSync(dir))
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     return path.join(dir, 'device-identity.json');

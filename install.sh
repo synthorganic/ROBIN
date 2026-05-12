@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────
-# Nerve Installer — one-command setup for the Nerve web interface
+# ROBIN Installer — one-command setup for the ROBIN web interface
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-nerve/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-robin/master/install.sh | bash
 #
 # Or with options:
-#   curl -fsSL ... | bash -s -- --dir ~/nerve --version v1.4.4
-#   curl -fsSL ... | bash -s -- --dir ~/nerve --branch main
+#   curl -fsSL ... | bash -s -- --dir ~/robin --version v1.4.4
+#   curl -fsSL ... | bash -s -- --dir ~/robin --branch main
 #   curl -fsSL ... | bash -s -- --gateway-url https://gw.example.com --gateway-token <token> --skip-setup
 # ──────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -29,11 +29,11 @@ cleanup() {
 trap cleanup EXIT
 
 # ── Defaults ──────────────────────────────────────────────────────────
-INSTALL_DIR="${NERVE_INSTALL_DIR:-${HOME}/nerve}"
+INSTALL_DIR="${ROBIN_INSTALL_DIR:-${HOME}/robin}"
 BRANCH="master"
 BRANCH_EXPLICIT=false
 VERSION=""
-REPO="https://github.com/daggerhashimoto/openclaw-nerve.git"
+REPO="https://github.com/daggerhashimoto/openclaw-robin.git"
 NODE_MIN=22
 SKIP_SETUP=false
 DRY_RUN=false
@@ -130,7 +130,7 @@ repo_has_local_changes() {
 run_with_dots() {
   local msg="$1"; shift
   local stderr_file
-  stderr_file=$(mktemp /tmp/nerve-rwd-XXXXXX)
+  stderr_file=$(mktemp /tmp/robin-rwd-XXXXXX)
   TEMP_FILES+=("$stderr_file")
   printf "  ${RAIL}  ${CYAN}→${NC} %s " "$msg"
   "$@" 2>"$stderr_file" &
@@ -224,13 +224,13 @@ fetch_latest_release_tag() {
   if [[ -n "$token" ]]; then
     response=$(curl -fsSL \
       -H "Accept: application/vnd.github+json" \
-      -H "User-Agent: nerve-installer" \
+      -H "User-Agent: robin-installer" \
       -H "Authorization: Bearer ${token}" \
       "$api_url" 2>/dev/null) || return 1
   else
     response=$(curl -fsSL \
       -H "Accept: application/vnd.github+json" \
-      -H "User-Agent: nerve-installer" \
+      -H "User-Agent: robin-installer" \
       "$api_url" 2>/dev/null) || return 1
   fi
 
@@ -268,10 +268,10 @@ while [[ $# -gt 0 ]]; do
     --gateway-url) [[ $# -ge 2 ]] || { echo "Missing value for --gateway-url"; exit 1; }; GATEWAY_URL_OVERRIDE="$2"; shift 2 ;;
     --access-mode) [[ $# -ge 2 ]] || { echo "Missing value for --access-mode"; exit 1; }; ACCESS_MODE="$2"; shift 2 ;;
     --help|-h)
-      echo "Nerve Installer"
+      echo "ROBIN Installer"
       echo ""
       echo "Options:"
-      echo "  --dir <path>         Install directory (default: ~/nerve)"
+      echo "  --dir <path>         Install directory (default: ~/robin)"
       echo "  --version <vX.Y.Z>   Install a specific release version"
       echo "  --branch <name>      Install from a branch (dev override; bypasses release mode)"
       echo "  --repo <url>         Git repo URL"
@@ -675,9 +675,9 @@ else
     ok "Updated to ${TARGET_REF}"
   else
     if [[ "$TARGET_REF_KIND" == "branch" || "$TARGET_REF_KIND" == "branch-fallback" ]]; then
-      run_with_dots "Cloning Nerve" git clone --branch "$TARGET_REF" --depth 1 -q "$REPO" "$INSTALL_DIR"
+      run_with_dots "Cloning ROBIN" git clone --branch "$TARGET_REF" --depth 1 -q "$REPO" "$INSTALL_DIR"
     else
-      run_with_dots "Cloning Nerve" git clone --depth 1 -q "$REPO" "$INSTALL_DIR"
+      run_with_dots "Cloning ROBIN" git clone --depth 1 -q "$REPO" "$INSTALL_DIR"
       cd "$INSTALL_DIR"
       run_with_dots "Fetching tags" git fetch --tags origin -q
       run_with_dots "Checking out ${TARGET_REF}" git checkout --force "$TARGET_REF" -q
@@ -695,7 +695,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   dry "Would run: npm ci"
   dry "Would run: npm run build"
 else
-  npm_log=$(mktemp /tmp/nerve-npm-install-XXXXXX)
+  npm_log=$(mktemp /tmp/robin-npm-install-XXXXXX)
 
   run_with_dots "Installing dependencies" bash -c "npm ci --loglevel=error > '$npm_log' 2>&1"
   if [[ $RWD_EXIT -eq 0 ]]; then
@@ -704,7 +704,7 @@ else
     # Back up existing build outputs for rollback on failure
     BUILD_BACKUP=""
     if [[ -d dist || -d server-dist ]]; then
-      BUILD_BACKUP=$(mktemp -d /tmp/nerve-build-backup-XXXXXX)
+      BUILD_BACKUP=$(mktemp -d /tmp/robin-build-backup-XXXXXX)
       TEMP_FILES+=("$BUILD_BACKUP")
       [[ -d dist ]] && cp -a dist "$BUILD_BACKUP/dist"
       [[ -d server-dist ]] && cp -a server-dist "$BUILD_BACKUP/server-dist"
@@ -750,7 +750,7 @@ else
     exit 1
   fi
 
-  build_log=$(mktemp /tmp/nerve-build-XXXXXX)
+  build_log=$(mktemp /tmp/robin-build-XXXXXX)
 
   run_with_dots "Building project" bash -c "npm run build > '$build_log' 2>&1"
   if [[ $RWD_EXIT -eq 0 ]]; then
@@ -783,7 +783,7 @@ else
 
   # ── Download speech model (for local voice input) ──────────────────
   # Keep installer bootstrap in sync with UI/server default (multilingual base).
-  WHISPER_MODEL_DIR="${HOME}/.nerve/models"
+  WHISPER_MODEL_DIR="${HOME}/.robin/models"
   WHISPER_MODEL_KEY="base"
   if [[ -f .env ]]; then
     EXISTING_WHISPER_MODEL=$(grep -E '^WHISPER_MODEL=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' || true)
@@ -881,34 +881,34 @@ generate_env_from_gateway() {
   fi
 
   if [[ -n "$gw_token" ]]; then
-    local nerve_port=3080
-    if ! check_port "$nerve_port"; then
+    local robin_port=3080
+    if ! check_port "$robin_port"; then
       if [[ "$INTERACTIVE" != "true" ]]; then
-        fail "Port ${nerve_port} is already in use. Set a different PORT in .env or free the port."
+        fail "Port ${robin_port} is already in use. Set a different PORT in .env or free the port."
         exit 1
       else
-        warn "Port ${nerve_port} is already in use"
+        warn "Port ${robin_port} is already in use"
         while true; do
           printf "  ${RAIL}  ${CYAN}→${NC} Enter an available port: "
-          if ! read -r nerve_port < /dev/tty 2>/dev/null; then
+          if ! read -r robin_port < /dev/tty 2>/dev/null; then
             fail "Cannot read from terminal"
             exit 1
           fi
-          if [[ ! "$nerve_port" =~ ^[0-9]+$ ]] || (( nerve_port < 1 || nerve_port > 65535 )); then
+          if [[ ! "$robin_port" =~ ^[0-9]+$ ]] || (( robin_port < 1 || robin_port > 65535 )); then
             warn "Invalid port number"
             continue
           fi
-          if check_port "$nerve_port"; then
+          if check_port "$robin_port"; then
             break
           fi
-          warn "Port ${nerve_port} is also in use"
+          warn "Port ${robin_port} is also in use"
         done
       fi
     fi
     cat > .env <<ENVEOF
 GATEWAY_URL=${gw_url}
 GATEWAY_TOKEN=${gw_token}
-PORT=${nerve_port}
+PORT=${robin_port}
 ENVEOF
     ok "Generated .env from OpenClaw gateway config"
   else
@@ -949,7 +949,7 @@ else
         if read -r answer < /dev/tty 2>/dev/null; then
           if [[ "$(echo "$answer" | tr "[:upper:]" "[:lower:]")" == "y" ]]; then
             echo ""
-            NERVE_INSTALLER=1 npm run setup < /dev/tty 2>/dev/null || {
+            ROBIN_INSTALLER=1 npm run setup < /dev/tty 2>/dev/null || {
               warn "Setup wizard failed (no TTY?) — run ${CYAN}npm run setup${NC} manually"
             }
           else
@@ -963,12 +963,12 @@ else
       fi
     elif [[ -n "$ACCESS_MODE" ]]; then
       info "Explicit access mode requested — running non-interactive setup wizard..."
-      NERVE_INSTALLER=1 npm run setup -- --defaults --access-mode "$ACCESS_MODE" || {
+      ROBIN_INSTALLER=1 npm run setup -- --defaults --access-mode "$ACCESS_MODE" || {
         fail "Setup failed for --access-mode ${ACCESS_MODE}"
         exit 1
       }
     elif [[ "$INTERACTIVE" == "true" ]]; then
-      NERVE_INSTALLER=1 npm run setup < /dev/tty 2>/dev/null || {
+      ROBIN_INSTALLER=1 npm run setup < /dev/tty 2>/dev/null || {
         warn "Setup wizard failed — attempting auto-config from gateway..."
         generate_env_from_gateway
       }
@@ -983,7 +983,7 @@ fi
 stage "Service"
 
 setup_systemd() {
-  local service_file="/etc/systemd/system/nerve.service"
+  local service_file="/etc/systemd/system/robin.service"
   local node_bin
   node_bin=$(which node)
   local working_dir="$INSTALL_DIR"
@@ -1037,11 +1037,11 @@ setup_systemd() {
   fi
 
   local tmp_service
-  tmp_service=$(mktemp /tmp/nerve.service.XXXXXX)
+  tmp_service=$(mktemp /tmp/robin.service.XXXXXX)
 
   cat > "$tmp_service" <<EOF
 [Unit]
-Description=Nerve - OpenClaw Web UI
+Description=ROBIN - OpenClaw Web UI
 After=network.target
 
 [Service]
@@ -1064,16 +1064,16 @@ EOF
   if [[ $EUID -eq 0 ]]; then
     mv "$tmp_service" "$service_file"
     if [[ -f "${working_dir}/.env" ]]; then
-      run_with_dots "Systemd service" bash -c "systemctl daemon-reload && systemctl enable nerve.service &>/dev/null && systemctl start nerve.service"
+      run_with_dots "Systemd service" bash -c "systemctl daemon-reload && systemctl enable robin.service &>/dev/null && systemctl start robin.service"
       if [[ $RWD_EXIT -eq 0 ]]; then
         ok "Systemd service installed and started"
       else
-        warn "Systemd service install failed — try: sudo systemctl start nerve.service"
+        warn "Systemd service install failed — try: sudo systemctl start robin.service"
       fi
     else
       systemctl daemon-reload
-      systemctl enable nerve.service &>/dev/null
-      ok "Systemd service installed (not started — run ${CYAN}npm run setup${NC} first, then ${CYAN}systemctl start nerve.service${NC})"
+      systemctl enable robin.service &>/dev/null
+      ok "Systemd service installed (not started — run ${CYAN}npm run setup${NC} first, then ${CYAN}systemctl start robin.service${NC})"
     fi
   else
     echo ""
@@ -1081,8 +1081,8 @@ EOF
     echo ""
     echo "    sudo mv ${tmp_service} ${service_file}"
     echo "    sudo systemctl daemon-reload"
-    echo "    sudo systemctl enable nerve.service"
-    echo "    sudo systemctl start nerve.service"
+    echo "    sudo systemctl enable robin.service"
+    echo "    sudo systemctl start robin.service"
     echo ""
     info "Service will run as: ${install_user}"
     echo ""
@@ -1094,7 +1094,7 @@ setup_launchd() {
   node_bin=$(which node)
   local working_dir="$INSTALL_DIR"
   local plist_dir="${HOME}/Library/LaunchAgents"
-  local plist_file="${plist_dir}/com.nerve.server.plist"
+  local plist_file="${plist_dir}/com.robin.server.plist"
 
   mkdir -p "$plist_dir"
 
@@ -1108,7 +1108,7 @@ setup_launchd() {
   node_dir_escaped=$(dirname "${node_bin}")
   cat > "$start_script" <<STARTEOF
 #!/bin/bash
-# Nerve start wrapper — .env is loaded by the Node server at runtime.
+# ROBIN start wrapper — .env is loaded by the Node server at runtime.
 SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 cd "\${SCRIPT_DIR}"
 export PATH="${node_dir_escaped}:\${PATH}"
@@ -1123,7 +1123,7 @@ STARTEOF
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.nerve.server</string>
+  <string>com.robin.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>${start_script}</string>
@@ -1140,9 +1140,9 @@ STARTEOF
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${working_dir}/nerve.log</string>
+  <string>${working_dir}/robin.log</string>
   <key>StandardErrorPath</key>
-  <string>${working_dir}/nerve.log</string>
+  <string>${working_dir}/robin.log</string>
 </dict>
 </plist>
 EOF
@@ -1152,30 +1152,30 @@ EOF
   uid=$(id -u)
   if launchctl bootstrap "gui/${uid}" "$plist_file" 2>/dev/null; then
     ok "launchd service installed and started"
-    info "Nerve will start automatically on login"
+    info "ROBIN will start automatically on login"
   elif launchctl load "$plist_file" 2>/dev/null; then
     ok "launchd service installed and started (legacy loader)"
-    info "Nerve will start automatically on login"
+    info "ROBIN will start automatically on login"
   else
     ok "launchd plist created at ${plist_file}"
     info "Load it with: launchctl load ${plist_file}"
   fi
   echo ""
   info "Manage:"
-  echo "    launchctl stop com.nerve.server"
-  echo "    launchctl start com.nerve.server"
+  echo "    launchctl stop com.robin.server"
+  echo "    launchctl start com.robin.server"
   echo "    launchctl unload ${plist_file}"
   echo ""
 }
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   # ── macOS: launchd service ──────────────────────────────────────────
-  plist_check="${HOME}/Library/LaunchAgents/com.nerve.server.plist"
+  plist_check="${HOME}/Library/LaunchAgents/com.robin.server.plist"
   if [[ "$DRY_RUN" == "true" ]]; then
     if [[ -f "$plist_check" ]]; then
       dry "launchd service already exists — would restart it"
     else
-      dry "Would create launchd service (~/Library/LaunchAgents/com.nerve.server.plist)"
+      dry "Would create launchd service (~/Library/LaunchAgents/com.robin.server.plist)"
     fi
   else
     echo -e "${BOLD}  Service${NC}"
@@ -1183,7 +1183,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     if [[ -f "$plist_check" ]]; then
       info "Updating existing launchd service..."
       uid=$(id -u)
-      launchctl bootout "gui/${uid}/com.nerve.server" 2>/dev/null || launchctl stop com.nerve.server 2>/dev/null || true
+      launchctl bootout "gui/${uid}/com.robin.server" 2>/dev/null || launchctl stop com.robin.server 2>/dev/null || true
       setup_launchd
     elif [[ "$INTERACTIVE" == "true" ]]; then
       printf "  ${RAIL}  ${YELLOW}?${NC} Install as a launchd service (starts on login)? (Y/n) "
@@ -1205,22 +1205,22 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   fi
 elif command -v systemctl &>/dev/null; then
   if [[ "$DRY_RUN" == "true" ]]; then
-    if [[ -f /etc/systemd/system/nerve.service ]]; then
+    if [[ -f /etc/systemd/system/robin.service ]]; then
       dry "Service already exists — would restart it"
     else
       dry "Would prompt to install systemd service"
-      dry "Would create /etc/systemd/system/nerve.service"
+      dry "Would create /etc/systemd/system/robin.service"
       dry "Would enable and start the service"
     fi
   else
     echo -e "${BOLD}  Systemd service${NC}"
     echo ""
-    if [[ -f /etc/systemd/system/nerve.service ]]; then
+    if [[ -f /etc/systemd/system/robin.service ]]; then
       info "Updating existing systemd service..."
       if [[ $EUID -eq 0 ]]; then
-        systemctl stop nerve.service 2>/dev/null || true
+        systemctl stop robin.service 2>/dev/null || true
       else
-        sudo systemctl stop nerve.service 2>/dev/null || true
+        sudo systemctl stop robin.service 2>/dev/null || true
       fi
       setup_systemd
     elif [[ "$INTERACTIVE" == "true" ]]; then
@@ -1273,7 +1273,7 @@ else
   fi
   url_len=${#local_url}
   # Box must fit both the header text and the URL, with breathing room
-  header_len=29  # "Open Nerve in your browser:" + padding
+  header_len=29  # "Open ROBIN in your browser:" + padding
   url_line_len=$((url_len + 4))  # "→ " + url + padding
   if [[ $header_len -gt $url_line_len ]]; then
     box_inner=$((header_len + 4))
@@ -1282,11 +1282,11 @@ else
   fi
 
   echo ""
-  echo -e "     ${GREEN}${BOLD}✅ Nerve installed!${NC}"
+  echo -e "     ${GREEN}${BOLD}✅ ROBIN installed!${NC}"
   echo ""
   echo -e "     ${ORANGE}╭$(printf '─%.0s' $(seq 1 $box_inner))╮${NC}"
   echo -e "     ${ORANGE}│${NC}$(printf ' %.0s' $(seq 1 $box_inner))${ORANGE}│${NC}"
-  echo -e "     ${ORANGE}│${NC}  ${BOLD}Open Nerve in your browser:${NC}$(printf ' %.0s' $(seq 1 $((box_inner - 29))))${ORANGE}│${NC}"
+  echo -e "     ${ORANGE}│${NC}  ${BOLD}Open ROBIN in your browser:${NC}$(printf ' %.0s' $(seq 1 $((box_inner - 29))))${ORANGE}│${NC}"
   echo -e "     ${ORANGE}│${NC}  ${CYAN}${BOLD}→ ${local_url}${NC}$(printf ' %.0s' $(seq 1 $((box_inner - url_len - 4))))${ORANGE}│${NC}"
   echo -e "     ${ORANGE}│${NC}$(printf ' %.0s' $(seq 1 $box_inner))${ORANGE}│${NC}"
   echo -e "     ${ORANGE}╰$(printf '─%.0s' $(seq 1 $box_inner))╯${NC}"
@@ -1295,11 +1295,11 @@ else
   echo ""
   echo -e "     ${DIM}Directory:  cd ${INSTALL_DIR}${NC}"
   if $IS_MAC; then
-    echo -e "     ${DIM}Restart:   launchctl stop com.nerve.server && launchctl start com.nerve.server${NC}"
-    echo -e "     ${DIM}Logs:      tail -f ${INSTALL_DIR}/nerve.log${NC}"
+    echo -e "     ${DIM}Restart:   launchctl stop com.robin.server && launchctl start com.robin.server${NC}"
+    echo -e "     ${DIM}Logs:      tail -f ${INSTALL_DIR}/robin.log${NC}"
   elif command -v systemctl &>/dev/null; then
-    echo -e "     ${DIM}Restart:   sudo systemctl restart nerve.service${NC}"
-    echo -e "     ${DIM}Logs:      sudo journalctl -u nerve.service -f${NC}"
+    echo -e "     ${DIM}Restart:   sudo systemctl restart robin.service${NC}"
+    echo -e "     ${DIM}Logs:      sudo journalctl -u robin.service -f${NC}"
   else
     echo -e "     ${DIM}Start:     cd ${INSTALL_DIR} && npm run prod${NC}"
   fi
@@ -1312,7 +1312,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 if [[ "$ENV_MISSING" == "true" ]] || [[ ! -f "${INSTALL_DIR}/.env" ]]; then
-  warn "Install complete but Nerve is not fully configured"
+  warn "Install complete but ROBIN is not fully configured"
   info "Run: cd ${INSTALL_DIR} && npm run setup"
   exit 2  # partial success — installed but non-functional
 fi

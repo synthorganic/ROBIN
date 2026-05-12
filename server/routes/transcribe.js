@@ -119,7 +119,7 @@ app.put('/api/transcribe/config', async (c) => {
                 return c.text(`Unsupported language: ${lang}. Available: ${SUPPORTED_LANGUAGES.map((l) => l.code).join(', ')}`, 400);
             }
             updateConfig('language', lang);
-            await writeEnvKey('NERVE_LANGUAGE', lang);
+            await writeEnvKey('ROBIN_LANGUAGE', lang);
             messages.push(`Language set to ${lang}`);
         }
         return c.json({
@@ -165,7 +165,7 @@ app.put('/api/language', rateLimitGeneral, async (c) => {
                 return c.text(`Unsupported language: ${lang}. Available: ${SUPPORTED_LANGUAGES.map((l) => l.code).join(', ')}`, 400);
             }
             updateConfig('language', lang);
-            await writeEnvKey('NERVE_LANGUAGE', lang);
+            await writeEnvKey('ROBIN_LANGUAGE', lang);
         }
         if (body.edgeVoiceGender !== undefined) {
             const gender = body.edgeVoiceGender;

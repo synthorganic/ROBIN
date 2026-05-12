@@ -17,7 +17,7 @@ describe('assigneeOptions', () => {
       session('agent:designer:main', { displayName: 'Alpha Agent' }),
     ];
 
-    expect(buildAssigneeOptions(sessions, 'Nerve')).toEqual([
+    expect(buildAssigneeOptions(sessions, 'ROBIN')).toEqual([
       { value: '', label: 'Unassigned' },
       { value: 'operator', label: 'Operator' },
       { value: 'agent:designer', label: 'Alpha Agent' },
@@ -31,7 +31,7 @@ describe('assigneeOptions', () => {
       session('agent:builder:main', { label: 'Builder' }),
     ];
 
-    expect(buildAssigneeOptions(sessions, 'Nerve').map((option) => option.value)).toEqual([
+    expect(buildAssigneeOptions(sessions, 'ROBIN').map((option) => option.value)).toEqual([
       '',
       'operator',
       'agent:builder',
@@ -47,7 +47,7 @@ describe('assigneeOptions', () => {
       session('agent:builder:telegram:direct:123', { displayName: 'Telegram DM' }),
     ];
 
-    expect(buildAssigneeOptions(sessions, 'Nerve')).toEqual([
+    expect(buildAssigneeOptions(sessions, 'ROBIN')).toEqual([
       { value: '', label: 'Unassigned' },
       { value: 'operator', label: 'Operator' },
       { value: 'agent:builder', label: 'Builder' },
@@ -60,7 +60,7 @@ describe('assigneeOptions', () => {
       session('agent:reviewer:main', { label: 'Reviewer' }),
     ];
 
-    expect(buildAssigneeOptionsForEdit(sessions, 'agent:design-reviewer-2', 'Nerve')).toEqual([
+    expect(buildAssigneeOptionsForEdit(sessions, 'agent:design-reviewer-2', 'ROBIN')).toEqual([
       { value: '', label: 'Unassigned' },
       { value: 'operator', label: 'Operator' },
       { value: 'agent:reviewer', label: 'Reviewer' },

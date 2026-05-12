@@ -17,11 +17,18 @@ app.post('/api/map/assets', async (c) => {
         lat: Number(body.lat) || 0,
         lng: Number(body.lng) || 0,
         sourceUrl: String(body.sourceUrl ?? ''),
+        streamUrl: typeof body.streamUrl === 'string' ? body.streamUrl : undefined,
         thumbnailUrl: typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl : undefined,
         notes: typeof body.notes === 'string' ? body.notes : undefined,
         tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)) : [],
         status: typeof body.status === 'string' ? body.status : undefined,
         linkedSessionId: typeof body.linkedSessionId === 'string' ? body.linkedSessionId : undefined,
+        sourceId: typeof body.sourceId === 'string' ? body.sourceId : undefined,
+        sourceName: typeof body.sourceName === 'string' ? body.sourceName : undefined,
+        severity: typeof body.severity === 'string' ? body.severity : undefined,
+        confidence: typeof body.confidence === 'string' ? body.confidence : undefined,
+        observedAt: typeof body.observedAt === 'string' ? body.observedAt : undefined,
+        live: body.live === true,
     });
     return c.json({ ok: true, asset });
 });
@@ -37,11 +44,18 @@ app.put('/api/map/assets/:id', async (c) => {
             ...(body.lat != null ? { lat: Number(body.lat) || 0 } : {}),
             ...(body.lng != null ? { lng: Number(body.lng) || 0 } : {}),
             ...(typeof body.sourceUrl === 'string' ? { sourceUrl: body.sourceUrl } : {}),
+            ...(typeof body.streamUrl === 'string' ? { streamUrl: body.streamUrl } : {}),
             ...(typeof body.thumbnailUrl === 'string' ? { thumbnailUrl: body.thumbnailUrl } : {}),
             ...(typeof body.notes === 'string' ? { notes: body.notes } : {}),
             ...(Array.isArray(body.tags) ? { tags: body.tags.map((tag) => String(tag)) } : {}),
             ...(typeof body.status === 'string' ? { status: body.status } : {}),
             ...(typeof body.linkedSessionId === 'string' ? { linkedSessionId: body.linkedSessionId } : {}),
+            ...(typeof body.sourceId === 'string' ? { sourceId: body.sourceId } : {}),
+            ...(typeof body.sourceName === 'string' ? { sourceName: body.sourceName } : {}),
+            ...(typeof body.severity === 'string' ? { severity: body.severity } : {}),
+            ...(typeof body.confidence === 'string' ? { confidence: body.confidence } : {}),
+            ...(typeof body.observedAt === 'string' ? { observedAt: body.observedAt } : {}),
+            ...(typeof body.live === 'boolean' ? { live: body.live } : {}),
         });
         return c.json({ ok: true, asset });
     }

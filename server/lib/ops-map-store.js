@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { broadcast } from '../routes/events.js';
 export const OPS_MAP_ASSET_TYPES = ['document', 'video', 'note', 'link'];
-const STORE_DIR = path.join(config.home, '.nerve', 'inertiai-ops');
+const STORE_DIR = path.join(config.home, '.robin', 'inertiai-ops');
 const STORE_FILE = path.join(STORE_DIR, 'map-assets.json');
 function isAssetType(value) {
     return typeof value === 'string' && OPS_MAP_ASSET_TYPES.includes(value);
@@ -49,6 +49,7 @@ function normalizeAssetRecord(value) {
         lat: normalizeCoordinate(record.lat),
         lng: normalizeCoordinate(record.lng),
         sourceUrl: normalizeString(record.sourceUrl),
+        streamUrl: normalizeOptionalString(record.streamUrl),
         thumbnailUrl: normalizeOptionalString(record.thumbnailUrl),
         notes: normalizeOptionalString(record.notes),
         tags: normalizeTags(record.tags),
@@ -76,6 +77,7 @@ function normalizeAssetInput(input) {
         lat: normalizeCoordinate(input.lat),
         lng: normalizeCoordinate(input.lng),
         sourceUrl: normalizeString(input.sourceUrl),
+        streamUrl: normalizeOptionalString(input.streamUrl),
         thumbnailUrl: normalizeOptionalString(input.thumbnailUrl),
         notes: normalizeOptionalString(input.notes),
         tags: normalizeTags(input.tags),
@@ -122,6 +124,7 @@ class OpsMapStore {
             ...(patch.lat != null ? { lat: normalizeCoordinate(patch.lat) } : {}),
             ...(patch.lng != null ? { lng: normalizeCoordinate(patch.lng) } : {}),
             ...(patch.sourceUrl != null ? { sourceUrl: normalizeString(patch.sourceUrl) } : {}),
+            ...(patch.streamUrl !== undefined ? { streamUrl: normalizeOptionalString(patch.streamUrl) } : {}),
             ...(patch.thumbnailUrl !== undefined ? { thumbnailUrl: normalizeOptionalString(patch.thumbnailUrl) } : {}),
             ...(patch.notes !== undefined ? { notes: normalizeOptionalString(patch.notes) } : {}),
             ...(patch.tags !== undefined ? { tags: normalizeTags(patch.tags) } : {}),

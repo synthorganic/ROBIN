@@ -57,6 +57,7 @@ export interface MapAsset {
   lat: number;
   lng: number;
   sourceUrl: string;
+  streamUrl?: string;
   thumbnailUrl?: string;
   notes?: string;
   tags: string[];
@@ -87,6 +88,8 @@ export interface MapSourceStatus {
     | 'nws'
     | 'firms'
     | 'radnet'
+    | 'trafficcams'
+    | 'trackedflights'
     | 'eurdep'
     | 'safecast'
     | 'gmcmap'

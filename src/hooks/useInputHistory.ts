@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react';
 
-const STORAGE_KEY = 'nerve-input-history';
+const STORAGE_KEY = 'robin-input-history';
 const MAX_ENTRIES = 100;
 
 /**
@@ -10,7 +10,7 @@ const MAX_ENTRIES = 100;
  * ArrowUp/Down navigate the stack; the current draft is saved
  * when navigation begins and restored when moving past the newest entry.
  *
- * History is persisted to `localStorage` under `nerve-input-history`
+ * History is persisted to `localStorage` under `robin-input-history`
  * (max 100 entries). Duplicate consecutive entries are suppressed.
  */
 export function useInputHistory() {

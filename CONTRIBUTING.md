@@ -25,8 +25,8 @@ Thanks for wanting to help! This guide covers everything you need to start contr
 
 1. **Fork and clone** the repository:
    ```bash
-   git clone https://github.com/<your-username>/openclaw-nerve.git
-   cd openclaw-nerve
+   git clone https://github.com/<your-username>/ROBIN.git
+   cd ROBIN
    ```
 
 2. **Install dependencies:**
@@ -56,7 +56,7 @@ Thanks for wanting to help! This guide covers everything you need to start contr
 ## Project Structure
 
 ```
-openclaw-nerve/
+ROBIN/
 ├── src/                        # Frontend (React + TypeScript)
 │   ├── features/               # Product surfaces and feature-local helpers
 │   │   ├── activity/           # Agent log and event log panels

@@ -17,7 +17,7 @@ vi.mock('./config.js', () => {
       gatewayToken: 'test-token',
     },
     WS_ALLOWED_HOSTS,
-    SESSION_COOKIE_NAME: 'nerve_session_3080',
+    SESSION_COOKIE_NAME: 'robin_session_3080',
   };
 });
 
@@ -308,7 +308,7 @@ describe('ws-proxy', () => {
 
       const ws = new WebSocket(
         `ws://127.0.0.1:${proxyPort}/ws?target=${encodeURIComponent(mockGw.url + '/ws')}`,
-        { headers: { Cookie: 'nerve_session_3080=good-token' } },
+        { headers: { Cookie: 'robin_session_3080=good-token' } },
       );
       const msg = await waitForMessage(ws);
       expect(JSON.parse(msg).event).toBe('connect.challenge');
@@ -341,7 +341,7 @@ describe('ws-proxy', () => {
 
       const ws = new WebSocket(
         `ws://127.0.0.1:${proxyPort}/ws?target=${encodeURIComponent(mockGw.url + '/ws')}`,
-        { headers: { Cookie: 'nerve_session_3080=good-token' } },
+        { headers: { Cookie: 'robin_session_3080=good-token' } },
       );
 
       await new Promise<void>((resolve) => ws.on('open', resolve));
@@ -349,7 +349,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c-token-1',
-        params: { client: { id: 'nerve-ui', mode: 'webchat' } },
+        params: { client: { id: 'robin-ui', mode: 'webchat' } },
       }));
 
       // Wait for connect response
@@ -386,7 +386,7 @@ describe('ws-proxy', () => {
 
       const ws = new WebSocket(
         `ws://127.0.0.1:${proxyPort}/ws?target=${encodeURIComponent(mockGw.url + '/ws')}`,
-        { headers: { Cookie: 'nerve_session_3080=good-token' } },
+        { headers: { Cookie: 'robin_session_3080=good-token' } },
       );
 
       await new Promise<void>((resolve) => ws.on('open', resolve));
@@ -394,7 +394,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c-token-2',
-        params: { auth: { token: '' }, client: { id: 'nerve-ui', mode: 'webchat' } },
+        params: { auth: { token: '' }, client: { id: 'robin-ui', mode: 'webchat' } },
       }));
 
       // Wait for connect response
@@ -437,7 +437,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c1',
-        params: { auth: { token: 'test-token' }, client: { id: 'nerve-ui', mode: 'webchat' } },
+        params: { auth: { token: 'test-token' }, client: { id: 'robin-ui', mode: 'webchat' } },
       }));
 
       // Wait for the connect response from mock gateway
@@ -483,7 +483,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c2',
-        params: { auth: { token: 'test-token' }, client: { id: 'nerve-ui', mode: 'webchat' } },
+        params: { auth: { token: 'test-token' }, client: { id: 'robin-ui', mode: 'webchat' } },
       }));
 
       // Wait for the connect response
@@ -551,7 +551,7 @@ describe('ws-proxy', () => {
           type: 'req',
           method: 'connect',
           id: 'c3',
-          params: { auth: { token: 'test-token' }, client: { id: 'nerve-ui' } },
+          params: { auth: { token: 'test-token' }, client: { id: 'robin-ui' } },
         }));
 
         // Wait for the connect response (arrives after 200ms timeout fires)
@@ -590,7 +590,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c4',
-        params: { auth: { token: 'test-token' }, client: { id: 'nerve-ui' } },
+        params: { auth: { token: 'test-token' }, client: { id: 'robin-ui' } },
       }));
 
       // Wait for the connect response
@@ -667,7 +667,7 @@ describe('ws-proxy', () => {
           type: 'req',
           method: 'connect',
           id: 'c5',
-          params: { auth: { token: 'test-token' }, client: { id: 'nerve-ui' } },
+          params: { auth: { token: 'test-token' }, client: { id: 'robin-ui' } },
         }));
         ws.send(JSON.stringify({ type: 'req', method: 'ping', id: 'p5' }));
 
@@ -717,7 +717,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c-proxy-1',
-        params: { client: { id: 'nerve-ui' } },
+        params: { client: { id: 'robin-ui' } },
       }));
 
       // Wait for the connect request to be received by the gateway

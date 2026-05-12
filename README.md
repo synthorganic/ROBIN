@@ -1,18 +1,19 @@
-# ROBIN — OpenClaw Nerve Web Interface
+# ROBIN — Inertiai Ops Control Surface
 
-A local-first web interface for the [OpenClaw](https://github.com/openclaw/openclaw) agent framework. 
-ROBIN provides a unified control surface with chat, task management (kanban), real-time voice interaction, 
-and AI agent orchestration capabilities.
+ROBIN is the local-first operations workspace for Inertiai Ops. It brings the status overview, project document intake, agent chat, CLI bridge, and geo-linked operations map into one browser UI.
+
+ROBIN can talk directly to a local OpenAI-compatible API such as LM Studio, llama.cpp server, or vLLM. It can also bridge to a compatible agent gateway when that runtime is available.
 
 ## Features
 
-- **Interactive Chat Interface** - Real-time streaming chat with agents, message history, and markdown rendering
+- **Status Overview** - Operational status, activity summaries, document intake, and project-organized document lists
+- **Agent Chat** - Chat-style agent session with local API setup, model selection, tool output, and document access
+- **Local API Wire** - OpenAI-compatible base URL, API key, and model polling for LM Studio-style local inference
 - **Task Management** - Kanban boards for proposals, execution tracking, and agent task management
+- **Workspace Browser** - File explorer with inline code editors and CLI bridge access
+- **Geo Ops Map** - Project-linked map entities, relationship analysis, and local ops data storage
 - **Voice Interaction** - Push-to-talk voice input, wake word detection, and text-to-speech audio output
-- **Workspace Browser** - File explorer with inline code editors and terminal emulation
-- **Agent Activity Dashboard** - Live logs, token usage tracking, and memory management
-- **Multi-Modal Output** - Support for charts, tables, code blocks, and formatted markdown content
-- **Local-First Architecture** - Runs entirely on your machine with optional remote gateway connectivity
+- **Local-First Architecture** - Runs on your machine with optional remote gateway connectivity
 
 ## Quick Start
 
@@ -20,17 +21,18 @@ and AI agent orchestration capabilities.
 
 - Node.js >= 22.x
 - npm (bundled with Node)
-- A running [OpenClaw](https://github.com/openclaw/openclaw) gateway
+- Optional: a local OpenAI-compatible API such as LM Studio on `http://127.0.0.1:1234`
+- Optional: a compatible agent gateway for gateway-backed memory, skill, and session operations
 
 ### Installation (Linux/macOS)
 
 ```bash
 # Option 1: One-command automated installer
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-nerve/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh | bash
 
 # Option 2: Manual installation
-git clone https://github.com/daggerhashimoto/openclaw-nerve.git
-cd openclaw-nerve
+git clone https://github.com/synthorganic/ROBIN.git
+cd ROBIN
 npm install
 npm run setup
 ```
@@ -50,14 +52,17 @@ Visit http://localhost:3080 (or the configured port) to access ROBIN.
 
 ## Configuration
 
-ROBIN looks for settings in a `.env` file. Run `npm run setup` for an interactive 
+ROBIN looks for settings in a `.env` file. Run `npm run setup` for an interactive
 configuration wizard, or manually edit `.env` with these key options:
 
-- `GATEWAY_TOKEN` — Authentication token for your OpenClaw gateway (required)
-- `GATEWAY_URL` — URL of your OpenClaw gateway server
+- `LOCAL_API_BASE_URL` — OpenAI-compatible local API base URL, for example `http://127.0.0.1:1234`
+- `LOCAL_API_KEY` — Local API key; LM Studio commonly accepts any non-empty value
+- `LOCAL_API_MODEL` — Default local model when the API does not provide one
+- `GATEWAY_TOKEN` — Authentication token for a compatible agent gateway
+- `GATEWAY_URL` — URL of the gateway server
 - `PORT` — Server port (default: 3080)
 - `HOST` — Bind address (default: 127.0.0.1, set to 0.0.0.0 for network access)
-- `NERVE_AUTH`/`NERVE_PASSWORD_HASH` — Enable password protection
+- `ROBIN_AUTH`/`ROBIN_PASSWORD_HASH` — Enable password protection
 
 ## Project Structure
 
@@ -85,13 +90,13 @@ configuration wizard, or manually edit `.env` with these key options:
 │   ├── hooks/           # Cross-cutting hooks used across features
 │   └── lib/             # Utility libraries
 ├── server/              # Backend API (Hono + TypeScript)
-├── skills/              # OpenClaw skill packages
+├── skills/              # Agent skill packages
 └── docs/                # Detailed documentation
 ```
 
 ## Development
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for local development setup, testing, 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local development setup, testing,
 and pull request guidelines.
 
 ## License

@@ -39,7 +39,7 @@ describe('memories routes', () => {
         memoryPath,
         memoryDir,
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
     vi.doMock('../middleware/rate-limit.js', () => ({
       rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
@@ -68,7 +68,7 @@ describe('memories routes', () => {
         memoryDir,
         workspaceWatchRecursive: false,
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
     vi.doMock('../routes/events.js', () => ({
       broadcast: broadcastMock,

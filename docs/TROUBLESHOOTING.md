@@ -16,32 +16,32 @@ Common issues and solutions for ROBIN.
 
 **Fix:**
 - Re-run `npm run setup` to set a new password
-- Or set `NERVE_AUTH=true` with a valid `GATEWAY_TOKEN` — the gateway token works as a fallback password without needing a password hash
+- Or set `ROBIN_AUTH=true` with a valid `GATEWAY_TOKEN` — the gateway token works as a fallback password without needing a password hash
 
 ### Session expired / redirected to login
 
 **Symptom:** You were logged in but got redirected to the login page.
 
-**Cause:** The session cookie expired (default TTL: 30 days) or the `NERVE_SESSION_SECRET` changed (e.g., server restart without a persisted secret).
+**Cause:** The session cookie expired (default TTL: 30 days) or the `ROBIN_SESSION_SECRET` changed (e.g., server restart without a persisted secret).
 
 **Fix:**
 - Log in again with your password
-- If sessions don't survive restarts, ensure `NERVE_SESSION_SECRET` is set in `.env` (the setup wizard generates one). Without it, an ephemeral secret is created on each startup
+- If sessions don't survive restarts, ensure `ROBIN_SESSION_SECRET` is set in `.env` (the setup wizard generates one). Without it, an ephemeral secret is created on each startup
 
 ### API returns 401 but auth is disabled
 
-**Symptom:** API calls fail with "Authentication required" even though `NERVE_AUTH` isn't set.
+**Symptom:** API calls fail with "Authentication required" even though `ROBIN_AUTH` isn't set.
 
-**Cause:** Check that `NERVE_AUTH` isn't set to `true` somewhere unexpected (e.g., exported in your shell profile).
+**Cause:** Check that `ROBIN_AUTH` isn't set to `true` somewhere unexpected (e.g., exported in your shell profile).
 
 **Fix:**
 ```bash
 # Check the env var
-grep NERVE_AUTH .env
-echo $NERVE_AUTH
+grep ROBIN_AUTH .env
+echo $ROBIN_AUTH
 
 # Explicitly disable
-echo "NERVE_AUTH=false" >> .env
+echo "ROBIN_AUTH=false" >> .env
 ```
 
 ### WebSocket connects but immediately closes with 401
@@ -177,7 +177,7 @@ curl http://127.0.0.1:3080/health
 **Fix:**
 ```bash
 # Remove and regenerate device identity
-rm ~/.ROBIN/device-identity.json
+rm ~/.robin/device-identity.json
 # Restart ROBIN — a new keypair will be generated
 ```
 
@@ -201,10 +201,10 @@ WS_ALLOWED_HOSTS=mygateway.local npm start
 **Fix:** Set the exact browser origin in `.env` and allow the same origin on the gateway:
 
 ```bash
-NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
+ROBIN_PUBLIC_ORIGIN=https://robin.example.com
 ```
 
-Also add `https://ROBIN.example.com` to `gateway.controlUi.allowedOrigins`, then restart both ROBIN and the gateway.
+Also add `https://robin.example.com` to `gateway.controlUi.allowedOrigins`, then restart both ROBIN and the gateway.
 
 ### "device token mismatch" on WebSocket connect
 
@@ -348,7 +348,7 @@ If ROBIN and the gateway are on the same machine, re-running `npm run setup` can
 **Fix (local STT):**
 - Models auto-download on first use. Check server logs for download progress or errors
 - Ensure `ffmpeg` is installed (the installer handles this): `ffmpeg -version`
-- Check model file exists: `ls ~/.ROBIN/models/ggml-base.bin`
+- Check model file exists: `ls ~/.robin/models/ggml-base.bin`
 
 **Fix (OpenAI STT):**
 - Set `STT_PROVIDER=openai` and `OPENAI_API_KEY` in `.env`
@@ -370,20 +370,20 @@ If ROBIN and the gateway are on the same machine, re-running `npm run setup` can
 1. Set language explicitly in **Settings → Audio → Language** (no auto-detect mode)
 2. For local STT, switch model from `tiny` to `base`
 3. Ensure `WHISPER_MODEL` is multilingual (`tiny`, `base`, `small`) for non-English usage
-4. Persist language in `.env` as `NERVE_LANGUAGE=<code>` (legacy `LANGUAGE` is still read, but deprecated)
+4. Persist language in `.env` as `ROBIN_LANGUAGE=<code>` (legacy `LANGUAGE` is still read, but deprecated)
 
 ### Voice phrase changes don't persist
 
 **Symptom:** Custom stop/cancel/wake phrases disappear after refresh or restart.
 
-**Cause:** Phrase overrides are stored on disk at `~/.ROBIN/voice-phrases.json` (or `NERVE_VOICE_PHRASES_PATH` if set). Write failures usually come from path/permission issues.
+**Cause:** Phrase overrides are stored on disk at `~/.robin/voice-phrases.json` (or `ROBIN_VOICE_PHRASES_PATH` if set). Write failures usually come from path/permission issues.
 
 **Fix:**
 - Verify file location and permissions:
   ```bash
-  ls -l ~/.ROBIN/voice-phrases.json
+  ls -l ~/.robin/voice-phrases.json
   ```
-- If using a custom path, ensure `NERVE_VOICE_PHRASES_PATH` points to a writable location
+- If using a custom path, ensure `ROBIN_VOICE_PHRASES_PATH` points to a writable location
 - Re-save phrases via Settings and watch server logs for `/api/voice-phrases` errors
 
 ### Wake word doesn't trigger
@@ -499,11 +499,11 @@ That means failures can come from a missing assignee root, a child-session creat
 
 **Symptom:** Model selector is empty or shows only the current model.
 
-**Cause:** Models are fetched via `GET /api/gateway/models`, which reads the active OpenClaw config. If that config is unreadable, or it has no configured models, the dropdown can stay empty or sparse.
+**Cause:** Models are fetched via `GET /api/gateway/models`, which reads the active gateway config. If that config is unreadable, or it has no configured models, the dropdown can stay empty or sparse.
 
 **Fix:**
 - Verify the expected models are configured in OpenClaw (`agents.defaults.model` / `agents.defaults.models`)
-- Check that ROBIN can read the active OpenClaw config file
+- Check that ROBIN can read the active gateway config file
 - Check server logs for `gateway/models` read errors
 - After fixing config, reopen the spawn dialog or refresh the page
 
@@ -635,9 +635,9 @@ git tag -l                 # Confirm tags exist locally
 
 **Fix:**
 ```bash
-cat ~/.ROBIN/updater/ROBIN-update.lock   # Shows the PID
+cat ~/.robin/updater/robin-update.lock   # Shows the PID
 ps -p <pid>                               # Check if alive
-rm ~/.ROBIN/updater/ROBIN-update.lock     # Remove if stale
+rm ~/.robin/updater/robin-update.lock     # Remove if stale
 ```
 
 ### Health check version mismatch (exit 60)
@@ -658,7 +658,7 @@ curl http://127.0.0.1:3080/api/version   # Verify version
 
 **Fix:** Manual recovery:
 ```bash
-cat ~/.ROBIN/updater/last-good.json       # Get snapshot ref
+cat ~/.robin/updater/last-good.json       # Get snapshot ref
 git checkout --force <ref>
 npm install && npm run build && npm run build:server
 systemctl restart ROBIN

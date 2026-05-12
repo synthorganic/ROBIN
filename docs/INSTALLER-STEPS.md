@@ -1,9 +1,9 @@
-# Nerve Installer Script: Step-by-Step Reference
+# ROBIN Installer Script: Step-by-Step Reference
 
 This document describes exactly what `install.sh` does, in the order it executes, including conditional branches.
 
 - Script: `install.sh`
-- Purpose: One-command install/update of **openclaw-nerve**
+- Purpose: One-command install/update of **ROBIN**
 - Primary entrypoint: `curl .../install.sh | bash`
 
 ---
@@ -20,7 +20,7 @@ This makes it fail fast on command errors, unset variables, and pipeline failure
 ### 0.2 Default variables
 It initializes defaults such as:
 
-- `INSTALL_DIR` (default `~/nerve`, overridable via `NERVE_INSTALL_DIR`)
+- `INSTALL_DIR` (default `~/ROBIN`, overridable via `ROBIN_INSTALL_DIR`)
 - `BRANCH` (default `master`, used only for explicit/fallback branch installs)
 - `REPO`
 - `NODE_MIN=22`
@@ -82,7 +82,7 @@ Interactive mode is true if either:
 This allows prompts even when invoked via `curl | bash`.
 
 ### 0.7 Banner output
-Prints the Nerve ASCII banner and a dry-run warning banner when relevant.
+Prints the ROBIN ASCII banner and a dry-run warning banner when relevant.
 
 ---
 
@@ -174,7 +174,7 @@ The installer resolves a target ref before clone/update:
 
 ### 3.4 Local speech model bootstrap
 - Resolves target model from `.env` `WHISPER_MODEL` (defaults to `base`).
-- Ensures matching file exists in `~/.nerve/models/` (for example `ggml-base.bin`).
+- Ensures matching file exists in `~/.robin/models/` (for example `ggml-base.bin`).
 - If missing, downloads the selected model from Hugging Face.
 - If download fails, continues with warning (local STT may fail unless OpenAI STT is configured).
 - Runtime default STT model is `base` (multilingual) unless user overrides `WHISPER_MODEL`.
@@ -226,7 +226,7 @@ If token exists but port `3080` is already occupied:
 #### Interactive mode (no `--skip-setup`)
 - If `.env` exists:
   - ask: “Run setup wizard anyway?”
-  - if yes: run `NERVE_INSTALLER=1 npm run setup`
+  - if yes: run `ROBIN_INSTALLER=1 npm run setup`
   - if no: keep existing config
 - If no `.env`:
   - run setup wizard
@@ -239,13 +239,13 @@ Inside the interactive setup wizard, access mode now splits Tailscale into two e
 Behavior by interactive profile:
 - `tailnet IP`
   - configures direct tailnet-IP access
-  - keeps Nerve network-reachable
+  - keeps ROBIN network-reachable
   - patches gateway allowed origins using the tailnet IP origin
 - `Tailscale Serve`
-  - keeps Nerve on `127.0.0.1`
+  - keeps ROBIN on `127.0.0.1`
   - asks whether to run `tailscale serve --bg 443 http://127.0.0.1:<PORT>`
   - detects the resulting `https://<node>.tail<id>.ts.net` origin
-  - patches both Nerve and the gateway for that `*.ts.net` origin
+  - patches both ROBIN and the gateway for that `*.ts.net` origin
   - if Serve cannot be confirmed, asks whether to fall back to `tailnet IP` or stop
 
 If Tailscale is installed but not logged in:
@@ -275,13 +275,13 @@ Non-interactive Tailscale behavior:
 
 ### 4.3 Gateway config patching (inside setup wizard)
 
-After `.env` is written, the setup wizard detects and applies pending OpenClaw gateway config changes. This uses a detection layer (`detectNeededConfigChanges`) that checks what needs changing without applying, then presents all changes as a bundled consent prompt.
+After `.env` is written, the setup wizard detects and applies pending compatible agent gateway config changes. This uses a detection layer (`detectNeededConfigChanges`) that checks what needs changing without applying, then presents all changes as a bundled consent prompt.
 
 #### Possible changes detected:
 1. **Device scopes** — bootstraps `~/.openclaw/devices/paired.json` with full operator scopes if missing or incomplete
-2. **Pre-pair Nerve device** — registers Nerve's Ed25519 identity in `paired.json` so it can connect without manual `openclaw devices approve`
+2. **Pre-pair ROBIN device** — registers ROBIN's Ed25519 identity in `paired.json` so it can connect without manual `openclaw devices approve`
 3. **Tools allow** — adds `"cron"`, `"gateway"`, and `"sessions_spawn"` to `gateway.tools.allow` in `~/.openclaw/openclaw.json` (required for OpenClaw ≥2026.2.23, which denies these tools on `/tools/invoke` by default; `sessions_spawn` is required for Kanban task execution)
-4. **Allowed origins** — adds all required Nerve browser origins to `gateway.controlUi.allowedOrigins`
+4. **Allowed origins** — adds all required ROBIN browser origins to `gateway.controlUi.allowedOrigins`
    - LAN or tailnet-IP mode: `http://<ip>:<port>`
    - Tailscale Serve mode: `https://<node>.tail<id>.ts.net`
 
@@ -316,7 +316,7 @@ Service setup is OS-specific.
 ## 5A) Linux/systemd path
 
 ### 5A.1 Unit generation (`setup_systemd`)
-Creates a unit file at `/etc/systemd/system/nerve.service` with:
+Creates a unit file at `/etc/systemd/system/robin.service` with:
 
 - `ExecStart=<node> server-dist/index.js`
 - `WorkingDirectory=<INSTALL_DIR>`
@@ -360,13 +360,13 @@ Creates `<INSTALL_DIR>/start.sh` that:
 The Node server loads `.env` at runtime, so config updates still take effect on restart without rewriting the plist.
 
 ### 5B.2 Plist creation
-Writes `~/Library/LaunchAgents/com.nerve.server.plist` with:
+Writes `~/Library/LaunchAgents/com.robin.server.plist` with:
 
 - program args -> wrapper script
 - working directory
 - PATH env
 - keepalive + run-at-load
-- stdout/stderr logs to `<INSTALL_DIR>/nerve.log`
+- stdout/stderr logs to `<INSTALL_DIR>/robin.log`
 
 ### 5B.3 Service load behavior
 Attempts:

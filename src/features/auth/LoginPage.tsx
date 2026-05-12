@@ -1,7 +1,7 @@
 /**
- * LoginPage — Full-screen login gate for Nerve authentication.
+ * LoginPage — Full-screen login gate for ROBIN authentication.
  *
- * Renders a password form matching Nerve's dark cockpit theme.
+ * Renders a password form matching ROBIN's dark cockpit theme.
  * Supports Enter-to-submit and auto-focuses the password input on mount.
  */
 
@@ -66,7 +66,7 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
               <FuzzyText fontSize="clamp(2.2rem,5vw,4rem)">ROBIN</FuzzyText>
             </div>
             <p className="mt-4 max-w-[48ch] text-sm leading-6 text-muted-foreground sm:text-base">
-              Local-first control for the central OpenClaw operator, the CLI coding lane, and the geo-linked operations map.
+              Local-first control for the central agent, the CLI coding lane, and the geo-linked operations map.
             </p>
 
             <div className="mt-6 overflow-hidden rounded-[26px] border border-primary/12">
@@ -76,7 +76,7 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <div className="shell-panel rounded-2xl px-4 py-3">
                 <div className="text-[0.667rem] font-medium uppercase tracking-[0.22em] text-muted-foreground">Agent</div>
-                <div className="mt-2 text-sm font-medium text-foreground">Local API over OpenClaw</div>
+                <div className="mt-2 text-sm font-medium text-foreground">Local API and gateway</div>
               </div>
               <div className="shell-panel rounded-2xl px-4 py-3">
                 <div className="text-[0.667rem] font-medium uppercase tracking-[0.22em] text-muted-foreground">Bridge</div>
@@ -102,12 +102,12 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
               <div>
-                <label htmlFor="nerve-password" className="mb-2 block text-[0.733rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                <label htmlFor="robin-password" className="mb-2 block text-[0.733rem] font-medium uppercase tracking-[0.2em] text-muted-foreground">
                   Password
                 </label>
                 <Input
                   ref={inputRef}
-                  id="nerve-password"
+                  id="robin-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

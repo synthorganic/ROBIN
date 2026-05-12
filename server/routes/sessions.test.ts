@@ -28,7 +28,7 @@ describe('GET /api/sessions/:id/model', () => {
         host: '127.0.0.1',
         sslPort: 3443,
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
     vi.doMock('../middleware/rate-limit.js', () => ({
       rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),

@@ -23,7 +23,7 @@ vi.mock('../lib/config.js', () => ({
     auth: false, port: 3000, host: '127.0.0.1', sslPort: 3443,
     gatewayUrl: 'http://localhost:3100', gatewayToken: 'test-token',
   },
-  SESSION_COOKIE_NAME: 'nerve_session_3000',
+  SESSION_COOKIE_NAME: 'robin_session_3000',
 }));
 
 vi.mock('../middleware/rate-limit.js', () => ({
@@ -389,7 +389,7 @@ describe('gateway routes', () => {
           auth: false, port: 3000, host: '127.0.0.1', sslPort: 3443,
           gatewayUrl: 'http://localhost:3100', gatewayToken: 'test-token',
         },
-        SESSION_COOKIE_NAME: 'nerve_session_3000',
+        SESSION_COOKIE_NAME: 'robin_session_3000',
       }));
       vi.doMock('../middleware/rate-limit.js', () => ({
         rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),

@@ -6,6 +6,7 @@ import {
   Biohazard,
   Bot,
   Brain,
+  Camera,
   ChevronRight,
   Code2,
   CornerDownLeft,
@@ -23,6 +24,7 @@ import {
   Route,
   Orbit,
   Paperclip,
+  Plane,
   Play,
   RadioTower,
   RefreshCw,
@@ -132,6 +134,7 @@ function assetMatchesQuery(asset: MapAsset, query: string) {
     asset.title,
     asset.type,
     asset.sourceUrl,
+    asset.streamUrl ?? '',
     asset.notes ?? '',
     asset.status ?? '',
     asset.linkedSessionId ?? '',
@@ -166,6 +169,7 @@ function classifyAssetFamily(asset: MapAsset): SignalFamily {
     asset.title,
     asset.type,
     asset.sourceUrl,
+    asset.streamUrl ?? '',
     asset.notes ?? '',
     asset.status ?? '',
     asset.tags.join(' '),
@@ -176,7 +180,7 @@ function classifyAssetFamily(asset: MapAsset): SignalFamily {
   if (/(nuclear|reactor|radiological|uranium|plutonium|isotope)/.test(haystack)) return 'nuclear';
   if (/(bio|biological|pathogen|medical|clinical|plume|contamination)/.test(haystack)) return 'biological';
   if (/(ordnance|munition|weapon|missile|explosive|strike|launch)/.test(haystack)) return 'ordnance';
-  if (/(logistics|route|cargo|port|shipping|vessel|supply|dock|freight)/.test(haystack)) return 'logistics';
+  if (/(logistics|route|cargo|port|shipping|vessel|supply|dock|freight|flight|aircraft|aviation|ads-b)/.test(haystack)) return 'logistics';
   return 'general';
 }
 
@@ -222,6 +226,10 @@ function sourceIcon(sourceId: string) {
       return <Flame size={16} />;
     case 'radnet':
       return <Orbit size={16} />;
+    case 'trafficcams':
+      return <Camera size={16} />;
+    case 'trackedflights':
+      return <Plane size={16} />;
     case 'eurdep':
       return <Globe2 size={16} />;
     case 'safecast':
@@ -387,6 +395,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     nws: true,
     firms: true,
     radnet: true,
+    trafficcams: true,
+    trackedflights: true,
     eurdep: true,
     safecast: true,
     gmcmap: true,

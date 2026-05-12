@@ -1,7 +1,7 @@
 /**
  * Authentication middleware for Hono.
  *
- * When `NERVE_AUTH` is enabled, requires a valid signed session cookie on all
+ * When `ROBIN_AUTH` is enabled, requires a valid signed session cookie on all
  * `/api/*` routes except public ones (auth endpoints, health check). Static
  * files and SPA routes pass through — the frontend login gate handles those.
  * @module
@@ -21,7 +21,7 @@ const PUBLIC_ROUTES = [
 ];
 /**
  * Authentication middleware.
- * When NERVE_AUTH is enabled, requires a valid signed session cookie
+ * When ROBIN_AUTH is enabled, requires a valid signed session cookie
  * on all /api/* routes except public ones. Static files pass through.
  */
 export const authMiddleware = createMiddleware(async (c, next) => {

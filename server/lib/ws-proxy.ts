@@ -3,7 +3,7 @@
  *
  * Clients connect to `ws(s)://host:port/ws?target=<gateway-ws-url>` and this
  * module opens a corresponding connection to the gateway, relaying messages
- * bidirectionally. During the connect handshake, injects Nerve's Ed25519-signed
+ * bidirectionally. During the connect handshake, injects ROBIN's Ed25519-signed
  * device identity so the gateway grants operator.read/write scopes.
  *
  * On the first ever connection the gateway creates a pending pairing request.
@@ -146,7 +146,7 @@ export function setupWebSocketProxy(server: HttpServer | HttpsServer): void {
 /**
  * Create a relay between a browser WebSocket and the gateway.
  *
- * Injects Nerve's device identity into the connect handshake for full
+ * Injects ROBIN's device identity into the connect handshake for full
  * operator scopes. The connect message is held until the gateway sends a
  * `connect.challenge` nonce so that device identity can always be injected.
  * If the nonce doesn't arrive within `_internals.challengeTimeoutMs`, the
@@ -490,7 +490,7 @@ function createGatewayRelay(
 }
 
 /**
- * Inject Nerve's device identity into a connect request.
+ * Inject ROBIN's device identity into a connect request.
  */
 interface ConnectParams {
   client?: { id?: string; mode?: string; instanceId?: string; [key: string]: unknown };
@@ -501,7 +501,7 @@ interface ConnectParams {
 
 function injectDeviceIdentity(msg: Record<string, unknown>, nonce: string, logTag = '[ws-proxy]'): Record<string, unknown> {
   const params = (msg.params || {}) as ConnectParams;
-  const clientId = params.client?.id || 'nerve-ui';
+  const clientId = params.client?.id || 'robin-ui';
   const clientMode = params.client?.mode || 'webchat';
   const role = params.role || 'operator';
   const scopes = params.scopes || ['operator.admin', 'operator.read', 'operator.write'];

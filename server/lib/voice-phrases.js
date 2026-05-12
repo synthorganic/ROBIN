@@ -1,7 +1,7 @@
 /**
  * Voice phrase configuration — per-language stop/cancel/wake phrases.
  *
- * Primary runtime config file: ~/.nerve/voice-phrases.json
+ * Primary runtime config file: ~/.robin/voice-phrases.json
  * Legacy fallback (read-only): <PROJECT_ROOT>/voice-phrases.json
  *
  * Format (v2 — per-language):
@@ -22,7 +22,7 @@ import { DEFAULT_VOICE_PHRASES } from './constants.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const LEGACY_CONFIG_PATH = path.join(PROJECT_ROOT, 'voice-phrases.json');
-const CONFIG_PATH = process.env.NERVE_VOICE_PHRASES_PATH || path.join(process.env.HOME || os.homedir(), '.nerve', 'voice-phrases.json');
+const CONFIG_PATH = process.env.ROBIN_VOICE_PHRASES_PATH || path.join(process.env.HOME || os.homedir(), '.robin', 'voice-phrases.json');
 let cached = null;
 let cachedMtime = 0;
 let cachedPath = '';

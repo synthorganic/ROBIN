@@ -45,8 +45,8 @@ describe('WorkspacePanel', () => {
   });
 
   it('recomputes the config subview from storage on agent switch before mounting the child tab', async () => {
-    localStorage.setItem('nerve-workspace-tab', 'config');
-    localStorage.setItem('nerve-config-view', 'skills');
+    localStorage.setItem('robin-workspace-tab', 'config');
+    localStorage.setItem('robin-config-view', 'skills');
 
     const props = {
       workspaceAgentId: 'alpha',
@@ -60,8 +60,8 @@ describe('WorkspacePanel', () => {
     expect(skillsTabRenderLog).toEqual(['alpha']);
     expect(configTabRenderLog).toEqual([]);
 
-    localStorage.removeItem('nerve-config-view');
-    localStorage.setItem('nerve:workspace:bravo:config-view', 'files');
+    localStorage.removeItem('robin-config-view');
+    localStorage.setItem('robin:workspace:bravo:config-view', 'files');
 
     rerender(<WorkspacePanel {...props} workspaceAgentId="bravo" />);
 
@@ -71,7 +71,7 @@ describe('WorkspacePanel', () => {
   });
 
   it('passes the cron warning into the config tab', async () => {
-    localStorage.setItem('nerve-workspace-tab', 'config');
+    localStorage.setItem('robin-workspace-tab', 'config');
     mockUseCrons.mockReturnValue({
       activeCount: 0,
       cronWarning: 'This gateway does not expose cron management, so ROBIN can’t load or edit crons right now.',

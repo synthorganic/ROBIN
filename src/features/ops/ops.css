@@ -1841,6 +1841,65 @@
   background: rgba(15, 17, 13, 0.72);
 }
 
+.ops-live-camera-preview {
+  position: relative;
+  min-height: 220px;
+  display: grid;
+  background: rgba(10, 11, 8, 0.96);
+}
+
+.ops-live-camera-image {
+  width: 100%;
+  min-height: 220px;
+  max-height: 320px;
+  object-fit: cover;
+  filter: saturate(0.92) contrast(1.04);
+}
+
+.ops-live-camera-empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: rgba(232, 221, 191, 0.68);
+}
+
+.ops-live-camera-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid rgba(238, 203, 109, 0.18);
+  border-radius: 8px;
+  background: rgba(12, 14, 10, 0.86);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+}
+
+.ops-live-camera-panel span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(231, 214, 166, 0.78);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ops-live-camera-panel strong {
+  color: #fff3cc;
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+
+.ops-live-camera-panel p {
+  margin: 0;
+  color: rgba(232, 225, 203, 0.76);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .ops-asset-iframe,
 .ops-asset-video,
 .ops-asset-image {

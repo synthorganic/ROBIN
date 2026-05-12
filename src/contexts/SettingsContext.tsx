@@ -47,7 +47,7 @@ interface SettingsContextValue {
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
-const FONT_REFRESH_STORAGE_KEY = 'nerve:font-refresh-20260312';
+const FONT_REFRESH_STORAGE_KEY = 'robin:font-refresh-20260312';
 
 const ALLOWED_FONT_SIZES = new Set([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24]);
 const ALLOWED_EDITOR_FONT_SIZES = new Set([10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 22, 24]);
@@ -95,13 +95,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return saved === 'openai' ? 'openai' : 'local';
   });
   const [sttInputMode, setSttInputModeState] = useState<STTInputMode>(() => {
-    const saved = localStorage.getItem('nerve:sttInputMode') as STTInputMode | null;
+    const saved = localStorage.getItem('robin:sttInputMode') as STTInputMode | null;
     return saved === 'browser' || saved === 'local' || saved === 'hybrid' ? saved : 'hybrid';
   });
   const [sttModel, setSttModelState] = useState(() => localStorage.getItem('oc-stt-model') || 'base');
   const [wakeWordEnabled, setWakeWordEnabled] = useState(false);
   const [liveTranscriptionPreview, setLiveTranscriptionPreview] = useState(() => {
-    const saved = localStorage.getItem('nerve:liveTranscriptionPreview');
+    const saved = localStorage.getItem('robin:liveTranscriptionPreview');
     return saved === 'true'; // Default to disabled (fresh installs)
   });
   const [panelRatio, setPanelRatioState] = useState(() => {
@@ -113,10 +113,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return saved !== 'false'; // Default to true (visible)
   });
   const [eventsVisible, setEventsVisible] = useState(() => {
-    return localStorage.getItem('nerve:showEvents') === 'true'; // Default to false (hidden)
+    return localStorage.getItem('robin:showEvents') === 'true'; // Default to false (hidden)
   });
   const [logVisible, setLogVisible] = useState(() => {
-    return localStorage.getItem('nerve:showLog') === 'true'; // Default to false (hidden)
+    return localStorage.getItem('robin:showLog') === 'true'; // Default to false (hidden)
   });
   const [theme, setThemeState] = useState<ThemeName>(() => {
     const saved = localStorage.getItem('oc-theme') as ThemeName | null;
@@ -124,12 +124,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   });
   const [font, setFontState] = useState<FontName>(resolveInitialFont);
   const [fontSize, setFontSizeState] = useState<number>(() => {
-    const saved = localStorage.getItem('nerve:font-size');
+    const saved = localStorage.getItem('robin:font-size');
     const parsed = saved ? parseInt(saved, 10) : NaN;
     return normalizeFontSize(parsed);
   });
   const [editorFontSize, setEditorFontSizeState] = useState<number>(() => {
-    const saved = localStorage.getItem('nerve:editor-font-size');
+    const saved = localStorage.getItem('robin:editor-font-size');
     const parsed = saved ? parseInt(saved, 10) : NaN;
     return normalizeEditorFontSize(parsed);
   });
@@ -167,7 +167,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const toggleLiveTranscriptionPreview = useCallback(() => {
     setLiveTranscriptionPreview(prev => {
       const next = !prev;
-      localStorage.setItem('nerve:liveTranscriptionPreview', String(next));
+      localStorage.setItem('robin:liveTranscriptionPreview', String(next));
       return next;
     });
   }, []);
@@ -227,7 +227,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const changeSttInputMode = useCallback((mode: STTInputMode) => {
     setSttInputModeState(mode);
-    localStorage.setItem('nerve:sttInputMode', mode);
+    localStorage.setItem('robin:sttInputMode', mode);
   }, []);
 
   const changeSttModel = useCallback((model: string) => {
@@ -275,7 +275,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const toggleEvents = useCallback(() => {
     setEventsVisible(prev => {
       const next = !prev;
-      localStorage.setItem('nerve:showEvents', String(next));
+      localStorage.setItem('robin:showEvents', String(next));
       return next;
     });
   }, []);
@@ -283,7 +283,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const toggleLog = useCallback(() => {
     setLogVisible(prev => {
       const next = !prev;
-      localStorage.setItem('nerve:showLog', String(next));
+      localStorage.setItem('robin:showLog', String(next));
       return next;
     });
   }, []);
@@ -301,13 +301,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const setFontSize = useCallback((size: number) => {
     const normalized = normalizeFontSize(size);
     setFontSizeState(normalized);
-    localStorage.setItem('nerve:font-size', String(normalized));
+    localStorage.setItem('robin:font-size', String(normalized));
   }, []);
 
   const setEditorFontSize = useCallback((size: number) => {
     const normalized = normalizeEditorFontSize(size);
     setEditorFontSizeState(normalized);
-    localStorage.setItem('nerve:editor-font-size', String(normalized));
+    localStorage.setItem('robin:editor-font-size', String(normalized));
   }, []);
 
   const value = useMemo<SettingsContextValue>(() => ({

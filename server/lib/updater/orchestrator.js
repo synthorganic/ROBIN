@@ -188,8 +188,8 @@ async function handleFailure(err, options, serviceManager, snapshotCreated, repo
         if (serviceManager) {
             reporter.hint('Check service logs:');
             reporter.cmd(serviceManager.name === 'systemd'
-                ? 'journalctl -u nerve -n 50 --no-pager'
-                : 'log show --predicate \'processImagePath contains "nerve"\' --last 5m');
+                ? 'journalctl -u robin -n 50 --no-pager'
+                : 'log show --predicate \'processImagePath contains "robin"\' --last 5m');
         }
     }
     return exitCode;
@@ -225,7 +225,7 @@ async function handleManualRollback(options, reporter) {
     }
 }
 // ── Last run persistence ─────────────────────────────────────────────
-const STATE_DIR = join(homedir(), '.nerve', 'updater');
+const STATE_DIR = join(homedir(), '.robin', 'updater');
 function writeLastRun(data) {
     try {
         mkdirSync(STATE_DIR, { recursive: true });

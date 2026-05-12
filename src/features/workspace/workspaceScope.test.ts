@@ -32,6 +32,6 @@ describe('workspaceScope', () => {
   });
 
   it('namespaces storage keys per agent', () => {
-    expect(getWorkspaceStorageKey('open-files', 'test')).toBe('nerve:workspace:test:open-files');
+    expect(getWorkspaceStorageKey('open-files', 'test')).toBe('robin:workspace:test:open-files');
   });
 });

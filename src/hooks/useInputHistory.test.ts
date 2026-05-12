@@ -114,12 +114,12 @@ describe('useInputHistory', () => {
 
     act(() => result.current.addToHistory('persisted'));
 
-    const stored = JSON.parse(localStorage.getItem('nerve-input-history') || '[]');
+    const stored = JSON.parse(localStorage.getItem('robin-input-history') || '[]');
     expect(stored).toContain('persisted');
   });
 
   it('loads history from localStorage on mount', () => {
-    localStorage.setItem('nerve-input-history', JSON.stringify(['loaded']));
+    localStorage.setItem('robin-input-history', JSON.stringify(['loaded']));
 
     const { result } = renderHook(() => useInputHistory());
 

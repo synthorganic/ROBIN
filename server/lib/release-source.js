@@ -118,7 +118,7 @@ export async function latestReleaseVersion(cwd) {
     const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
     const headers = {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'nerve-updater',
+        'User-Agent': 'robin-updater',
     };
     if (token) {
         headers.Authorization = `Bearer ${token}`;

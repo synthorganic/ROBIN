@@ -12,7 +12,7 @@ describe('detectAgentDisplayNameDefault', () => {
   });
 
   it('detects Name from IDENTITY.md metadata', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'nerve-agent-name-'));
+    const tempDir = mkdtempSync(join(tmpdir(), 'robin-agent-name-'));
     const identityPath = join(tempDir, 'IDENTITY.md');
     writeFileSync(identityPath, '# IDENTITY\n- **Name:** Chip\n', 'utf8');
 
@@ -21,7 +21,7 @@ describe('detectAgentDisplayNameDefault', () => {
   });
 
   it('falls back to second identity candidate if first is missing/invalid', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'nerve-agent-name-'));
+    const tempDir = mkdtempSync(join(tmpdir(), 'robin-agent-name-'));
     const firstPath = join(tempDir, 'missing.md');
     const secondPath = join(tempDir, 'nested', 'IDENTITY.md');
     mkdirSync(join(tempDir, 'nested'), { recursive: true });
@@ -32,7 +32,7 @@ describe('detectAgentDisplayNameDefault', () => {
   });
 
   it('falls back to literal default when metadata is unavailable or malformed', () => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'nerve-agent-name-'));
+    const tempDir = mkdtempSync(join(tmpdir(), 'robin-agent-name-'));
     const identityPath = join(tempDir, 'IDENTITY.md');
     writeFileSync(identityPath, '# IDENTITY\nNo name field here\n', 'utf8');
 

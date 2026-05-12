@@ -45,7 +45,7 @@ const {
     renameSession: vi.fn(),
     agentLogEntries: [],
     eventEntries: [],
-    agentName: 'Nerve',
+    agentName: 'ROBIN',
   };
 
   const saveFileByAgent = {

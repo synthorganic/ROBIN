@@ -115,8 +115,8 @@ describe('useOpenFiles', () => {
 
     expect(store.get(getWorkspaceStorageKey('open-files', 'main'))).toBe(JSON.stringify(['main.md']));
     expect(store.get(getWorkspaceStorageKey('active-tab', 'main'))).toBe('main.md');
-    expect(store.has('nerve-open-files')).toBe(false);
-    expect(store.has('nerve-active-tab')).toBe(false);
+    expect(store.has('robin-open-files')).toBe(false);
+    expect(store.has('robin-active-tab')).toBe(false);
   });
 
   it('restores each agent\'s tab set when the agent id changes', async () => {

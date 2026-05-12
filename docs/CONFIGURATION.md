@@ -21,12 +21,12 @@ The wizard walks through **6 sections**:
 
 #### 1. Gateway Connection
 
-Connects ROBIN to your OpenClaw gateway. The wizard auto-detects the gateway token from:
+Connects ROBIN to your compatible agent gateway. The wizard auto-detects the gateway token from:
 1. Existing `.env` (`GATEWAY_TOKEN`)
 2. Environment variable `OPENCLAW_GATEWAY_TOKEN`
 3. `~/.openclaw/openclaw.json` (auto-detected)
 
-Tests the connection before proceeding. If the gateway is unreachable, setup stops so you can fix the gateway or token first. On current OpenClaw builds, the wizard also:
+Tests the connection before proceeding. If the gateway is unreachable, setup stops so you can fix the gateway or token first. On current gateway builds, the wizard also:
 - Reads the real gateway token from the systemd service file (works around a known bug where `openclaw onboard` writes different tokens to systemd and `openclaw.json`)
 - Bootstraps `paired.json` and `device-auth.json` with full operator scopes if they don't exist yet
 - Pre-pairs ROBIN's device identity in the normal setup path so it can connect without manual approval (`openclaw devices approve`)
@@ -95,7 +95,7 @@ The wizard backs up existing `.env` files as `.env.backup` or `.env.backup.YYYY-
 | `SSL_PORT` | `3443` | HTTPS server port (requires certificates at `certs/cert.pem` and `certs/key.pem`) |
 | `HOST` | `127.0.0.1` | Bind address. Set to `0.0.0.0` for network access — see warning below |
 
-> **⚠️ Network exposure:** Setting `HOST=0.0.0.0` exposes all endpoints to the network. Enable authentication (`NERVE_AUTH=true`) and set a password via the setup wizard before binding to a non-loopback address. Without auth, anyone with network access can read/write agent memory, modify config files, and control sessions. See [Security](SECURITY.md) for the full threat model.
+> **⚠️ Network exposure:** Setting `HOST=0.0.0.0` exposes all endpoints to the network. Enable authentication (`ROBIN_AUTH=true`) and set a password via the setup wizard before binding to a non-loopback address. Without auth, anyone with network access can read/write agent memory, modify config files, and control sessions. See [Security](SECURITY.md) for the full threat model.
 
 ```bash
 PORT=3080
@@ -107,26 +107,26 @@ HOST=127.0.0.1
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `GATEWAY_TOKEN` | — | **Yes** | Authentication token for the OpenClaw gateway. The setup wizard auto-detects this. See note below |
+| `GATEWAY_TOKEN` | — | **Yes** | Authentication token for the compatible agent gateway. The setup wizard auto-detects this. See note below |
 | `GATEWAY_URL` | `http://127.0.0.1:18789` | No | Gateway HTTP endpoint URL |
-| `NERVE_PUBLIC_ORIGIN` | *(empty)* | No | Explicit browser-facing ROBIN origin used when server-side gateway RPC fallback must open its own WebSocket to OpenClaw. Useful for reverse-proxy, cloud, and hybrid deployments. |
+| `ROBIN_PUBLIC_ORIGIN` | *(empty)* | No | Explicit browser-facing ROBIN origin used when server-side gateway RPC fallback must open its own WebSocket to the gateway. Useful for reverse-proxy, cloud, and hybrid deployments. |
 
 ```bash
 GATEWAY_TOKEN=your-token-here
 GATEWAY_URL=http://127.0.0.1:18789
 
 # Optional for reverse-proxy / cloud / hybrid installs
-NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
+ROBIN_PUBLIC_ORIGIN=https://robin.example.com
 ```
 
 For non-interactive installs that should talk to a remote gateway, pass the URL directly to the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh \
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh \
   | bash -s -- --gateway-url https://gw.example.com --gateway-token <token> --skip-setup
 ```
 
-If remote workspace panels (Files, Memory, Config, Skills) fail with `origin not allowed` while chat still works, set `NERVE_PUBLIC_ORIGIN` to the exact browser origin and add that same origin to `gateway.controlUi.allowedOrigins` on the gateway.
+If remote workspace panels (Files, Memory, Config, Skills) fail with `origin not allowed` while chat still works, set `ROBIN_PUBLIC_ORIGIN` to the exact browser origin and add that same origin to `gateway.controlUi.allowedOrigins` on the gateway.
 
 ### Token Injection
 
@@ -134,7 +134,7 @@ ROBIN performs **server-side token injection**. When a connection is established
 
 **Trust is granted if:**
 1. The connection is from a **local loopback address** (`127.0.0.1` or `::1`). When ROBIN is behind a trusted reverse proxy, proxy-aware client IP handling can preserve that loopback detection (see `TRUSTED_PROXIES`).
-2. OR, the connection has a valid **authenticated session** (`NERVE_AUTH=true`).
+2. OR, the connection has a valid **authenticated session** (`ROBIN_AUTH=true`).
 
 This allows the browser UI to connect without having to manually enter or store the gateway token in the browser's persistent storage. If a connection is not trusted (e.g., remote access without authentication), the token field in the UI must be filled manually.
 
@@ -179,24 +179,24 @@ Xiaomi MiMo is available as an explicit provider option when `MIMO_API_KEY` is s
 |----------|---------|-------------|
 | `STT_PROVIDER` | `local` | STT provider: `local` (whisper.cpp, no API key needed) or `openai` (requires `OPENAI_API_KEY`) |
 | `WHISPER_MODEL` | `base` | Local whisper model: `tiny` (75 MB), `base` (142 MB), or `small` (466 MB) — multilingual variants. English-only variants (`tiny.en`, `base.en`, `small.en`) are also available. |
-| `WHISPER_MODEL_DIR` | `~/.ROBIN/models` | Directory for downloaded whisper model files |
-| `NERVE_LANGUAGE` | `en` | Preferred voice language (ISO 639-1). Legacy `LANGUAGE` is still accepted but deprecated |
+| `WHISPER_MODEL_DIR` | `~/.robin/models` | Directory for downloaded whisper model files |
+| `ROBIN_LANGUAGE` | `en` | Preferred voice language (ISO 639-1). Legacy `LANGUAGE` is still accepted but deprecated |
 | `EDGE_VOICE_GENDER` | `female` | Edge TTS voice gender: `female` or `male` |
 
 ```bash
 # Use local speech-to-text (no API key needed)
 STT_PROVIDER=local
 WHISPER_MODEL=base
-NERVE_LANGUAGE=en
+ROBIN_LANGUAGE=en
 ```
 
-ROBIN uses explicit language selection (`NERVE_LANGUAGE`) for voice flows; there is no user-facing auto-detect language mode.
+ROBIN uses explicit language selection (`ROBIN_LANGUAGE`) for voice flows; there is no user-facing auto-detect language mode.
 
 Local STT requires `ffmpeg` for audio format conversion (webm/ogg → 16kHz mono WAV). The installer handles this automatically. Models are downloaded from HuggingFace on first use.
 
-> **Migration note:** `LANGUAGE` is still read for backwards compatibility, but new writes use `NERVE_LANGUAGE`.
+> **Migration note:** `LANGUAGE` is still read for backwards compatibility, but new writes use `ROBIN_LANGUAGE`.
 
-Voice phrase overrides (stop/cancel/wake words) are stored at `~/.ROBIN/voice-phrases.json` and generated on first save from the UI.
+Voice phrase overrides (stop/cancel/wake words) are stored at `~/.robin/voice-phrases.json` and generated on first save from the UI.
 
 ### Network & Security
 
@@ -225,36 +225,36 @@ ROBIN includes a built-in authentication layer that protects all API endpoints, 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NERVE_AUTH` | `false` | Enable authentication. Set to `true` to require a password for access |
-| `NERVE_PASSWORD_HASH` | *(empty)* | scrypt hash of the password. Generated by the setup wizard |
-| `NERVE_SESSION_SECRET` | *(auto-generated)* | 32-byte hex string for HMAC-SHA256 cookie signing. Auto-generated during setup. If not set, an ephemeral secret is generated at startup (sessions won't survive restarts) |
-| `NERVE_SESSION_TTL` | `2592000000` (30 days) | Session lifetime in milliseconds |
+| `ROBIN_AUTH` | `false` | Enable authentication. Set to `true` to require a password for access |
+| `ROBIN_PASSWORD_HASH` | *(empty)* | scrypt hash of the password. Generated by the setup wizard |
+| `ROBIN_SESSION_SECRET` | *(auto-generated)* | 32-byte hex string for HMAC-SHA256 cookie signing. Auto-generated during setup. If not set, an ephemeral secret is generated at startup (sessions won't survive restarts) |
+| `ROBIN_SESSION_TTL` | `2592000000` (30 days) | Session lifetime in milliseconds |
 
 ```bash
-NERVE_AUTH=true
-NERVE_PASSWORD_HASH=<generated-by-setup>
-NERVE_SESSION_SECRET=<generated-by-setup>
+ROBIN_AUTH=true
+ROBIN_PASSWORD_HASH=<generated-by-setup>
+ROBIN_SESSION_SECRET=<generated-by-setup>
 ```
 
-#### `NERVE_ALLOW_INSECURE`
+#### `ROBIN_ALLOW_INSECURE`
 
-When `HOST=0.0.0.0` and `NERVE_AUTH=false`, the server **refuses to start** to prevent accidentally exposing all endpoints without authentication. Set `NERVE_ALLOW_INSECURE=true` to override this safety check. **Not recommended for production.**
+When `HOST=0.0.0.0` and `ROBIN_AUTH=false`, the server **refuses to start** to prevent accidentally exposing all endpoints without authentication. Set `ROBIN_ALLOW_INSECURE=true` to override this safety check. **Not recommended for production.**
 
 ```bash
-NERVE_ALLOW_INSECURE=true
+ROBIN_ALLOW_INSECURE=true
 ```
 
 **Quick enable (with gateway token as password):**
 
 ```bash
-NERVE_AUTH=true
-NERVE_SESSION_SECRET=$(openssl rand -hex 32)
-# No NERVE_PASSWORD_HASH needed — your GATEWAY_TOKEN works as the password
+ROBIN_AUTH=true
+ROBIN_SESSION_SECRET=$(openssl rand -hex 32)
+# No ROBIN_PASSWORD_HASH needed — your GATEWAY_TOKEN works as the password
 ```
 
 **Behavior:**
-- When `NERVE_AUTH=false` (default): No authentication, all endpoints are open
-- When `NERVE_AUTH=true`: All `/api/*` routes (except auth and health) require a valid session cookie
+- When `ROBIN_AUTH=false` (default): No authentication, all endpoints are open
+- When `ROBIN_AUTH=true`: All `/api/*` routes (except auth and health) require a valid session cookie
 - The session cookie is `HttpOnly`, `SameSite=Strict`, and port-suffixed (`ROBIN_session_3080`)
 - WebSocket upgrade requests are also authenticated
 - If no password hash is set, the gateway token is accepted as a fallback password
@@ -290,16 +290,16 @@ REPLICATE_BASE_URL=https://api.replicate.com/v1
 | `MEMORY_DIR` | `~/.openclaw/workspace/memory/` | Directory for the main agent's daily memory files (`YYYY-MM-DD.md`) |
 | `SESSIONS_DIR` | `~/.openclaw/agents/main/sessions/` | Session transcript directory (scanned for token usage) |
 | `USAGE_FILE` | `~/.openclaw/token-usage.json` | Persistent cumulative token usage data |
-| `NERVE_VOICE_PHRASES_PATH` | `~/.ROBIN/voice-phrases.json` | Override location for per-language voice phrase overrides |
-| `NERVE_WATCH_WORKSPACE_RECURSIVE` | `false` | Re-enables recursive `fs.watch` for full workspace `file.changed` SSE events outside `MEMORY.md` and `memory/`. Disabled by default to prevent Linux inotify `ENOSPC` watcher exhaustion. Memory watchers stay enabled for discovered agent workspaces even when this is `false`. |
+| `ROBIN_VOICE_PHRASES_PATH` | `~/.robin/voice-phrases.json` | Override location for per-language voice phrase overrides |
+| `ROBIN_WATCH_WORKSPACE_RECURSIVE` | `false` | Re-enables recursive `fs.watch` for full workspace `file.changed` SSE events outside `MEMORY.md` and `memory/`. Disabled by default to prevent Linux inotify `ENOSPC` watcher exhaustion. Memory watchers stay enabled for discovered agent workspaces even when this is `false`. |
 
 ```bash
 FILE_BROWSER_ROOT=/home/user
 MEMORY_PATH=/custom/path/MEMORY.md
 MEMORY_DIR=/custom/path/memory/
 SESSIONS_DIR=/custom/path/sessions/
-NERVE_VOICE_PHRASES_PATH=/custom/path/voice-phrases.json
-NERVE_WATCH_WORKSPACE_RECURSIVE=false
+ROBIN_VOICE_PHRASES_PATH=/custom/path/voice-phrases.json
+ROBIN_WATCH_WORKSPACE_RECURSIVE=false
 ```
 
 ### TTS Cache
@@ -316,14 +316,14 @@ TTS_CACHE_MAX=500
 
 ### Updater State
 
-The updater stores state in `~/.ROBIN/updater/`. These are not configurable via env vars — they're managed automatically by `npm run update`.
+The updater stores state in `~/.robin/updater/`. These are not configurable via env vars — they're managed automatically by `npm run update`.
 
 | Path | Purpose |
 |------|---------|
-| `~/.ROBIN/updater/last-good.json` | Snapshot of the last successful state (git ref, version, env hash) |
-| `~/.ROBIN/updater/last-run.json` | Result metadata from the most recent update attempt |
-| `~/.ROBIN/updater/snapshots/<ts>/.env` | Timestamped `.env` backups (mode 0600) |
-| `~/.ROBIN/updater/ROBIN-update.lock` | PID lock file (prevents concurrent updates) |
+| `~/.robin/updater/last-good.json` | Snapshot of the last successful state (git ref, version, env hash) |
+| `~/.robin/updater/last-run.json` | Result metadata from the most recent update attempt |
+| `~/.robin/updater/snapshots/<ts>/.env` | Timestamped `.env` backups (mode 0600) |
+| `~/.robin/updater/robin-update.lock` | PID lock file (prevents concurrent updates) |
 
 ### Development
 
@@ -335,7 +335,7 @@ The updater stores state in `~/.ROBIN/updater/`. These are not configurable via 
 
 ## Kanban
 
-Kanban board configuration is stored in the runtime data file (`${NERVE_DATA_DIR:-~/.ROBIN}/kanban/tasks.json`), not in `.env`. Manage it via the REST API:
+Kanban board configuration is stored in the runtime data file (`${ROBIN_DATA_DIR:-~/.robin}/kanban/tasks.json`), not in `.env`. Manage it via the REST API:
 
 ```bash
 # Read current config
@@ -358,7 +358,7 @@ curl -X PUT http://localhost:3080/api/kanban/config \
 | `allowDoneDragBypass` | `boolean` | `false` | Allow dragging tasks directly to done (skipping review) |
 | `quickViewLimit` | `number` | `5` | Max tasks shown in workspace quick view (1--50) |
 | `proposalPolicy` | `string` | `"confirm"` | How agent proposals are handled: `"confirm"` (manual review) or `"auto"` (apply immediately) |
-| `defaultModel` | `string` | *(none)* | Default model for agent execution (max 100 chars). If unset, execution falls back to OpenClaw's configured default model |
+| `defaultModel` | `string` | *(none)* | Default model for agent execution (max 100 chars). If unset, execution falls back to the gateway's configured default model |
 
 ### Column Schema
 
@@ -432,10 +432,10 @@ HOST=0.0.0.0
 AGENT_NAME=Friday
 
 # Authentication (recommended when HOST=0.0.0.0)
-NERVE_AUTH=true
-NERVE_PASSWORD_HASH=<generated-by-setup>
-NERVE_SESSION_SECRET=<generated-by-setup>
-NERVE_SESSION_TTL=2592000000
+ROBIN_AUTH=true
+ROBIN_PASSWORD_HASH=<generated-by-setup>
+ROBIN_SESSION_SECRET=<generated-by-setup>
+ROBIN_SESSION_TTL=2592000000
 
 # API Keys
 OPENAI_API_KEY=sk-...
@@ -445,7 +445,7 @@ MIMO_API_KEY=sk-mimo-...
 # Speech / Language
 STT_PROVIDER=local
 WHISPER_MODEL=base
-NERVE_LANGUAGE=en
+ROBIN_LANGUAGE=en
 EDGE_VOICE_GENDER=female
 
 # Network (Tailscale example)

@@ -528,7 +528,7 @@ export function AudioSettings({
     void setLanguage(code).then((saved) => {
       if (!saved) return;
       // Notify InputBar after language update succeeds
-      window.dispatchEvent(new CustomEvent('nerve:language-changed'));
+      window.dispatchEvent(new CustomEvent('robin:language-changed'));
     });
   }, [setLanguage]);
 
@@ -1038,7 +1038,7 @@ export function AudioSettings({
         onClose={() => {
           setPhrasesModal(prev => ({ ...prev, open: false }));
           // Phrases may have changed — notify voice input to refetch phrase config.
-          window.dispatchEvent(new CustomEvent('nerve:voice-phrases-changed'));
+          window.dispatchEvent(new CustomEvent('robin:voice-phrases-changed'));
         }}
         languageCode={phrasesModal.code}
         languageName={phrasesModal.name}

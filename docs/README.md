@@ -1,4 +1,4 @@
-# Nerve Docs
+# ROBIN Docs
 
 Start here when you need setup, operations, or contributor guidance.
 
@@ -23,8 +23,8 @@ Start here when you need setup, operations, or contributor guidance.
 ## Setup and deployment
 
 - [AI Agent Setup](./AI_SETUP.md)
-- [Nerve Agent Install Contract](./INSTALL.md)
+- [ROBIN Agent Install Contract](./INSTALL.md)
 - [Run everything on one machine](./DEPLOYMENT-A.md)
-- [Use a cloud Gateway with Nerve on your laptop](./DEPLOYMENT-B.md)
-- [Run both Nerve and Gateway in the cloud](./DEPLOYMENT-C.md)
-- [Add Tailscale to an existing Nerve install](./TAILSCALE.md)
+- [Use a cloud Gateway with ROBIN on your laptop](./DEPLOYMENT-B.md)
+- [Run both ROBIN and Gateway in the cloud](./DEPLOYMENT-C.md)
+- [Add Tailscale to an existing ROBIN install](./TAILSCALE.md)

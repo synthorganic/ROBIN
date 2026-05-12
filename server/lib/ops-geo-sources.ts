@@ -8,6 +8,8 @@ export type OpsGeoSourceId =
   | 'nws'
   | 'firms'
   | 'radnet'
+  | 'trafficcams'
+  | 'trackedflights'
   | 'eurdep'
   | 'safecast'
   | 'gmcmap'
@@ -204,6 +206,7 @@ function sourceAsset(
     lat: input.lat,
     lng: input.lng,
     sourceUrl: input.sourceUrl,
+    streamUrl: input.streamUrl,
     thumbnailUrl: input.thumbnailUrl,
     notes: input.notes ? truncate(cleanText(input.notes), 800) : undefined,
     tags: Array.from(new Set([sourceId, ...(input.tags ?? [])].map((tag) => tag.toLowerCase()).filter(Boolean))),
@@ -603,6 +606,194 @@ async function fetchRadNetAssets(): Promise<OpsMapAsset[]> {
     .filter((asset): asset is OpsMapAsset => Boolean(asset));
 }
 
+interface TrafficCameraRecord {
+  index: number;
+  camera: string;
+  lat: number;
+  lng: number;
+  description: string;
+  still: string;
+  statusUrl: string;
+  hls: string;
+}
+
+const TRAFFIC_CAMERA_SOURCE_URL = process.env.INERTIAI_OPS_TRAFFIC_CAMERA_URL
+  || 'http://trafficvid.lexingtonky.gov/publicmap/';
+const DEFAULT_TRAFFIC_CAMERA_IDS = ['LEX-CAM-057', 'LEX-CAM-058', 'LEX-CAM-059', 'LEX-CAM-060', 'LEX-CAM-061'];
+const ADSB_LOL_BASE_URL = process.env.INERTIAI_OPS_ADSB_BASE_URL || 'https://api.adsb.lol';
+
+function normalizeTrafficCameraId(value: string) {
+  const trimmed = value.trim().toUpperCase();
+  const numeric = trimmed.match(/(\d{1,3})$/)?.[1];
+  return numeric ? `LEX-CAM-${numeric.padStart(3, '0')}` : trimmed;
+}
+
+function selectedTrafficCameraIds() {
+  const configured = process.env.INERTIAI_OPS_TRAFFIC_CAMERA_IDS;
+  if (!configured) return DEFAULT_TRAFFIC_CAMERA_IDS;
+  const ids = configured
+    .split(/[\s,;]+/)
+    .map(normalizeTrafficCameraId)
+    .filter(Boolean);
+  return ids.length ? ids : DEFAULT_TRAFFIC_CAMERA_IDS;
+}
+
+function trafficCameraPageUrl(index: number) {
+  const url = new URL(TRAFFIC_CAMERA_SOURCE_URL);
+  url.searchParams.set('cam', String(index));
+  return url.toString();
+}
+
+function parseTrafficCameraCatalog(html: string): TrafficCameraRecord[] {
+  const cameraPattern = /\{\s*"camera":\s*'(?<camera>LEX-CAM-\d+)'\s*,\s*"lat":\s*'(?<lat>[^']+)'\s*,\s*"lng":\s*'(?<lng>[^']+)'\s*,\s*"description":\s*'(?<description>[^']+)'\s*,\s*"still":\s*'(?<still>[^']+)'\s*,\s*"status":\s*'(?<statusUrl>[^']+)'\s*,\s*"override":\s*'[^']*'\s*,\s*"hls":\s*'(?<hls>[^']+)'/g;
+  return Array.from(html.matchAll(cameraPattern))
+    .map((match, index) => {
+      const groups = match.groups;
+      if (!groups) return null;
+      const lat = parseNumber(groups.lat);
+      const lng = parseNumber(groups.lng);
+      if (lat == null || lng == null) return null;
+      return {
+        index,
+        camera: normalizeTrafficCameraId(groups.camera),
+        lat,
+        lng,
+        description: cleanText(groups.description, groups.camera),
+        still: groups.still,
+        statusUrl: groups.statusUrl,
+        hls: groups.hls,
+      };
+    })
+    .filter((record): record is TrafficCameraRecord => Boolean(record));
+}
+
+async function fetchTrafficCameraAssets(): Promise<OpsMapAsset[]> {
+  const html = await fetchText(TRAFFIC_CAMERA_SOURCE_URL);
+  const selectedIds = new Set(selectedTrafficCameraIds());
+  const fetchedAt = new Date().toISOString();
+  return parseTrafficCameraCatalog(html)
+    .filter((camera) => selectedIds.has(camera.camera))
+    .map((camera) => sourceAsset('trafficcams', {
+      idParts: [camera.camera, camera.lat, camera.lng],
+      type: 'video',
+      title: `Traffic Cam: ${camera.description}`,
+      lat: camera.lat,
+      lng: camera.lng,
+      sourceUrl: trafficCameraPageUrl(camera.index),
+      streamUrl: camera.hls,
+      thumbnailUrl: camera.still,
+      notes: `Official LFUCG traffic camera ${camera.camera}. Use the sidebar live-feed button for the provider page; direct HLS links are refreshed from the source page and may expire between refreshes.`,
+      tags: ['traffic', 'camera', 'cctv', 'live', 'lexington', 'lfucg', camera.camera.toLowerCase()],
+      status: 'Live CCTV feed',
+      sourceName: 'LFUCG Traffic Cameras',
+      severity: 'info',
+      confidence: 'high',
+      observedAt: fetchedAt,
+    }));
+}
+
+interface TrackedFlightDefinition {
+  registration: string;
+  icao24: string;
+  sourceUrl: string;
+  label?: string;
+}
+
+interface AdsbLolAircraft {
+  hex?: string;
+  flight?: string;
+  r?: string;
+  t?: string;
+  alt_baro?: number | string | null;
+  alt_geom?: number | string | null;
+  gs?: number | string | null;
+  track?: number | string | null;
+  lat?: number | string | null;
+  lon?: number | string | null;
+  seen?: number | string | null;
+  seen_pos?: number | string | null;
+  baro_rate?: number | string | null;
+}
+
+const DEFAULT_TRACKED_FLIGHTS: TrackedFlightDefinition[] = [
+  {
+    registration: 'N103RV',
+    icao24: 'a01164',
+    sourceUrl: 'https://www.flightradar24.com/N103RV/3fa6c6f5',
+    label: "Van's RV-7",
+  },
+];
+
+function trackedFlights(): TrackedFlightDefinition[] {
+  return DEFAULT_TRACKED_FLIGHTS;
+}
+
+function formatRounded(value: number | null, unit: string) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return `${Math.round(value)} ${unit}`;
+}
+
+function formatHeading(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return `hdg ${Math.round(value)}°`;
+}
+
+function observedAtFromNow(nowMs: number, secondsAgo: number | null) {
+  if (secondsAgo == null || !Number.isFinite(secondsAgo)) return new Date(nowMs).toISOString();
+  return new Date(nowMs - Math.max(0, secondsAgo) * 1000).toISOString();
+}
+
+async function fetchTrackedFlightAssets(): Promise<OpsMapAsset[]> {
+  const nowMs = Date.now();
+  const flights = await Promise.all(trackedFlights().map(async (flight) => {
+    const payload = await fetchJson(`${ADSB_LOL_BASE_URL}/v2/icao/${encodeURIComponent(flight.icao24)}`);
+    const aircraft = isRecord(payload) ? asArray(payload.ac)[0] : null;
+    if (!isRecord(aircraft)) return null;
+
+    const lat = parseNumber(aircraft.lat);
+    const lng = parseNumber(aircraft.lon);
+    if (lat == null || lng == null) return null;
+
+    const altitude = parseNumber(aircraft.alt_baro) ?? parseNumber(aircraft.alt_geom);
+    const speed = parseNumber(aircraft.gs);
+    const heading = parseNumber(aircraft.track);
+    const verticalRate = parseNumber(aircraft.baro_rate);
+    const seen = parseNumber(aircraft.seen_pos) ?? parseNumber(aircraft.seen);
+    const registration = cleanText(aircraft.r || flight.registration, flight.registration);
+    const flightId = cleanText(aircraft.flight || registration, registration);
+    const aircraftType = cleanText(aircraft.t || flight.label || 'Aircraft');
+    const statusParts = [
+      formatRounded(altitude, 'ft'),
+      formatRounded(speed, 'kt'),
+      formatHeading(heading),
+    ].filter((part): part is string => Boolean(part));
+    const notesParts = [
+      `Live ADS-B track for ${registration}${flight.label ? ` (${flight.label})` : ''}.`,
+      `ICAO24 ${flight.icao24.toUpperCase()}.`,
+      verticalRate != null ? `Vertical rate ${Math.round(verticalRate)} fpm.` : null,
+      'Provider page opens in the sidebar action link.',
+    ].filter((part): part is string => Boolean(part));
+
+    return sourceAsset('trackedflights', {
+      idParts: [flight.icao24, registration],
+      type: 'link',
+      title: `Flight: ${registration}`,
+      lat,
+      lng,
+      sourceUrl: flight.sourceUrl,
+      notes: notesParts.join(' '),
+      tags: ['flight', 'aircraft', 'ads-b', 'aviation', 'live', registration.toLowerCase(), flight.icao24.toLowerCase(), aircraftType.toLowerCase()],
+      status: statusParts.join(' · ') || 'Live ADS-B track',
+      sourceName: 'Tracked Flights',
+      severity: 'info',
+      confidence: 'high',
+      observedAt: observedAtFromNow(nowMs, seen),
+    });
+  }));
+
+  return flights.filter((flight): flight is OpsMapAsset => Boolean(flight));
+}
+
 const SOURCE_DEFINITIONS: SourceDefinition[] = [
   {
     id: 'gdelt',
@@ -655,6 +846,24 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     attribution: 'U.S. Environmental Protection Agency RadNet',
     description: 'U.S. near-real-time gamma radiation air monitoring network across all 50 states.',
     fetch: fetchRadNetAssets,
+  },
+  {
+    id: 'trafficcams',
+    name: 'LFUCG Traffic Cameras',
+    category: 'transport',
+    refreshSeconds: 5 * 60,
+    attribution: 'Lexington-Fayette Urban County Government Traffic Cameras',
+    description: 'Selected Lexington live CCTV traffic cameras with provider-page launch links and refreshed HLS stream URLs.',
+    fetch: fetchTrafficCameraAssets,
+  },
+  {
+    id: 'trackedflights',
+    name: 'Tracked Flights',
+    category: 'transport',
+    refreshSeconds: 30,
+    attribution: 'ADSB.lol live ADS-B feed with FlightRadar24 operator pages',
+    description: 'Live tracked aircraft positions from open ADS-B data with provider links for full flight pages.',
+    fetch: fetchTrackedFlightAssets,
   },
   {
     id: 'eurdep',

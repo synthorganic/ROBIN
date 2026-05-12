@@ -1,5 +1,5 @@
 /**
- * CodeMirror theme matching the Nerve dark UI.
+ * CodeMirror theme matching the ROBIN dark UI.
  *
  * Uses CSS custom properties from the app's theme system so it
  * automatically adapts to whatever theme is active.
@@ -9,7 +9,7 @@ import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
-export const nerveTheme = EditorView.theme(
+export const robinTheme = EditorView.theme(
   {
     '&': {
       backgroundColor: 'transparent',
@@ -107,8 +107,8 @@ export const nerveTheme = EditorView.theme(
   { dark: true },
 );
 
-/** Syntax highlighting colors for the Nerve theme. */
-export const nerveHighlighting = syntaxHighlighting(
+/** Syntax highlighting colors for the ROBIN theme. */
+export const robinHighlighting = syntaxHighlighting(
   HighlightStyle.define([
     { tag: t.keyword, color: '#c678dd' },
     { tag: [t.name, t.deleted, t.character, t.macroName], color: '#e06c75' },

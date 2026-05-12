@@ -46,7 +46,7 @@ interface SettingsDrawerProps {
 type SettingsCategory = 'advanced' | 'audio' | 'appearance' | 'lmstudio';
 type LegacySettingsCategory = SettingsCategory | 'audio-input' | 'voice-output';
 
-const SETTINGS_CATEGORY_KEY = 'nerve:settings-category';
+const SETTINGS_CATEGORY_KEY = 'robin:settings-category';
 
 function normalizeSavedCategory(value: string | null): SettingsCategory | null {
   const raw = value as LegacySettingsCategory | null;

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
-const STATE_DIR = join(homedir(), '.nerve', 'updater');
+const STATE_DIR = join(homedir(), '.robin', 'updater');
 const LAST_GOOD_PATH = join(STATE_DIR, 'last-good.json');
 /**
  * Create a snapshot of the current state before updating.

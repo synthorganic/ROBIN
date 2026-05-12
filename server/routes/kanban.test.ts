@@ -50,7 +50,7 @@ afterEach(async () => {
   }
   vi.useRealTimers();
   vi.restoreAllMocks();
-  delete process.env.NERVE_KANBAN_EXECUTION_MODE;
+  delete process.env.ROBIN_KANBAN_EXECUTION_MODE;
   await new Promise(resolve => setTimeout(resolve, 50));
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -69,7 +69,7 @@ async function buildApp(options: { invokeGatewayToolMock?: GatewayToolMock; gate
     rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
   }));
 
-  process.env.NERVE_KANBAN_EXECUTION_MODE = options.executionMode ?? 'primary';
+  process.env.ROBIN_KANBAN_EXECUTION_MODE = options.executionMode ?? 'primary';
 
   const invokeGatewayToolMock = options.invokeGatewayToolMock
     ?? (vi.fn(() => Promise.resolve({})) as GatewayToolMock);

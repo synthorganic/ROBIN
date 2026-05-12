@@ -141,7 +141,7 @@ export async function latestReleaseVersion(cwd: string): Promise<string | null> 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'nerve-updater',
+    'User-Agent': 'robin-updater',
   };
 
   if (token) {

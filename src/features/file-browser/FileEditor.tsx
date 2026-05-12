@@ -13,7 +13,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { search, searchKeymap } from '@codemirror/search';
 import { bracketMatching, foldGutter } from '@codemirror/language';
 import { Loader2, AlertTriangle, RotateCw, LockKeyhole } from 'lucide-react';
-import { nerveTheme, nerveHighlighting } from './editorTheme';
+import { robinTheme, robinHighlighting } from './editorTheme';
 import { getLanguageExtension, shouldWrap } from './utils/languageMap';
 import type { OpenFile } from './types';
 
@@ -66,8 +66,8 @@ export function FileEditor({ file, onContentChange, onSave, onRetry }: FileEdito
             },
           },
         ]),
-        nerveTheme,
-        nerveHighlighting,
+        robinTheme,
+        robinHighlighting,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onContentChangeRef.current(

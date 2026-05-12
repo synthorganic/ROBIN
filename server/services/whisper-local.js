@@ -319,8 +319,8 @@ export async function transcribeLocal(fileData, filename, language) {
     // Build whisper options: .en models only accept 'en'; multilingual accepts language codes
     const whisperLang = isEnModel ? 'en' : (resolveLanguage(effectiveLang)?.whisperCode || effectiveLang);
     const id = randomUUID().slice(0, 8);
-    const inputTmp = join(tmpdir(), `nerve-stt-in-${id}-${filename}`);
-    const wavTmp = join(tmpdir(), `nerve-stt-${id}.wav`);
+    const inputTmp = join(tmpdir(), `robin-stt-in-${id}-${filename}`);
+    const wavTmp = join(tmpdir(), `robin-stt-${id}.wav`);
     try {
         // 1. Save uploaded audio to temp file
         writeFileSync(inputTmp, fileData);

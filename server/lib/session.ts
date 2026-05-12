@@ -89,7 +89,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /**
- * Parse the nerve_session cookie from a raw Cookie header string.
+ * Parse the robin_session cookie from a raw Cookie header string.
  * Used for WebSocket upgrade requests (outside Hono's middleware).
  */
 export function parseSessionCookie(cookieHeader: string | undefined, cookieName: string): string | null {

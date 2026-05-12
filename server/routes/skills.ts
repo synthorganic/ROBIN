@@ -156,7 +156,7 @@ async function createScopedOpenclawEnv(workspaceRoot: string): Promise<{
   env: NodeJS.ProcessEnv;
   cleanup: () => Promise<void>;
 }> {
-  const tempDir = await fs.mkdtemp(join(os.tmpdir(), 'nerve-skills-'));
+  const tempDir = await fs.mkdtemp(join(os.tmpdir(), 'robin-skills-'));
   const tempConfigPath = join(tempDir, OPENCLAW_CONFIG_FILENAME);
 
   try {

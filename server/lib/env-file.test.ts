@@ -42,20 +42,20 @@ describe('upsertEnvContent', () => {
 
 describe('writeEnvKey', () => {
   it('serializes concurrent writes to avoid lost updates', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nerve-env-test-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'robin-env-test-'));
     const envPath = path.join(dir, '.env');
     fs.writeFileSync(envPath, 'OPENAI_API_KEY=old\n', 'utf8');
 
     await Promise.all([
       writeEnvKey('OPENAI_API_KEY', 'new', envPath),
       writeEnvKey('REPLICATE_API_TOKEN', 'r8_xxx', envPath),
-      writeEnvKey('NERVE_LANGUAGE', 'tr', envPath),
+      writeEnvKey('ROBIN_LANGUAGE', 'tr', envPath),
     ]);
 
     const final = fs.readFileSync(envPath, 'utf8');
     expect(final).toContain('OPENAI_API_KEY=new\n');
     expect(final).toContain('REPLICATE_API_TOKEN=r8_xxx\n');
-    expect(final).toContain('NERVE_LANGUAGE=tr\n');
+    expect(final).toContain('ROBIN_LANGUAGE=tr\n');
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

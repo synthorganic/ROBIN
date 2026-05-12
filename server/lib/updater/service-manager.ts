@@ -78,7 +78,7 @@ class SystemdManager implements ServiceManager {
       ).toString();
 
       for (const line of output.split('\n')) {
-        if (/nerve/i.test(line)) {
+        if (/robin/i.test(line)) {
           const unit = line.trim().split(/\s+/)[0];
           if (unit) return unit;
         }
@@ -102,7 +102,7 @@ class LaunchdManager implements ServiceManager {
     try {
       const output = execSync('launchctl list', { stdio: 'pipe' }).toString();
       for (const line of output.split('\n')) {
-        if (/nerve/i.test(line)) {
+        if (/robin/i.test(line)) {
           const parts = line.trim().split(/\s+/);
           const candidate = parts[parts.length - 1];
           if (candidate) {
@@ -151,7 +151,7 @@ class LaunchdManager implements ServiceManager {
   async getLogs(lines: number): Promise<string> {
     try {
       return execSync(
-        `log show --predicate 'processImagePath contains "nerve"' --last 5m --info | tail -${lines}`,
+        `log show --predicate 'processImagePath contains "robin"' --last 5m --info | tail -${lines}`,
         { stdio: 'pipe' },
       ).toString();
     } catch {

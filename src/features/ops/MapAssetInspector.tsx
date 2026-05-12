@@ -13,11 +13,12 @@ interface MapAssetInspectorProps {
   currentSessionId?: string | null;
 }
 
-type PreviewKind = 'iframe' | 'video' | 'image' | 'source-data' | 'none';
+type PreviewKind = 'iframe' | 'video' | 'image' | 'live-camera' | 'source-data' | 'none';
 
 interface PreviewDescriptor {
   kind: PreviewKind;
   src?: string;
+  streamUrl?: string;
   note?: string;
 }
 
@@ -56,6 +57,15 @@ function embedVideoUrl(url: string) {
 }
 
 function describePreview(asset: MapAsset): PreviewDescriptor {
+  if (asset.live && asset.type === 'video') {
+    return {
+      kind: 'live-camera',
+      src: asset.thumbnailUrl,
+      streamUrl: asset.streamUrl,
+      note: 'Traffic camera streams are provider-issued and may expire; use Open Live Feed for the stable camera page.',
+    };
+  }
+
   if (asset.live) {
     return {
       kind: 'source-data',
@@ -143,6 +153,11 @@ export default function MapAssetInspector({ asset, currentSessionId }: MapAssetI
 
   const preview = describePreview(asset);
   const linkedToCurrent = currentSessionId && asset.linkedSessionId === currentSessionId;
+  const sourceButtonLabel = asset.live && asset.type === 'video'
+    ? 'Open Live Feed'
+    : asset.sourceId === 'trackedflights'
+      ? 'Open Live Flight'
+      : 'Open Source';
 
   return (
     <div className="ops-asset-shell">
@@ -166,11 +181,18 @@ export default function MapAssetInspector({ asset, currentSessionId }: MapAssetI
         </div>
       </div>
 
-      {asset.sourceUrl ? (
+      {asset.sourceUrl || asset.streamUrl ? (
         <div className="ops-asset-actions">
-          <a className="ops-button ghost" href={asset.sourceUrl} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} /> Open Source
-          </a>
+          {asset.sourceUrl ? (
+            <a className="ops-button ghost" href={asset.sourceUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={16} /> {sourceButtonLabel}
+            </a>
+          ) : null}
+          {asset.streamUrl ? (
+            <a className="ops-button ghost" href={asset.streamUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={16} /> Open HLS Stream
+            </a>
+          ) : null}
         </div>
       ) : null}
 
@@ -194,6 +216,23 @@ export default function MapAssetInspector({ asset, currentSessionId }: MapAssetI
 
         {preview.kind === 'image' && preview.src ? (
           <img className="ops-asset-image" src={preview.src} alt={asset.title} loading="lazy" />
+        ) : null}
+
+        {preview.kind === 'live-camera' ? (
+          <div className="ops-live-camera-preview">
+            {preview.src ? (
+              <img className="ops-live-camera-image" src={preview.src} alt={asset.title} loading="lazy" />
+            ) : (
+              <div className="ops-live-camera-empty">
+                <Camera size={28} />
+              </div>
+            )}
+            <div className="ops-live-camera-panel">
+              <span><Camera size={14} /> Live traffic camera</span>
+              <strong>{asset.title}</strong>
+              <p>{preview.streamUrl ? 'Fresh stream URL attached from the source page.' : 'No direct stream URL is currently attached.'}</p>
+            </div>
+          </div>
         ) : null}
 
         {preview.kind === 'source-data' ? (

@@ -1,15 +1,15 @@
 ---
-name: nerve-kanban
-description: Interact with the Nerve Kanban board API. CRUD tasks, manage workflow (execute, approve, reject, abort), handle proposals, configure the board. All endpoints are under /api/kanban on the Nerve server.
+name: robin-kanban
+description: Interact with the ROBIN Kanban board API. CRUD tasks, manage workflow (execute, approve, reject, abort), handle proposals, configure the board. All endpoints are under /api/kanban on the ROBIN server.
 ---
 
-# Nerve Kanban API Skill
+# ROBIN Kanban API Skill
 
-Use this skill to manage tasks on the Nerve Kanban board via its REST API.
+Use this skill to manage tasks on the ROBIN Kanban board via its REST API.
 
 ## Base URL
 
-All endpoints are relative to the Nerve server origin (e.g. `http://localhost:3000`). Prefix every path with `/api/kanban`.
+All endpoints are relative to the ROBIN server origin (e.g. `http://localhost:3000`). Prefix every path with `/api/kanban`.
 
 ## Core Concepts
 

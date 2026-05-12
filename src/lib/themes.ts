@@ -1,4 +1,4 @@
-// Theme definitions for Nerve UI
+// Theme definitions for ROBIN UI
 
 export type ThemeName =
   | 'robin'

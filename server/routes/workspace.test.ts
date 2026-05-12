@@ -40,7 +40,7 @@ describe('workspace routes', () => {
         memoryPath,
         memoryDir,
       },
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
     vi.doMock('../middleware/rate-limit.js', () => ({
       rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
@@ -139,7 +139,7 @@ describe('workspace routes', () => {
           memoryDir: path.join(remoteWorkspace, 'memory'),
           workspaceRemote: false,
         },
-        SESSION_COOKIE_NAME: 'nerve_session_3000',
+        SESSION_COOKIE_NAME: 'robin_session_3000',
       }));
       vi.doMock('../middleware/rate-limit.js', () => ({
         rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
@@ -204,7 +204,7 @@ describe('workspace routes', () => {
           memoryDir: path.join(remoteWorkspace, 'memory'),
           workspaceRemote: true,
         },
-        SESSION_COOKIE_NAME: 'nerve_session_3000',
+        SESSION_COOKIE_NAME: 'robin_session_3000',
       }));
       vi.doMock('../middleware/rate-limit.js', () => ({
         rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
@@ -250,7 +250,7 @@ describe('workspace routes', () => {
           memoryDir: path.join(remoteWorkspace, 'memory'),
           workspaceRemote: true,
         },
-        SESSION_COOKIE_NAME: 'nerve_session_3000',
+        SESSION_COOKIE_NAME: 'robin_session_3000',
       }));
       vi.doMock('../middleware/rate-limit.js', () => ({
         rateLimitGeneral: vi.fn((_c: unknown, next: () => Promise<void>) => next()),

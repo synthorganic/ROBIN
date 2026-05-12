@@ -5,7 +5,7 @@ ROBIN supports agent-driven installation.
 If you want an AI agent to install, configure, and validate ROBIN, the canonical raw instruction file is:
 
 - [`INSTALL.md`](./INSTALL.md)
-- raw URL: `https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md`
+- raw URL: `https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md`
 
 Use that file as the operational contract.
 Use this page for the human-readable explanation, boundaries, and topology map.
@@ -16,7 +16,7 @@ Use this page for the human-readable explanation, boundaries, and topology map.
 Install, configure, and validate ROBIN on this machine.
 
 Fetch and follow instructions from:
-https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md
+https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md
 ```
 
 ## Default agent behavior
@@ -30,7 +30,7 @@ Unless you say otherwise, agents should use these defaults:
 - validate before reporting completion
 
 That means the common happy path is:
-1. detect an existing OpenClaw gateway
+1. detect an existing compatible agent gateway
 2. install ROBIN
 3. run setup
 4. start or restart ROBIN
@@ -41,7 +41,7 @@ That means the common happy path is:
 For the default local path, agents may automatically:
 - inspect the current machine and existing install state
 - detect whether `~/ROBIN` already exists
-- detect whether OpenClaw is installed and reachable
+- detect whether the gateway runtime is installed and reachable
 - detect the gateway token and gateway URL
 - install missing core prerequisites for the local path
 - run the ROBIN installer
@@ -51,14 +51,14 @@ For the default local path, agents may automatically:
 - restart local services or processes
 - run validation and smoke checks
 
-Agents may also apply minimal localhost-safe OpenClaw changes needed for the default path, such as local origin allowlisting, local pairing fixes, or required local tool allow entries.
+Agents may also apply minimal localhost-safe gateway changes needed for the default path, such as local origin allowlisting, local pairing fixes, or required local tool allow entries.
 
 ## What requires confirmation
 
 Agents should ask before they do anything that changes exposure, trust, or install ownership.
 
 That includes:
-- installing OpenClaw
+- installing the gateway runtime
 - exposing ROBIN beyond localhost
 - LAN access
 - public internet exposure
@@ -72,15 +72,15 @@ Short version: local repair and local setup can be automated. Public or destruct
 
 ## Dependency behavior
 
-ROBIN is not a standalone app. It depends on an OpenClaw gateway.
+ROBIN is not a standalone app. It depends on a compatible agent gateway.
 
 Expected agent behavior:
 1. look for an existing reachable gateway first
 2. prefer using that gateway
 3. if none is found, explain the dependency clearly
-4. ask before installing OpenClaw
+4. ask before installing the gateway runtime
 
-For the default same-machine flow, agents may make the smallest safe local OpenClaw fixes required for ROBIN to connect. For remote or public gateway changes, they should stop and ask.
+For the default same-machine flow, agents may make the smallest safe local gateway fixes required for ROBIN to connect. For remote or public gateway changes, they should stop and ask.
 
 ## Topology map
 
@@ -98,7 +98,7 @@ Recommended default: start with the local setup unless you already know you need
 An agent should only report success when all of these are true:
 - ROBIN is installed at the intended path
 - ROBIN starts successfully
-- it points at the intended OpenClaw gateway
+- it points at the intended compatible agent gateway
 - access and auth match the requested mode
 - the smoke test passes
 
@@ -128,9 +128,9 @@ For remote or custom setups, agents should adjust the URLs to match the requeste
 
 Agents should fail clearly, not vaguely.
 
-### No OpenClaw gateway found
+### No compatible agent gateway found
 
-Explain that ROBIN depends on OpenClaw and ask before installing it.
+Explain that ROBIN depends on a compatible agent gateway and ask before installing it.
 
 ### Installer or setup wizard unavailable
 
@@ -162,18 +162,18 @@ Install, configure, and validate ROBIN on this machine.
 Use the safest local-first path and keep it localhost-only unless you need my approval.
 
 Fetch and follow instructions from:
-https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md
+https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md
 ```
 
 ### Local ROBIN + existing remote gateway
 
 ```text
-Install ROBIN on this machine and connect it to my existing remote OpenClaw gateway.
+Install ROBIN on this machine and connect it to my existing remote compatible agent gateway.
 Do not expose ROBIN beyond localhost unless I approve it.
 If remote gateway config needs changing, tell me before you do it.
 
 Fetch and follow instructions from:
-https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md
+https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md
 ```
 
 ### Tailscale setup
@@ -184,7 +184,7 @@ Ask before making any exposure or gateway allowlist changes.
 Use the repo's Tailscale guidance instead of inventing a new flow.
 
 Fetch and follow instructions from:
-https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md
+https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md
 ```
 
 ### Existing install repair
@@ -194,5 +194,5 @@ Inspect my existing ROBIN install, repair it if needed, and validate it.
 Do not reinstall or delete anything unless you ask first.
 
 Fetch and follow instructions from:
-https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/docs/INSTALL.md
+https://raw.githubusercontent.com/synthorganic/ROBIN/main/docs/INSTALL.md
 ```

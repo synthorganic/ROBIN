@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * nerve-update — one-command updater for Nerve.
+ * robin-update — one-command updater for ROBIN.
  *
  * Usage:
  *   npm run update
@@ -89,7 +89,7 @@ function parseArgs(argv: string[]): UpdateOptions {
 
 function printHelp(): void {
   process.stderr.write(`
-  Usage: nerve-update [options]
+  Usage: robin-update [options]
 
   Options:
     --version <vX.Y.Z>  Pin to a specific version

@@ -39,22 +39,22 @@ If `~/ROBIN` already exists:
 3. prefer safe validation, restart, repair, or non-destructive reconfigure work
 4. ask before reinstalling, replacing, deleting, or hard-resetting anything
 
-## OpenClaw dependency handling
+## Gateway dependency handling
 
-ROBIN depends on an OpenClaw gateway.
+ROBIN depends on a compatible agent gateway.
 
 You must:
 1. detect whether a usable gateway already exists
 2. prefer using an existing reachable gateway
 3. explain the dependency if no usable gateway is found
-4. ask before installing OpenClaw if it is missing
+4. ask before installing the gateway runtime if it is missing
 
-You may apply minimal localhost-safe OpenClaw changes automatically when needed for the default local path. Examples:
+You may apply minimal localhost-safe gateway changes automatically when needed for the default local path. Examples:
 - adding missing local control UI origins
 - adding required gateway tool allow entries such as `cron`, `gateway`, and `sessions_spawn`
 - fixing local device pairing or scopes needed for ROBIN to connect
 
-Ask first before any OpenClaw change that is remote, public, security-sensitive, destructive, or changes network exposure.
+Ask first before any gateway change that is remote, public, security-sensitive, destructive, or changes network exposure.
 
 ## Prerequisite handling
 
@@ -74,7 +74,7 @@ If prerequisite installation is impossible, fail clearly and say what is missing
 ## Consent boundaries
 
 Ask for confirmation before any of the following:
-- installing OpenClaw
+- installing the gateway runtime
 - exposing ROBIN beyond localhost
 - LAN exposure
 - public internet exposure
@@ -106,7 +106,7 @@ Follow this order unless the user explicitly asks for a different topology.
 Check:
 - whether `~/ROBIN` already exists
 - whether `openclaw` is installed
-- whether the OpenClaw gateway is reachable
+- whether the compatible agent gateway is reachable
 - whether a gateway token can be detected
 
 ### 2. Prefer the installer
@@ -120,7 +120,7 @@ If you are inside a local checkout of this repo, prefer:
 If you are operating from GitHub or a raw-doc context without a local checkout, prefer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/synthorganic/ROBIN/main/install.sh | bash
 ```
 
 ### 3. Prefer the setup wizard
@@ -143,7 +143,7 @@ If the installer or wizard cannot be used, do the smallest correct manual fallba
 If the repo is not present locally:
 
 ```bash
-git clone https://github.com/daggerhashimoto/openclaw-ROBIN.git ~/ROBIN
+git clone https://github.com/synthorganic/ROBIN.git ~/ROBIN
 cd ~/ROBIN
 npm install
 ```
@@ -196,7 +196,7 @@ Choose the branch based on the user's intended topology, not on low-level subsys
 Only report success when all of the following are true:
 - ROBIN is installed at the intended path
 - ROBIN starts successfully
-- it is configured against the intended OpenClaw gateway
+- it is configured against the intended compatible agent gateway
 - access and auth behavior match the chosen mode
 - a minimal smoke test passes
 
@@ -207,7 +207,7 @@ Keep the smoke test small and explicit.
 1. Confirm the ROBIN process or service is running.
 2. Confirm the expected ROBIN URL responds.
    - local default: `http://127.0.0.1:3080/health`
-3. Confirm the intended OpenClaw gateway is reachable.
+3. Confirm the intended compatible agent gateway is reachable.
 4. Confirm `.env` points to that gateway.
 5. If auth is enabled or network access was requested, confirm the login surface or expected protected access behavior is present.
 

@@ -22,7 +22,7 @@ interface OpsDocumentStoreShape {
   documents: OpsDocumentRecord[];
 }
 
-const STORE_DIR = path.join(config.home, '.nerve', 'inertiai-ops');
+const STORE_DIR = path.join(config.home, '.robin', 'inertiai-ops');
 const DOCUMENT_DIR = path.join(STORE_DIR, 'documents');
 const STORE_FILE = path.join(STORE_DIR, 'documents.json');
 const TEXT_PREVIEW_LIMIT = 4000;

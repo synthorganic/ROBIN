@@ -39,15 +39,15 @@ describe('gateway detection and repair', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
-    tempHome = mkdtempSync(path.join(os.tmpdir(), 'nerve-gateway-detect-'));
+    tempHome = mkdtempSync(path.join(os.tmpdir(), 'robin-gateway-detect-'));
     process.env.HOME = tempHome;
-    process.env.NERVE_DATA_DIR = path.join(tempHome, '.nerve');
+    process.env.ROBIN_DATA_DIR = path.join(tempHome, '.robin');
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
 
     mkdirSync(path.join(tempHome, '.openclaw', 'devices'), { recursive: true });
     mkdirSync(path.join(tempHome, '.openclaw', 'identity'), { recursive: true });
     mkdirSync(path.join(tempHome, '.openclaw'), { recursive: true });
-    mkdirSync(path.join(tempHome, '.nerve'), { recursive: true });
+    mkdirSync(path.join(tempHome, '.robin'), { recursive: true });
 
     writeFileSync(path.join(tempHome, '.openclaw', 'openclaw.json'), JSON.stringify({
       gateway: {
@@ -60,9 +60,9 @@ describe('gateway detection and repair', () => {
       },
     }, null, 2));
 
-    writeFileSync(path.join(tempHome, '.nerve', 'device-identity.json'), JSON.stringify({
-      deviceId: 'nerve-device',
-      publicKeyB64url: 'nerve-public-key',
+    writeFileSync(path.join(tempHome, '.robin', 'device-identity.json'), JSON.stringify({
+      deviceId: 'robin-device',
+      publicKeyB64url: 'robin-public-key',
     }, null, 2));
 
     writeFileSync(path.join(tempHome, '.openclaw', 'devices', 'paired.json'), JSON.stringify({
@@ -76,10 +76,10 @@ describe('gateway detection and repair', () => {
           },
         },
       },
-      'nerve-device': {
-        deviceId: 'nerve-device',
+      'robin-device': {
+        deviceId: 'robin-device',
         scopes: FULL_OPERATOR_SCOPES,
-        displayName: 'Nerve UI',
+        displayName: 'ROBIN UI',
         platform: 'web',
         clientId: 'webchat-ui',
         clientMode: 'webchat',
@@ -224,16 +224,16 @@ describe('gateway detection and repair', () => {
     });
   });
 
-  it('approves only the pending request that matches Nerve and leaves unrelated requests untouched', async () => {
+  it('approves only the pending request that matches ROBIN and leaves unrelated requests untouched', async () => {
     const execSyncMock = vi.fn((command: string) => {
       if (command.includes('devices list --json')) {
         return Buffer.from(JSON.stringify({
           pending: [
             {
-              requestId: 'req-nerve',
-              deviceId: 'nerve-device',
-              publicKey: 'nerve-public-key',
-              displayName: 'Nerve UI',
+              requestId: 'req-robin',
+              deviceId: 'robin-device',
+              publicKey: 'robin-public-key',
+              displayName: 'ROBIN UI',
             },
             {
               requestId: 'req-other',
@@ -245,7 +245,7 @@ describe('gateway detection and repair', () => {
         }));
       }
 
-      if (command === 'openclaw devices approve req-nerve') {
+      if (command === 'openclaw devices approve req-robin') {
         return Buffer.from('approved');
       }
 
@@ -253,7 +253,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -262,7 +262,7 @@ describe('gateway detection and repair', () => {
       approved: 1,
     });
     expect(execSyncMock).toHaveBeenCalledWith(
-      'openclaw devices approve req-nerve',
+      'openclaw devices approve req-robin',
       expect.objectContaining({ timeout: 10000, stdio: 'pipe' }),
     );
     expect(execSyncMock).not.toHaveBeenCalledWith(
@@ -277,10 +277,10 @@ describe('gateway detection and repair', () => {
         return Buffer.from(JSON.stringify({
           pending: [
             {
-              requestId: 'req-nerve; rm -rf /',
-              deviceId: 'nerve-device',
-              publicKey: 'nerve-public-key',
-              displayName: 'Nerve UI',
+              requestId: 'req-robin; rm -rf /',
+              deviceId: 'robin-device',
+              publicKey: 'robin-public-key',
+              displayName: 'ROBIN UI',
             },
           ],
         }));
@@ -290,7 +290,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -303,18 +303,18 @@ describe('gateway detection and repair', () => {
     );
   });
 
-  it('does not approve any pending request when Nerve cannot be identified safely', async () => {
+  it('does not approve any pending request when ROBIN cannot be identified safely', async () => {
     const execSyncMock = vi.fn((command: string) => {
       if (command.includes('devices list --json')) {
         return Buffer.from(JSON.stringify({
           pending: [
             {
               requestId: 'req-a',
-              displayName: 'Nerve UI',
+              displayName: 'ROBIN UI',
             },
             {
               requestId: 'req-b',
-              displayName: 'Nerve UI',
+              displayName: 'ROBIN UI',
             },
           ],
         }));
@@ -324,7 +324,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -342,9 +342,9 @@ describe('gateway detection and repair', () => {
       if (command.includes('devices list --json')) {
         return Buffer.from(JSON.stringify({
           pending: {
-            requestId: 'req-nerve',
-            deviceId: 'nerve-device',
-            publicKey: 'nerve-public-key',
+            requestId: 'req-robin',
+            deviceId: 'robin-device',
+            publicKey: 'robin-public-key',
           },
         }));
       }
@@ -353,7 +353,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -366,16 +366,16 @@ describe('gateway detection and repair', () => {
     );
   });
 
-  it('fails closed when a pending request matches only one of Nerve\'s known identifiers', async () => {
+  it('fails closed when a pending request matches only one of ROBIN\'s known identifiers', async () => {
     const execSyncMock = vi.fn((command: string) => {
       if (command.includes('devices list --json')) {
         return Buffer.from(JSON.stringify({
           pending: [
             {
               requestId: 'req-partial',
-              deviceId: 'nerve-device',
+              deviceId: 'robin-device',
               publicKey: 'wrong-public-key',
-              displayName: 'Nerve UI',
+              displayName: 'ROBIN UI',
             },
             {
               requestId: 'req-other',
@@ -391,7 +391,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -414,7 +414,7 @@ describe('gateway detection and repair', () => {
     });
 
     const { mod } = await importGatewayDetect();
-    const result = mod.approvePendingNerveDevice({
+    const result = mod.approvePendingROBINDevice({
       exec: execSyncMock,
     });
 
@@ -427,17 +427,17 @@ describe('gateway detection and repair', () => {
     );
   });
 
-  it('repairs only the Nerve paired device record and preserves unrelated devices', async () => {
+  it('repairs only the ROBIN paired device record and preserves unrelated devices', async () => {
     writeFileSync(path.join(tempHome, '.openclaw', 'devices', 'paired.json'), JSON.stringify({
       'gateway-device': {
         deviceId: 'gateway-device',
         scopes: FULL_OPERATOR_SCOPES,
         tokens: { operator: { token: 'gateway-token', scopes: FULL_OPERATOR_SCOPES } },
       },
-      'nerve-device': {
-        deviceId: 'nerve-device',
+      'robin-device': {
+        deviceId: 'robin-device',
         scopes: ['operator.read'],
-        displayName: 'Nerve UI',
+        displayName: 'ROBIN UI',
         platform: 'web',
         clientId: 'webchat-ui',
         clientMode: 'webchat',
@@ -455,13 +455,13 @@ describe('gateway detection and repair', () => {
     }, null, 2));
 
     const { mod } = await importGatewayDetect();
-    const result = mod.prePairNerveDevice('test-token');
+    const result = mod.prePairROBINDevice('test-token');
     const paired = JSON.parse(readFileSync(path.join(tempHome, '.openclaw', 'devices', 'paired.json'), 'utf8'));
 
     expect(result.ok).toBe(true);
-    expect(paired['nerve-device'].scopes).toEqual(FULL_OPERATOR_SCOPES);
-    expect(paired['nerve-device'].tokens.operator.scopes).toEqual(FULL_OPERATOR_SCOPES);
-    expect(paired['nerve-device'].tokens.operator.token).toBe('test-token');
+    expect(paired['robin-device'].scopes).toEqual(FULL_OPERATOR_SCOPES);
+    expect(paired['robin-device'].tokens.operator.scopes).toEqual(FULL_OPERATOR_SCOPES);
+    expect(paired['robin-device'].tokens.operator.token).toBe('test-token');
     expect(paired['other-device'].scopes).toEqual(['operator.read']);
     expect(paired['other-device'].tokens.operator.scopes).toEqual(['operator.read']);
   });
@@ -500,10 +500,10 @@ describe('gateway detection and repair', () => {
         scopes: FULL_OPERATOR_SCOPES,
         tokens: { operator: { token: 'gateway-token', scopes: ['operator.read'] } },
       },
-      'nerve-device': {
-        deviceId: 'nerve-device',
+      'robin-device': {
+        deviceId: 'robin-device',
         scopes: FULL_OPERATOR_SCOPES,
-        displayName: 'Nerve UI',
+        displayName: 'ROBIN UI',
         platform: 'web',
         clientId: 'webchat-ui',
         clientMode: 'webchat',
@@ -536,10 +536,10 @@ describe('gateway detection and repair', () => {
         scopes: FULL_OPERATOR_SCOPES,
         tokens: { operator: { token: 'gateway-token', scopes: FULL_OPERATOR_SCOPES } },
       },
-      'nerve-device': {
-        deviceId: 'nerve-device',
+      'robin-device': {
+        deviceId: 'robin-device',
         scopes: FULL_OPERATOR_SCOPES,
-        displayName: 'Nerve UI',
+        displayName: 'ROBIN UI',
         platform: 'web',
         clientId: 'webchat-ui',
         clientMode: 'webchat',
@@ -577,10 +577,10 @@ describe('gateway detection and repair', () => {
         scopes: FULL_OPERATOR_SCOPES,
         tokens: { operator: { token: 'gateway-token', scopes: FULL_OPERATOR_SCOPES } },
       },
-      'nerve-device': {
-        deviceId: 'nerve-device',
+      'robin-device': {
+        deviceId: 'robin-device',
         scopes: FULL_OPERATOR_SCOPES,
-        displayName: 'Nerve UI',
+        displayName: 'ROBIN UI',
         platform: 'web',
         clientId: 'webchat-ui',
         clientMode: 'webchat',

@@ -95,11 +95,11 @@ export const InputBar = forwardRef<InputBarHandle, InputBarProps>(function Input
 
     fetchLang();
     // Listen for language changes from settings
-    window.addEventListener('nerve:language-changed', fetchLang);
-    window.addEventListener('nerve:voice-phrases-changed', handlePhrasesChanged);
+    window.addEventListener('robin:language-changed', fetchLang);
+    window.addEventListener('robin:voice-phrases-changed', handlePhrasesChanged);
     return () => {
-      window.removeEventListener('nerve:language-changed', fetchLang);
-      window.removeEventListener('nerve:voice-phrases-changed', handlePhrasesChanged);
+      window.removeEventListener('robin:language-changed', fetchLang);
+      window.removeEventListener('robin:voice-phrases-changed', handlePhrasesChanged);
       currentController?.abort();
     };
   }, []);

@@ -15,7 +15,7 @@ import type { Memory } from '@/types';
 
 const MemoryList = lazy(() => import('@/features/dashboard/MemoryList').then(m => ({ default: m.MemoryList })));
 
-const CONFIG_VIEW_KEY = 'nerve-config-view';
+const CONFIG_VIEW_KEY = 'robin-config-view';
 
 type ConfigView = 'files' | 'skills';
 
@@ -88,7 +88,7 @@ function ConfigWithSkills({ agentId, cronWarning = null }: ConfigWithSkillsProps
   );
 }
 
-const STORAGE_KEY = 'nerve-workspace-tab';
+const STORAGE_KEY = 'robin-workspace-tab';
 
 function getInitialTab(): TabId {
   try {

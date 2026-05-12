@@ -1,6 +1,6 @@
 # Architecture
 
-> **ROBIN** is a web interface for OpenClaw — chat, voice input, TTS, and agent monitoring in the browser. It connects to the OpenClaw gateway over WebSocket and provides a rich UI for interacting with AI agents.
+> **ROBIN** is a web interface for OpenClaw — chat, voice input, TTS, and agent monitoring in the browser. It connects to the compatible agent gateway over WebSocket and provides a rich UI for interacting with AI agents.
 
 ## System Diagram
 
@@ -39,7 +39,7 @@
 └──────────────────────────────┬───────────────────────────────────┘
                                │ HTTP / WS
                     ┌──────────┴──────────┐
-                    │  OpenClaw Gateway    │
+                    │  Compatible Agent Gateway    │
                     │  (ws://127.0.0.1:    │
                     │       18789)         │
                     └─────────────────────┘
@@ -263,7 +263,7 @@ Cmd+K command palette.
 | `components/ConfirmDialog.tsx` | Reusable confirmation modal |
 | `components/ErrorBoundary.tsx` | Top-level error boundary |
 | `components/PanelErrorBoundary.tsx` | Per-panel error boundary (isolates failures) |
-| `components/ROBINLogo.tsx` | SVG logo component |
+| `components/RobinLogo.tsx` | SVG logo component |
 | `components/skeletons/` | Loading skeleton components (Message, Session, Memory) |
 | `components/ui/` | Primitives: `button`, `card`, `dialog`, `input`, `switch`, `scroll-area`, `collapsible`, `AnimatedNumber`, `InlineSelect` |
 
@@ -318,7 +318,7 @@ Applied in order in `app.ts`:
 | CORS | Hono built-in + custom | Whitelist of localhost origins + `ALLOWED_ORIGINS` env var. Validates via `URL` constructor. Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS |
 | Security headers | `middleware/security-headers.ts` | Standard security headers (CSP, X-Frame-Options, etc.) |
 | Body limit | Hono built-in | Configurable max body size (from `config.limits.maxBodyBytes`) |
-| Auth | `middleware/auth.ts` | When `NERVE_AUTH=true`, requires a valid signed session cookie on `/api/*` routes (except auth endpoints and health). WebSocket upgrades checked separately in `ws-proxy.ts` |
+| Auth | `middleware/auth.ts` | When `ROBIN_AUTH=true`, requires a valid signed session cookie on `/api/*` routes (except auth endpoints and health). WebSocket upgrades checked separately in `ws-proxy.ts` |
 | Compression | Hono built-in | gzip/brotli on all routes **except** SSE (`/api/events`) |
 | Cache headers | `middleware/cache-headers.ts` | Hashed assets → immutable, API → no-cache, non-hashed static → must-revalidate |
 | Rate limiting | `middleware/rate-limit.ts` | Per-IP sliding window. Separate limits for general API vs TTS/transcribe. Client ID from socket or custom header |
@@ -337,7 +337,7 @@ Applied in order in `app.ts`:
 | `/api/tts/config` | `routes/tts.ts` | GET, PUT | TTS voice configuration per provider (read / partial update) |
 | `/api/transcribe` | `routes/transcribe.ts` | POST | Audio transcription via OpenAI Whisper or local whisper.cpp (`STT_PROVIDER`). Multipart file upload, MIME validation |
 | `/api/transcribe/config` | `routes/transcribe.ts` | GET, PUT | STT runtime config (provider/model/language), model readiness/download status, hot-reload updates |
-| `/api/language` | `routes/transcribe.ts` | GET, PUT | Language preference + Edge voice gender management (`NERVE_LANGUAGE`, `EDGE_VOICE_GENDER`) |
+| `/api/language` | `routes/transcribe.ts` | GET, PUT | Language preference + Edge voice gender management (`ROBIN_LANGUAGE`, `EDGE_VOICE_GENDER`) |
 | `/api/language/support` | `routes/transcribe.ts` | GET | Full provider × language compatibility matrix + current local model multilingual state |
 | `/api/voice-phrases` | `routes/voice-phrases.ts` | GET | Merged recognition phrase set (selected language + English fallback) |
 | `/api/voice-phrases/status` | `routes/voice-phrases.ts` | GET | Per-language custom phrase configuration status |
@@ -346,14 +346,14 @@ Applied in order in `app.ts`:
 | `/api/tokens` | `routes/tokens.ts` | GET | Token usage statistics — scans session transcripts, persists high water mark |
 | `/api/memories` | `routes/memories.ts` | GET, POST, DELETE | Agent-scoped memory management — reads `MEMORY.md` + daily files, stores/deletes via gateway tool invocation |
 | `/api/memories/section` | `routes/memories.ts` | GET, PUT | Read/replace a specific memory section by title, scoped via `agentId` |
-| `/api/gateway/models` | `routes/gateway.ts` | GET | Config-backed model catalog from the active OpenClaw config. Returns `{ models, error, source: "config" }` |
+| `/api/gateway/models` | `routes/gateway.ts` | GET | Config-backed model catalog from the active gateway config. Returns `{ models, error, source: "config" }` |
 | `/api/gateway/session-info` | `routes/gateway.ts` | GET | Current session model/thinking level |
 | `/api/gateway/session-patch` | `routes/gateway.ts` | POST | HTTP fallback for model changes. Thinking changes belong on WS `sessions.patch` |
 | `/api/server-info` | `routes/server-info.ts` | GET | Server time, gateway uptime, agent name |
 | `/api/version` | `routes/version.ts` | GET | Package version from `package.json` |
 | `/api/version/check` | `routes/version-check.ts` | GET | Check whether a newer published version is available |
-| `/api/channels` | `routes/channels.ts` | GET | List configured messaging channels from OpenClaw config |
-| `/api/gateway/restart` | `routes/gateway.ts` | POST | Restart the OpenClaw gateway service and verify readiness |
+| `/api/channels` | `routes/channels.ts` | GET | List configured messaging channels from gateway config |
+| `/api/gateway/restart` | `routes/gateway.ts` | POST | Restart the gateway service and verify readiness |
 | `/api/sessions/hidden` | `routes/sessions.ts` | GET | List hidden cron-like sessions from stored session metadata |
 | `/api/sessions/:id/model` | `routes/sessions.ts` | GET | Read the actual model used by a session from its transcript |
 | `/api/workspace` | `routes/workspace.ts` | GET | List allowlisted workspace files for the selected agent workspace |
@@ -362,7 +362,7 @@ Applied in order in `app.ts`:
 | `/api/crons/:id/toggle` | `routes/crons.ts` | POST | Toggle cron enabled/disabled |
 | `/api/crons/:id/run` | `routes/crons.ts` | POST | Run cron job immediately |
 | `/api/crons/:id/runs` | `routes/crons.ts` | GET | Cron run history |
-| `/api/skills` | `routes/skills.ts` | GET | List skills for the selected agent workspace via a scoped OpenClaw config |
+| `/api/skills` | `routes/skills.ts` | GET | List skills for the selected agent workspace via a scoped gateway config |
 | `/api/keys` | `routes/api-keys.ts` | GET, PUT | Read API-key presence and persist updated key values to `.env` |
 | `/api/files` | `routes/files.ts` | GET | Serve local image files (MIME-type restricted, directory traversal blocked) |
 | `/api/files/tree` | `routes/file-browser.ts` | GET | Agent-scoped workspace directory tree (excludes node_modules, .git, etc.) |
@@ -395,7 +395,7 @@ Applied in order in `app.ts`:
 | `lib/config.ts` | Centralized configuration from env vars — ports, keys, paths, limits, auth settings. Validated at startup |
 | `lib/session.ts` | Session token creation/verification (HMAC-SHA256), password hashing (scrypt), cookie parsing for WS upgrade requests |
 | `lib/ws-proxy.ts` | WebSocket proxy — client→gateway with session cookie auth on upgrade and Ed25519 device identity injection |
-| `lib/device-identity.ts` | Ed25519 keypair generation/persistence (`~/.ROBIN/device-identity.json`). Builds signed connect blocks for gateway auth |
+| `lib/device-identity.ts` | Ed25519 keypair generation/persistence (`~/.robin/device-identity.json`). Builds signed connect blocks for gateway auth |
 | `lib/gateway-client.ts` | HTTP client for gateway tool invocation API (`/tools/invoke`) |
 | `lib/file-watcher.ts` | Discovers agent workspaces, watches each `MEMORY.md` and `memory/` directory, and optionally watches full workspaces recursively. Broadcasts agent-tagged `memory.changed` / `file.changed` SSE events |
 | `lib/file-utils.ts` | File browser utilities — path validation, directory exclusions, binary file detection |
@@ -423,14 +423,14 @@ Applied in order in `app.ts`:
 
 ### Updater (`server/lib/updater/`)
 
-Self-update system invoked via `npm run update` (entrypoint: `bin/ROBIN-update.ts` → `bin-dist/bin/ROBIN-update.js`).
+Self-update system invoked via `npm run update` (entrypoint: `bin/robin-update.ts` → `bin-dist/bin/robin-update.js`).
 
 | File | Purpose |
 |------|---------|
 | `orchestrator.ts` | State machine: lock → preflight → resolve → snapshot → update → build → restart → health → rollback |
 | `preflight.ts` | Validates git, Node.js, npm versions and git repo state |
 | `release-resolver.ts` | Finds latest semver tag via `git ls-remote --tags`, falls back to local tags |
-| `snapshot.ts` | Saves current git ref, version, and `.env` backup to `~/.ROBIN/updater/` |
+| `snapshot.ts` | Saves current git ref, version, and `.env` backup to `~/.robin/updater/` |
 | `installer.ts` | `git fetch + checkout --force`, `npm install`, `npm run build + build:server` |
 | `service-manager.ts` | Auto-detects systemd or launchd, provides restart/status/logs |
 | `health.ts` | Polls `/health` and `/api/version` with exponential backoff (60s deadline) |
@@ -448,7 +448,7 @@ Compiled separately via `config/tsconfig.bin.json` to avoid changing the server'
 ### WebSocket Proxy
 
 ```
-Browser WS → /ws?target=ws://gateway:18789/ws → ws-proxy.ts → OpenClaw Gateway
+Browser WS → /ws?target=ws://gateway:18789/ws → ws-proxy.ts → Compatible Agent Gateway
 ```
 
 1. Client connects to `/ws` endpoint on ROBIN server
@@ -518,8 +518,8 @@ The kanban board provides task management with agent execution, drag-and-drop re
 ### Store Design
 
 ```
-${NERVE_DATA_DIR:-~/.ROBIN}/kanban/tasks.json   -- single JSON file (tasks + proposals + config)
-${NERVE_DATA_DIR:-~/.ROBIN}/kanban/audit.log    -- append-only audit log (JSONL)
+${ROBIN_DATA_DIR:-~/.robin}/kanban/tasks.json   -- single JSON file (tasks + proposals + config)
+${ROBIN_DATA_DIR:-~/.robin}/kanban/audit.log    -- append-only audit log (JSONL)
 ```
 
 All data lives in one JSON file (`StoreData`). Every mutation acquires an async mutex, reads the file, applies the change, and writes back atomically via temp-file rename. This guarantees consistency under concurrent requests without a database. On first startup, the store migrates legacy data from `server-dist/data/kanban/` or `server/data/kanban/` into the canonical runtime directory if needed.
@@ -615,7 +615,7 @@ This prevents stale overwrites from concurrent editors (drag-and-drop, API clien
    +-- error   -> run.status = error, task.status = todo
 ```
 
-Assigned-root execution now uses real session primitives instead of synthetic marker-message spawn conventions. The model cascade is: execute request `model` -> task `model` -> board config `defaultModel` -> OpenClaw's configured default model. Thinking follows the same pattern with `defaultThinking`.
+Assigned-root execution now uses real session primitives instead of synthetic marker-message spawn conventions. The model cascade is: execute request `model` -> task `model` -> board config `defaultModel` -> the gateway's configured default model. Thinking follows the same pattern with `defaultThinking`.
 
 ### Marker Parsing
 

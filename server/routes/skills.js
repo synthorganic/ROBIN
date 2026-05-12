@@ -104,7 +104,7 @@ function getActiveOpenclawConfigPath() {
     return join(config.home, '.openclaw', OPENCLAW_CONFIG_FILENAME);
 }
 async function createScopedOpenclawEnv(workspaceRoot) {
-    const tempDir = await fs.mkdtemp(join(os.tmpdir(), 'nerve-skills-'));
+    const tempDir = await fs.mkdtemp(join(os.tmpdir(), 'robin-skills-'));
     const tempConfigPath = join(tempDir, OPENCLAW_CONFIG_FILENAME);
     try {
         await fs.copyFile(getActiveOpenclawConfigPath(), tempConfigPath);

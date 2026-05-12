@@ -87,7 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Tailscale origin handling is more robust during setup and follow-up gateway patching (PR #116)
 - Small-screen text inputs now stay at 16px so mobile browsers do not auto-zoom the composer and settings controls after font size changes (PR #130)
 - Older top-level agent chats stay visible in the sidebar instead of disappearing once they fall outside the recent-activity query window (PR #134)
-- Kanban runtime data now lives under `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`, and legacy installs automatically migrate data from old `server-dist/data/kanban` or `server/data/kanban` locations on first run (PR #135)
+- Kanban runtime data now lives under `${ROBIN_DATA_DIR:-~/.ROBIN}/kanban`, and legacy installs automatically migrate data from old `server-dist/data/kanban` or `server/data/kanban` locations on first run (PR #135)
 - Setup no longer attempts to approve malformed pending device request IDs, and gateway auth validation now uses a working token probe during defaults and check flows (PR #141)
 - Kanban run completion now accepts stable child identifiers, ignores stale client `run` patches, stops stale pollers after reruns, and normalizes spawn session aliases consistently (PR #143)
 - Remote and sandboxed workspace gateway fallback now authenticates correctly with device identity in real OpenShell-style deployments (PR #145)
@@ -288,10 +288,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Voice language is now explicit (auto-detect removed from UI flow).
 - Default/fallback language behavior is English (`en`) for missing/invalid values.
-- Primary env key is now `NERVE_LANGUAGE` (legacy `LANGUAGE` remains a read fallback).
+- Primary env key is now `ROBIN_LANGUAGE` (legacy `LANGUAGE` remains a read fallback).
 - Wake phrase behavior is single-primary-phrase per language (custom phrase takes precedence).
 - Settings categories are now `Connection`, `Audio`, and `Appearance`.
-- Voice phrase overrides now persist as runtime state at `~/.ROBIN/voice-phrases.json` (configurable via `NERVE_VOICE_PHRASES_PATH`).
+- Voice phrase overrides now persist as runtime state at `~/.ROBIN/voice-phrases.json` (configurable via `ROBIN_VOICE_PHRASES_PATH`).
 - Local STT default model is now multilingual `tiny`.
 - Chat rendering now prefers event-first WebSocket updates instead of periodic full-history polling (PR #16).
 - Setup/config flow now uses one bundled consent prompt for OpenClaw gateway config patches, including `gateway.tools.allow` updates for cron management (PR #15).

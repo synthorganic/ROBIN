@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { OPS_MAP_ASSET_TYPES, buildOpsMapLayers, opsMapStore } from '../lib/ops-map-store.js';
+import { OPS_MAP_ASSET_TYPES, buildOpsMapLayers, opsMapStore, type OpsMapAsset } from '../lib/ops-map-store.js';
 import { opsGeoSourceService } from '../lib/ops-geo-sources.js';
 import { broadcast } from './events.js';
 
@@ -7,6 +7,14 @@ const app = new Hono();
 
 function isAssetType(value: unknown): value is typeof OPS_MAP_ASSET_TYPES[number] {
   return typeof value === 'string' && OPS_MAP_ASSET_TYPES.includes(value as typeof OPS_MAP_ASSET_TYPES[number]);
+}
+
+function isSeverity(value: unknown): value is NonNullable<OpsMapAsset['severity']> {
+  return value === 'info' || value === 'watch' || value === 'warning' || value === 'critical';
+}
+
+function isConfidence(value: unknown): value is NonNullable<OpsMapAsset['confidence']> {
+  return value === 'low' || value === 'medium' || value === 'high';
 }
 
 async function getMapSnapshot(forceSources = false, includeLive = true) {
@@ -72,11 +80,18 @@ app.post('/api/map/assets', async (c) => {
     lat: Number(body.lat) || 0,
     lng: Number(body.lng) || 0,
     sourceUrl: String(body.sourceUrl ?? ''),
+    streamUrl: typeof body.streamUrl === 'string' ? body.streamUrl : undefined,
     thumbnailUrl: typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl : undefined,
     notes: typeof body.notes === 'string' ? body.notes : undefined,
     tags: Array.isArray(body.tags) ? body.tags.map((tag) => String(tag)) : [],
     status: typeof body.status === 'string' ? body.status : undefined,
     linkedSessionId: typeof body.linkedSessionId === 'string' ? body.linkedSessionId : undefined,
+    sourceId: typeof body.sourceId === 'string' ? body.sourceId : undefined,
+    sourceName: typeof body.sourceName === 'string' ? body.sourceName : undefined,
+    severity: isSeverity(body.severity) ? body.severity : undefined,
+    confidence: isConfidence(body.confidence) ? body.confidence : undefined,
+    observedAt: typeof body.observedAt === 'string' ? body.observedAt : undefined,
+    live: body.live === true,
   });
 
   void emitMapSnapshot();
@@ -96,11 +111,18 @@ app.put('/api/map/assets/:id', async (c) => {
       ...(body.lat != null ? { lat: Number(body.lat) || 0 } : {}),
       ...(body.lng != null ? { lng: Number(body.lng) || 0 } : {}),
       ...(typeof body.sourceUrl === 'string' ? { sourceUrl: body.sourceUrl } : {}),
+      ...(typeof body.streamUrl === 'string' ? { streamUrl: body.streamUrl } : {}),
       ...(typeof body.thumbnailUrl === 'string' ? { thumbnailUrl: body.thumbnailUrl } : {}),
       ...(typeof body.notes === 'string' ? { notes: body.notes } : {}),
       ...(Array.isArray(body.tags) ? { tags: body.tags.map((tag) => String(tag)) } : {}),
       ...(typeof body.status === 'string' ? { status: body.status } : {}),
       ...(typeof body.linkedSessionId === 'string' ? { linkedSessionId: body.linkedSessionId } : {}),
+      ...(typeof body.sourceId === 'string' ? { sourceId: body.sourceId } : {}),
+      ...(typeof body.sourceName === 'string' ? { sourceName: body.sourceName } : {}),
+      ...(isSeverity(body.severity) ? { severity: body.severity } : {}),
+      ...(isConfidence(body.confidence) ? { confidence: body.confidence } : {}),
+      ...(typeof body.observedAt === 'string' ? { observedAt: body.observedAt } : {}),
+      ...(typeof body.live === 'boolean' ? { live: body.live } : {}),
     });
     void emitMapSnapshot();
     return c.json({ ok: true, asset });

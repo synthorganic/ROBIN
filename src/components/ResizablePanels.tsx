@@ -29,7 +29,7 @@ interface ResizablePanelsProps {
  *
  * Supports drag resizing, clamped min/max constraints, and double-click
  * to reset to the 55 % default split. Used as the main layout container
- * in the Nerve cockpit (sessions list + chat area).
+ * in the ROBIN cockpit (sessions list + chat area).
  */
 export function ResizablePanels({
   left,

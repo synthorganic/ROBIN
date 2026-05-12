@@ -162,10 +162,10 @@ class KanbanExecutionPreflightError extends Error {
  * Intentional platform compromise:
  * - Linux keeps the original master/session-spawn path as primary because it already works there.
  * - macOS defaults to the assignee-root fallback path because the primary subagent spawn flow is known to fail there.
- * Tests can override this with NERVE_KANBAN_EXECUTION_MODE.
+ * Tests can override this with ROBIN_KANBAN_EXECUTION_MODE.
  */
 function shouldUseKanbanFallback(): boolean {
-  const mode = process.env.NERVE_KANBAN_EXECUTION_MODE;
+  const mode = process.env.ROBIN_KANBAN_EXECUTION_MODE;
   if (mode === 'primary') return false;
   if (mode === 'fallback') return true;
   return process.platform === 'darwin';

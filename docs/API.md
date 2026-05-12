@@ -2,7 +2,7 @@
 
 ROBIN exposes a REST + SSE API served by [Hono](https://hono.dev/) on the configured `PORT` (default **3080**). All API routes are prefixed with `/api/` except the health endpoint. Responses are JSON unless otherwise noted.
 
-> **Authentication:** When `NERVE_AUTH=true`, all API endpoints (except `/api/auth/*` and `/health`) require a valid session cookie. Obtain one via `POST /api/auth/login`. When `NERVE_AUTH=false` (default for localhost), no authentication is required. See [SECURITY.md](./SECURITY.md) for details.
+> **Authentication:** When `ROBIN_AUTH=true`, all API endpoints (except `/api/auth/*` and `/health`) require a valid session cookie. Obtain one via `POST /api/auth/login`. When `ROBIN_AUTH=false` (default for localhost), no authentication is required. See [SECURITY.md](./SECURITY.md) for details.
 
 ---
 
@@ -53,7 +53,7 @@ Check whether authentication is enabled and whether the current request is authe
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `authEnabled` | `boolean` | Whether `NERVE_AUTH` is enabled on the server |
+| `authEnabled` | `boolean` | Whether `ROBIN_AUTH` is enabled on the server |
 | `authenticated` | `boolean` | Whether the current request has a valid session cookie. Always `true` when auth is disabled. |
 
 ### `POST /api/auth/login`
@@ -170,7 +170,7 @@ Returns the application name and version from `package.json`.
 ```json
 {
   "version": "1.3.0",
-  "name": "openclaw-ROBIN"
+  "name": "ROBIN"
 }
 ```
 
@@ -434,7 +434,7 @@ Transcribes audio using the configured STT provider.
 | `base.en` | 142 MB | Fast | English-only variant |
 | `small.en` | 466 MB | Moderate | English-only variant |
 
-Configure model via `WHISPER_MODEL`. Language hints come from `NERVE_LANGUAGE` (or `PUT /api/language` / `PUT /api/transcribe/config`). Models auto-download from HuggingFace on first use and are stored in `WHISPER_MODEL_DIR` (default `~/.ROBIN/models/`).
+Configure model via `WHISPER_MODEL`. Language hints come from `ROBIN_LANGUAGE` (or `PUT /api/language` / `PUT /api/transcribe/config`). Models auto-download from HuggingFace on first use and are stored in `WHISPER_MODEL_DIR` (default `~/.robin/models/`).
 
 **Request:** `multipart/form-data` with a `file` field containing audio data.
 
@@ -506,7 +506,7 @@ Hot-reloads STT config at runtime.
 | `model` | `string` | Whisper model id (`tiny`, `base`, `small`, plus `.en` variants) |
 | `language` | `string` | ISO 639-1 language code (`en`, `tr`, `de`, etc.) |
 
-Language changes persist to `.env` as `NERVE_LANGUAGE`.
+Language changes persist to `.env` as `ROBIN_LANGUAGE`.
 
 ---
 
@@ -557,7 +557,7 @@ Hot-reloads language settings at runtime.
 | `edgeVoiceGender` | `"female" \| "male"` | Preferred Edge TTS voice gender |
 
 Persists to `.env` keys:
-- `NERVE_LANGUAGE`
+- `ROBIN_LANGUAGE`
 - `EDGE_VOICE_GENDER`
 
 ### `GET /api/language/support`
@@ -651,7 +651,7 @@ Saves per-language custom phrase overrides.
 
 At least one of `stopPhrases`, `cancelPhrases`, or `wakePhrases` is required.
 
-Custom phrase overrides are stored in `~/.ROBIN/voice-phrases.json` (created on first save).
+Custom phrase overrides are stored in `~/.robin/voice-phrases.json` (created on first save).
 
 ---
 
@@ -867,7 +867,7 @@ All fields are optional. A `ts` (epoch ms) is automatically set on write. The lo
 
 ### `GET /api/gateway/models`
 
-Returns the models defined in the active OpenClaw config. This endpoint is config-backed now, not CLI-discovered or cache-backed.
+Returns the models defined in the active gateway config. This endpoint is config-backed now, not CLI-discovered or cache-backed.
 
 **Rate Limit:** General (60/min)
 
@@ -891,7 +891,7 @@ Returns the models defined in the active OpenClaw config. This endpoint is confi
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `models` | `array` | Configured models from `agents.defaults.model` and `agents.defaults.models` in the active OpenClaw config |
+| `models` | `array` | Configured models from `agents.defaults.model` and `agents.defaults.models` in the active gateway config |
 | `error` | `string \| null` | Read error or configuration problem, for example config unreadable or no configured models |
 | `source` | `"config"` | Identifies the backing source |
 
@@ -963,7 +963,7 @@ HTTP fallback for **model changes** when the frontend cannot apply `sessions.pat
 
 ### `POST /api/gateway/restart`
 
-Restarts the OpenClaw gateway service, then waits for the service to report healthy status and for the gateway port to become reachable.
+Restarts the gateway service, then waits for the service to report healthy status and for the gateway port to become reachable.
 
 **Rate Limit:** Restart (3/min)
 
@@ -1113,7 +1113,7 @@ Content must be a string, max 100 KB.
 
 ## Cron Jobs
 
-All cron routes proxy to the OpenClaw gateway via `invokeGatewayTool('cron', ...)`.
+All cron routes proxy to the compatible agent gateway via `invokeGatewayTool('cron', ...)`.
 
 **Rate Limit:** General (60/min) on all endpoints.
 
@@ -1177,9 +1177,9 @@ Returns the last 10 run history entries for a cron job.
 
 ### `GET /api/skills`
 
-Lists all OpenClaw skills via `openclaw skills list --json` for the selected workspace agent.
+Lists all gateway skills via `openclaw skills list --json` for the selected workspace agent.
 
-ROBIN scopes this by creating a temporary OpenClaw config whose `agents.defaults.workspace` points at the selected agent workspace, then runs the CLI against that workspace.
+ROBIN scopes this by creating a temporary gateway config whose `agents.defaults.workspace` points at the selected agent workspace, then runs the CLI against that workspace.
 
 **Rate Limit:** General (60/min)
 
@@ -1731,7 +1731,7 @@ Execute a task and move it to `in-progress`. The launch path depends on the task
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `model` | `string` | No | Execution model override (max 200 chars). Cascade: execute request → task `model` → board `defaultModel` → OpenClaw configured default |
+| `model` | `string` | No | Execution model override (max 200 chars). Cascade: execute request → task `model` → board `defaultModel` → gateway configured default |
 | `thinking` | `string` | No | Thinking override: `off`, `low`, `medium`, `high` |
 
 **Response:** The updated `KanbanTask` object with `status: "in-progress"` and a `run` object.

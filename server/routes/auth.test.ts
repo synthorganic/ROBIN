@@ -26,7 +26,7 @@ describe('auth routes', () => {
 
     vi.doMock('../lib/config.js', () => ({
       config: baseConfig,
-      SESSION_COOKIE_NAME: 'nerve_session_3000',
+      SESSION_COOKIE_NAME: 'robin_session_3000',
     }));
     vi.doMock('../middleware/rate-limit.js', () => ({
       rateLimitAuth: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
@@ -81,7 +81,7 @@ describe('auth routes', () => {
       expect(res.status).toBe(200);
       const json = (await res.json()) as Record<string, unknown>;
       expect(json.ok).toBe(true);
-      expect(res.headers.get('set-cookie')).toContain('nerve_session');
+      expect(res.headers.get('set-cookie')).toContain('robin_session');
     });
 
     it('accepts valid password with scrypt hash', async () => {
@@ -96,7 +96,7 @@ describe('auth routes', () => {
       expect(res.status).toBe(200);
       const json = (await res.json()) as Record<string, unknown>;
       expect(json.ok).toBe(true);
-      expect(res.headers.get('set-cookie')).toContain('nerve_session');
+      expect(res.headers.get('set-cookie')).toContain('robin_session');
     });
 
     it('rejects gateway token when a password hash is configured', async () => {

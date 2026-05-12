@@ -114,7 +114,7 @@ async function listDirectory(
       // Internal metadata file for restore bookkeeping.
       if (item.name === '.index.json') continue;
     // FILE_BROWSER_ROOT: Show all files when custom root is set, but always hide .trash folder
-    } else if (!config.fileBrowserRoot && item.name.startsWith('.') && item.name !== '.nerveignore' && item.name !== '.trash') {
+    } else if (!config.fileBrowserRoot && item.name.startsWith('.') && item.name !== '.robinignore' && item.name !== '.trash') {
       continue;
     } else if (config.fileBrowserRoot && item.name === '.trash') {
       continue;

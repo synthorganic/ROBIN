@@ -136,7 +136,7 @@ export default function App({ onLogout }: AppProps) {
   const initialCompactLayout = typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches;
   const initialDesktopFileBrowserCollapsed = (() => {
     try {
-      const saved = localStorage.getItem('nerve-file-tree-collapsed');
+      const saved = localStorage.getItem('robin-file-tree-collapsed');
       if (saved !== null) return saved === 'true';
     } catch {
       // ignore storage errors and fall back to desktop default
@@ -158,7 +158,7 @@ export default function App({ onLogout }: AppProps) {
     setDesktopFileBrowserCollapsed(collapsed);
 
     try {
-      localStorage.setItem('nerve-file-tree-collapsed', String(collapsed));
+      localStorage.setItem('robin-file-tree-collapsed', String(collapsed));
     } catch {
       // ignore storage errors
     }
@@ -308,7 +308,7 @@ export default function App({ onLogout }: AppProps) {
   // View mode state (chat | kanban), persisted to localStorage
   const [viewMode, setViewModeRaw] = useState<ViewMode>(() => {
     try {
-      const saved = localStorage.getItem('nerve:viewMode');
+      const saved = localStorage.getItem('robin:viewMode');
       if (saved === 'kanban') return 'kanban';
     } catch { /* ignore */ }
     return 'chat';
@@ -321,7 +321,7 @@ export default function App({ onLogout }: AppProps) {
       setFileBrowserCollapsed(true);
     }
 
-    try { localStorage.setItem('nerve:viewMode', mode); } catch { /* ignore */ }
+    try { localStorage.setItem('robin:viewMode', mode); } catch { /* ignore */ }
   }, [isCompactLayout, setFileBrowserCollapsed]);
   const openTaskInBoard = useCallback((taskId: string) => {
     setPendingTaskId(taskId);
@@ -980,7 +980,7 @@ export default function App({ onLogout }: AppProps) {
       {/* Gateway Restart Confirmation */}
       <ConfirmDialog
         open={showGatewayRestartConfirm}
-        title="Restart OpenClaw Gateway"
+        title="Restart Gateway"
         message="This will briefly interrupt gateway connectivity. Continue?"
         confirmLabel="Restart"
         cancelLabel="Cancel"

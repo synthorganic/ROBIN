@@ -199,7 +199,7 @@ function startRootWorkspaceWatcher() {
  * Start watching workspace files for changes.
  * Call this during server startup.
  *
- * When the workspace is remote (NERVE_WORKSPACE_REMOTE=true or workspace
+ * When the workspace is remote (ROBIN_WORKSPACE_REMOTE=true or workspace
  * directory is not locally accessible), skips all file watchers since
  * there's nothing local to watch.
  */
@@ -215,7 +215,7 @@ export async function startFileWatcher() {
     refreshWorkspaceWatchers();
     startRootWorkspaceWatcher();
     if (!config.workspaceWatchRecursive) {
-        console.log('[file-watcher] Workspace recursive watch disabled (default). Set NERVE_WATCH_WORKSPACE_RECURSIVE=true to re-enable SSE file.changed events outside memory/.');
+        console.log('[file-watcher] Workspace recursive watch disabled (default). Set ROBIN_WATCH_WORKSPACE_RECURSIVE=true to re-enable SSE file.changed events outside memory/.');
     }
 }
 /**

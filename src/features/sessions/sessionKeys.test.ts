@@ -81,16 +81,16 @@ describe('sessionKeys', () => {
   });
 
   it('builds display labels from label, displayName, then root id', () => {
-    expect(getSessionDisplayLabel(session('agent:reviewer:main', { label: 'Reviewer', displayName: 'webchat:reviewer' }), 'Nerve')).toBe('Reviewer');
-    expect(getSessionDisplayLabel(session('agent:reviewer:main', { displayName: 'Reviewer Prime' }), 'Nerve')).toBe('Reviewer Prime');
-    expect(getSessionDisplayLabel(session('agent:reviewer:main', { label: 'Reviewer' }), 'Nerve')).toBe('Reviewer');
-    expect(getSessionDisplayLabel(session('agent:reviewer:main'), 'Nerve')).toBe('Agent reviewer');
-    expect(getSessionDisplayLabel(session('agent:main:main'), 'Nerve')).toBe('Nerve (main)');
+    expect(getSessionDisplayLabel(session('agent:reviewer:main', { label: 'Reviewer', displayName: 'webchat:reviewer' }), 'ROBIN')).toBe('Reviewer');
+    expect(getSessionDisplayLabel(session('agent:reviewer:main', { displayName: 'Reviewer Prime' }), 'ROBIN')).toBe('Reviewer Prime');
+    expect(getSessionDisplayLabel(session('agent:reviewer:main', { label: 'Reviewer' }), 'ROBIN')).toBe('Reviewer');
+    expect(getSessionDisplayLabel(session('agent:reviewer:main'), 'ROBIN')).toBe('Agent reviewer');
+    expect(getSessionDisplayLabel(session('agent:main:main'), 'ROBIN')).toBe('ROBIN (main)');
   });
 
   it('keeps the main root label canonical even if gateway metadata says heartbeat', () => {
-    expect(getSessionDisplayLabel(session('agent:main:main', { label: 'heartbeat' }), 'Nerve')).toBe('Nerve (main)');
-    expect(getSessionDisplayLabel(session('agent:main:main', { displayName: 'heartbeat' }), 'Nerve')).toBe('Nerve (main)');
+    expect(getSessionDisplayLabel(session('agent:main:main', { label: 'heartbeat' }), 'ROBIN')).toBe('ROBIN (main)');
+    expect(getSessionDisplayLabel(session('agent:main:main', { displayName: 'heartbeat' }), 'ROBIN')).toBe('ROBIN (main)');
   });
 
   it('falls back to inferred parent when explicit parentId is outside the current window', () => {
