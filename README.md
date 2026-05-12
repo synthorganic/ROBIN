@@ -1,7 +1,7 @@
 # ROBIN — OpenClaw Nerve Web Interface
 
 A local-first web interface for the [OpenClaw](https://github.com/openclaw/openclaw) agent framework. 
-Nerve provides a unified control surface with chat, task management (kanban), real-time voice interaction, 
+ROBIN provides a unified control surface with chat, task management (kanban), real-time voice interaction, 
 and AI agent orchestration capabilities.
 
 ## Features
@@ -46,11 +46,11 @@ npm run dev:server # Backend on :3081
 npm start         # Serves built assets from :3080
 ```
 
-Visit http://localhost:3080 (or the configured port) to access Nerve.
+Visit http://localhost:3080 (or the configured port) to access ROBIN.
 
 ## Configuration
 
-Nerve looks for settings in a `.env` file. Run `npm run setup` for an interactive 
+ROBIN looks for settings in a `.env` file. Run `npm run setup` for an interactive 
 configuration wizard, or manually edit `.env` with these key options:
 
 - `GATEWAY_TOKEN` — Authentication token for your OpenClaw gateway (required)

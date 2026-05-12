@@ -1,12 +1,12 @@
 # Configuration
 
-Nerve is configured via a `.env` file in the project root. All variables have sensible defaults — only `GATEWAY_TOKEN` is strictly required.
+ROBIN is configured via a `.env` file in the project root. All variables have sensible defaults — only `GATEWAY_TOKEN` is strictly required.
 
 ---
 
 ## Setup Wizard
 
-The interactive setup wizard is the recommended way to configure Nerve:
+The interactive setup wizard is the recommended way to configure ROBIN:
 
 ```bash
 npm run setup               # Interactive setup (6 steps)
@@ -21,7 +21,7 @@ The wizard walks through **6 sections**:
 
 #### 1. Gateway Connection
 
-Connects Nerve to your OpenClaw gateway. The wizard auto-detects the gateway token from:
+Connects ROBIN to your OpenClaw gateway. The wizard auto-detects the gateway token from:
 1. Existing `.env` (`GATEWAY_TOKEN`)
 2. Environment variable `OPENCLAW_GATEWAY_TOKEN`
 3. `~/.openclaw/openclaw.json` (auto-detected)
@@ -29,7 +29,7 @@ Connects Nerve to your OpenClaw gateway. The wizard auto-detects the gateway tok
 Tests the connection before proceeding. If the gateway is unreachable, setup stops so you can fix the gateway or token first. On current OpenClaw builds, the wizard also:
 - Reads the real gateway token from the systemd service file (works around a known bug where `openclaw onboard` writes different tokens to systemd and `openclaw.json`)
 - Bootstraps `paired.json` and `device-auth.json` with full operator scopes if they don't exist yet
-- Pre-pairs Nerve's device identity in the normal setup path so it can connect without manual approval (`openclaw devices approve`)
+- Pre-pairs ROBIN's device identity in the normal setup path so it can connect without manual approval (`openclaw devices approve`)
 - Adds `cron`, `gateway`, and `sessions_spawn` to `gateway.tools.allow` when they are missing
 - Restarts the gateway to apply changes
 
@@ -39,13 +39,13 @@ Sets the `AGENT_NAME` displayed in the UI.
 
 #### 3. Access Mode
 
-Determines how you'll access Nerve. The wizard auto-configures `HOST`, `ALLOWED_ORIGINS`, `WS_ALLOWED_HOSTS`, and `CSP_CONNECT_EXTRA` based on your choice:
+Determines how you'll access ROBIN. The wizard auto-configures `HOST`, `ALLOWED_ORIGINS`, `WS_ALLOWED_HOSTS`, and `CSP_CONNECT_EXTRA` based on your choice:
 
 | Mode | Bind | Description |
 |------|------|-------------|
 | **Localhost** | `127.0.0.1` | Only accessible from this machine. Safest option. |
 | **Tailscale IP** | `0.0.0.0` | Accessible from your Tailscale network over the machine's tailnet IP. Sets CORS + CSP for that IP. |
-| **Tailscale Serve** | `127.0.0.1` | Keeps Nerve loopback-only and exposes it through a Tailscale Serve HTTPS hostname when available. |
+| **Tailscale Serve** | `127.0.0.1` | Keeps ROBIN loopback-only and exposes it through a Tailscale Serve HTTPS hostname when available. |
 | **Network (LAN)** | `0.0.0.0` | Accessible from your local network. Prompts for your LAN IP. Sets CORS + CSP for that IP. |
 | **Custom** | Manual | Full manual control: custom port, bind address, HTTPS certificate generation, CORS. |
 
@@ -109,20 +109,20 @@ HOST=127.0.0.1
 |----------|---------|----------|-------------|
 | `GATEWAY_TOKEN` | — | **Yes** | Authentication token for the OpenClaw gateway. The setup wizard auto-detects this. See note below |
 | `GATEWAY_URL` | `http://127.0.0.1:18789` | No | Gateway HTTP endpoint URL |
-| `NERVE_PUBLIC_ORIGIN` | *(empty)* | No | Explicit browser-facing Nerve origin used when server-side gateway RPC fallback must open its own WebSocket to OpenClaw. Useful for reverse-proxy, cloud, and hybrid deployments. |
+| `NERVE_PUBLIC_ORIGIN` | *(empty)* | No | Explicit browser-facing ROBIN origin used when server-side gateway RPC fallback must open its own WebSocket to OpenClaw. Useful for reverse-proxy, cloud, and hybrid deployments. |
 
 ```bash
 GATEWAY_TOKEN=your-token-here
 GATEWAY_URL=http://127.0.0.1:18789
 
 # Optional for reverse-proxy / cloud / hybrid installs
-NERVE_PUBLIC_ORIGIN=https://nerve.example.com
+NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
 ```
 
 For non-interactive installs that should talk to a remote gateway, pass the URL directly to the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-nerve/master/install.sh \
+curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh \
   | bash -s -- --gateway-url https://gw.example.com --gateway-token <token> --skip-setup
 ```
 
@@ -130,10 +130,10 @@ If remote workspace panels (Files, Memory, Config, Skills) fail with `origin not
 
 ### Token Injection
 
-Nerve performs **server-side token injection**. When a connection is established through the WebSocket proxy, Nerve automatically injects the configured `GATEWAY_TOKEN` into the connection request if the client is considered **trusted**.
+ROBIN performs **server-side token injection**. When a connection is established through the WebSocket proxy, ROBIN automatically injects the configured `GATEWAY_TOKEN` into the connection request if the client is considered **trusted**.
 
 **Trust is granted if:**
-1. The connection is from a **local loopback address** (`127.0.0.1` or `::1`). When Nerve is behind a trusted reverse proxy, proxy-aware client IP handling can preserve that loopback detection (see `TRUSTED_PROXIES`).
+1. The connection is from a **local loopback address** (`127.0.0.1` or `::1`). When ROBIN is behind a trusted reverse proxy, proxy-aware client IP handling can preserve that loopback detection (see `TRUSTED_PROXIES`).
 2. OR, the connection has a valid **authenticated session** (`NERVE_AUTH=true`).
 
 This allows the browser UI to connect without having to manually enter or store the gateway token in the browser's persistent storage. If a connection is not trusted (e.g., remote access without authentication), the token field in the UI must be filled manually.
@@ -179,7 +179,7 @@ Xiaomi MiMo is available as an explicit provider option when `MIMO_API_KEY` is s
 |----------|---------|-------------|
 | `STT_PROVIDER` | `local` | STT provider: `local` (whisper.cpp, no API key needed) or `openai` (requires `OPENAI_API_KEY`) |
 | `WHISPER_MODEL` | `base` | Local whisper model: `tiny` (75 MB), `base` (142 MB), or `small` (466 MB) — multilingual variants. English-only variants (`tiny.en`, `base.en`, `small.en`) are also available. |
-| `WHISPER_MODEL_DIR` | `~/.nerve/models` | Directory for downloaded whisper model files |
+| `WHISPER_MODEL_DIR` | `~/.ROBIN/models` | Directory for downloaded whisper model files |
 | `NERVE_LANGUAGE` | `en` | Preferred voice language (ISO 639-1). Legacy `LANGUAGE` is still accepted but deprecated |
 | `EDGE_VOICE_GENDER` | `female` | Edge TTS voice gender: `female` or `male` |
 
@@ -190,13 +190,13 @@ WHISPER_MODEL=base
 NERVE_LANGUAGE=en
 ```
 
-Nerve uses explicit language selection (`NERVE_LANGUAGE`) for voice flows; there is no user-facing auto-detect language mode.
+ROBIN uses explicit language selection (`NERVE_LANGUAGE`) for voice flows; there is no user-facing auto-detect language mode.
 
 Local STT requires `ffmpeg` for audio format conversion (webm/ogg → 16kHz mono WAV). The installer handles this automatically. Models are downloaded from HuggingFace on first use.
 
 > **Migration note:** `LANGUAGE` is still read for backwards compatibility, but new writes use `NERVE_LANGUAGE`.
 
-Voice phrase overrides (stop/cancel/wake words) are stored at `~/.nerve/voice-phrases.json` and generated on first save from the UI.
+Voice phrase overrides (stop/cancel/wake words) are stored at `~/.ROBIN/voice-phrases.json` and generated on first save from the UI.
 
 ### Network & Security
 
@@ -217,11 +217,11 @@ WS_ALLOWED_HOSTS=100.64.0.5
 TRUSTED_PROXIES=127.0.0.1,::1,10.0.0.1
 ```
 
-If you are retrofitting Tailscale onto an existing install, see [Add Tailscale to an Existing Nerve Install](TAILSCALE.md).
+If you are retrofitting Tailscale onto an existing install, see [Add Tailscale to an Existing ROBIN Install](TAILSCALE.md).
 
 ### Authentication
 
-Nerve includes a built-in authentication layer that protects all API endpoints, WebSocket connections, and SSE streams with a session cookie. Auth is opt-in for localhost users and auto-prompted during setup when binding to a network interface.
+ROBIN includes a built-in authentication layer that protects all API endpoints, WebSocket connections, and SSE streams with a session cookie. Auth is opt-in for localhost users and auto-prompted during setup when binding to a network interface.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -255,7 +255,7 @@ NERVE_SESSION_SECRET=$(openssl rand -hex 32)
 **Behavior:**
 - When `NERVE_AUTH=false` (default): No authentication, all endpoints are open
 - When `NERVE_AUTH=true`: All `/api/*` routes (except auth and health) require a valid session cookie
-- The session cookie is `HttpOnly`, `SameSite=Strict`, and port-suffixed (`nerve_session_3080`)
+- The session cookie is `HttpOnly`, `SameSite=Strict`, and port-suffixed (`ROBIN_session_3080`)
 - WebSocket upgrade requests are also authenticated
 - If no password hash is set, the gateway token is accepted as a fallback password
 
@@ -290,7 +290,7 @@ REPLICATE_BASE_URL=https://api.replicate.com/v1
 | `MEMORY_DIR` | `~/.openclaw/workspace/memory/` | Directory for the main agent's daily memory files (`YYYY-MM-DD.md`) |
 | `SESSIONS_DIR` | `~/.openclaw/agents/main/sessions/` | Session transcript directory (scanned for token usage) |
 | `USAGE_FILE` | `~/.openclaw/token-usage.json` | Persistent cumulative token usage data |
-| `NERVE_VOICE_PHRASES_PATH` | `~/.nerve/voice-phrases.json` | Override location for per-language voice phrase overrides |
+| `NERVE_VOICE_PHRASES_PATH` | `~/.ROBIN/voice-phrases.json` | Override location for per-language voice phrase overrides |
 | `NERVE_WATCH_WORKSPACE_RECURSIVE` | `false` | Re-enables recursive `fs.watch` for full workspace `file.changed` SSE events outside `MEMORY.md` and `memory/`. Disabled by default to prevent Linux inotify `ENOSPC` watcher exhaustion. Memory watchers stay enabled for discovered agent workspaces even when this is `false`. |
 
 ```bash
@@ -316,14 +316,14 @@ TTS_CACHE_MAX=500
 
 ### Updater State
 
-The updater stores state in `~/.nerve/updater/`. These are not configurable via env vars — they're managed automatically by `npm run update`.
+The updater stores state in `~/.ROBIN/updater/`. These are not configurable via env vars — they're managed automatically by `npm run update`.
 
 | Path | Purpose |
 |------|---------|
-| `~/.nerve/updater/last-good.json` | Snapshot of the last successful state (git ref, version, env hash) |
-| `~/.nerve/updater/last-run.json` | Result metadata from the most recent update attempt |
-| `~/.nerve/updater/snapshots/<ts>/.env` | Timestamped `.env` backups (mode 0600) |
-| `~/.nerve/updater/nerve-update.lock` | PID lock file (prevents concurrent updates) |
+| `~/.ROBIN/updater/last-good.json` | Snapshot of the last successful state (git ref, version, env hash) |
+| `~/.ROBIN/updater/last-run.json` | Result metadata from the most recent update attempt |
+| `~/.ROBIN/updater/snapshots/<ts>/.env` | Timestamped `.env` backups (mode 0600) |
+| `~/.ROBIN/updater/ROBIN-update.lock` | PID lock file (prevents concurrent updates) |
 
 ### Development
 
@@ -335,7 +335,7 @@ The updater stores state in `~/.nerve/updater/`. These are not configurable via 
 
 ## Kanban
 
-Kanban board configuration is stored in the runtime data file (`${NERVE_DATA_DIR:-~/.nerve}/kanban/tasks.json`), not in `.env`. Manage it via the REST API:
+Kanban board configuration is stored in the runtime data file (`${NERVE_DATA_DIR:-~/.ROBIN}/kanban/tasks.json`), not in `.env`. Manage it via the REST API:
 
 ```bash
 # Read current config
@@ -388,7 +388,7 @@ Each column in the `columns` array:
 
 ## HTTPS
 
-Nerve automatically starts an HTTPS server on `SSL_PORT` when certificates exist at:
+ROBIN automatically starts an HTTPS server on `SSL_PORT` when certificates exist at:
 
 ```
 certs/cert.pem    # Certificate

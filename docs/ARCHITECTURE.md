@@ -1,6 +1,6 @@
 # Architecture
 
-> **Nerve** is a web interface for OpenClaw — chat, voice input, TTS, and agent monitoring in the browser. It connects to the OpenClaw gateway over WebSocket and provides a rich UI for interacting with AI agents.
+> **ROBIN** is a web interface for OpenClaw — chat, voice input, TTS, and agent monitoring in the browser. It connects to the OpenClaw gateway over WebSocket and provides a rich UI for interacting with AI agents.
 
 ## System Diagram
 
@@ -19,7 +19,7 @@
 └───────────────────────────────┼──────────────────────────────────┘
                                 │
 ┌───────────────────────────────┼──────────────────────────────────┐
-│  Nerve Server (Hono + Node)   │                                  │
+│  ROBIN Server (Hono + Node)   │                                  │
 │                               │                                  │
 │  ┌────────────────────────────┴─────────────┐                    │
 │  │         WebSocket Proxy (ws-proxy.ts)     │                   │
@@ -79,7 +79,7 @@ Authentication gate and login UI.
 | File | Purpose |
 |------|---------|
 | `AuthGate.tsx` | Top-level component — shows loading spinner, login page, or the full app depending on auth state |
-| `LoginPage.tsx` | Full-screen password form matching Nerve's dark theme. Auto-focus, Enter-to-submit, gateway token hint |
+| `LoginPage.tsx` | Full-screen password form matching ROBIN's dark theme. Auto-focus, Enter-to-submit, gateway token hint |
 | `useAuth.ts` | Auth state via `useSyncExternalStore`. Module-level fetch checks `/api/auth/status` once on load. Exposes `login`/`logout` callbacks |
 | `index.ts` | Barrel export |
 
@@ -129,7 +129,7 @@ Full workspace file browser with tabbed CodeMirror editor.
 | `EditorTab.tsx` | Single editor tab with modified indicator |
 | `FileEditor.tsx` | CodeMirror 6 editor — syntax highlighting, line numbers, search, Cmd+S save |
 | `TabbedContentArea.tsx` | Manages chat/editor tab switching (chat never unmounts) |
-| `editorTheme.ts` | One Dark-inspired CodeMirror theme matching Nerve's dark aesthetic |
+| `editorTheme.ts` | One Dark-inspired CodeMirror theme matching ROBIN's dark aesthetic |
 | `hooks/useFileTree.ts` | File tree data fetching and directory toggle state |
 | `hooks/useOpenFiles.ts` | Open file tab management, save with mtime conflict detection |
 | `utils/fileIcons.tsx` | File extension → icon mapping |
@@ -263,7 +263,7 @@ Cmd+K command palette.
 | `components/ConfirmDialog.tsx` | Reusable confirmation modal |
 | `components/ErrorBoundary.tsx` | Top-level error boundary |
 | `components/PanelErrorBoundary.tsx` | Per-panel error boundary (isolates failures) |
-| `components/NerveLogo.tsx` | SVG logo component |
+| `components/ROBINLogo.tsx` | SVG logo component |
 | `components/skeletons/` | Loading skeleton components (Message, Session, Memory) |
 | `components/ui/` | Primitives: `button`, `card`, `dialog`, `input`, `switch`, `scroll-area`, `collapsible`, `AnimatedNumber`, `InlineSelect` |
 
@@ -395,7 +395,7 @@ Applied in order in `app.ts`:
 | `lib/config.ts` | Centralized configuration from env vars — ports, keys, paths, limits, auth settings. Validated at startup |
 | `lib/session.ts` | Session token creation/verification (HMAC-SHA256), password hashing (scrypt), cookie parsing for WS upgrade requests |
 | `lib/ws-proxy.ts` | WebSocket proxy — client→gateway with session cookie auth on upgrade and Ed25519 device identity injection |
-| `lib/device-identity.ts` | Ed25519 keypair generation/persistence (`~/.nerve/device-identity.json`). Builds signed connect blocks for gateway auth |
+| `lib/device-identity.ts` | Ed25519 keypair generation/persistence (`~/.ROBIN/device-identity.json`). Builds signed connect blocks for gateway auth |
 | `lib/gateway-client.ts` | HTTP client for gateway tool invocation API (`/tools/invoke`) |
 | `lib/file-watcher.ts` | Discovers agent workspaces, watches each `MEMORY.md` and `memory/` directory, and optionally watches full workspaces recursively. Broadcasts agent-tagged `memory.changed` / `file.changed` SSE events |
 | `lib/file-utils.ts` | File browser utilities — path validation, directory exclusions, binary file detection |
@@ -423,14 +423,14 @@ Applied in order in `app.ts`:
 
 ### Updater (`server/lib/updater/`)
 
-Self-update system invoked via `npm run update` (entrypoint: `bin/nerve-update.ts` → `bin-dist/bin/nerve-update.js`).
+Self-update system invoked via `npm run update` (entrypoint: `bin/ROBIN-update.ts` → `bin-dist/bin/ROBIN-update.js`).
 
 | File | Purpose |
 |------|---------|
 | `orchestrator.ts` | State machine: lock → preflight → resolve → snapshot → update → build → restart → health → rollback |
 | `preflight.ts` | Validates git, Node.js, npm versions and git repo state |
 | `release-resolver.ts` | Finds latest semver tag via `git ls-remote --tags`, falls back to local tags |
-| `snapshot.ts` | Saves current git ref, version, and `.env` backup to `~/.nerve/updater/` |
+| `snapshot.ts` | Saves current git ref, version, and `.env` backup to `~/.ROBIN/updater/` |
 | `installer.ts` | `git fetch + checkout --force`, `npm install`, `npm run build + build:server` |
 | `service-manager.ts` | Auto-detects systemd or launchd, provides restart/status/logs |
 | `health.ts` | Polls `/health` and `/api/version` with exponential backoff (60s deadline) |
@@ -451,7 +451,7 @@ Compiled separately via `config/tsconfig.bin.json` to avoid changing the server'
 Browser WS → /ws?target=ws://gateway:18789/ws → ws-proxy.ts → OpenClaw Gateway
 ```
 
-1. Client connects to `/ws` endpoint on Nerve server
+1. Client connects to `/ws` endpoint on ROBIN server
 2. When auth is enabled, the session cookie is verified on the HTTP upgrade request (rejects with 401 if invalid)
 3. Proxy validates target URL against `WS_ALLOWED_HOSTS` allowlist
 4. Proxy opens upstream WebSocket to the gateway
@@ -518,8 +518,8 @@ The kanban board provides task management with agent execution, drag-and-drop re
 ### Store Design
 
 ```
-${NERVE_DATA_DIR:-~/.nerve}/kanban/tasks.json   -- single JSON file (tasks + proposals + config)
-${NERVE_DATA_DIR:-~/.nerve}/kanban/audit.log    -- append-only audit log (JSONL)
+${NERVE_DATA_DIR:-~/.ROBIN}/kanban/tasks.json   -- single JSON file (tasks + proposals + config)
+${NERVE_DATA_DIR:-~/.ROBIN}/kanban/audit.log    -- append-only audit log (JSONL)
 ```
 
 All data lives in one JSON file (`StoreData`). Every mutation acquires an async mutex, reads the file, applies the change, and writes back atomically via temp-file rename. This guarantees consistency under concurrent requests without a database. On first startup, the store migrates legacy data from `server-dist/data/kanban/` or `server/data/kanban/` into the canonical runtime directory if needed.

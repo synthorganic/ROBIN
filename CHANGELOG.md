@@ -12,14 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Kanban execution now matches the real session tree.** Assigned tasks launch as real child sessions beneath the selected assignee root, task completion and failures report back to the parent root, and background root notifications no longer misfire while those updates land (PR #198).
 
-**Remote and hybrid installs are less brittle.** Nerve now supports remote-gateway installation up front via `--gateway-url`, resolves gateway RPC origins from public config for remote workspace access, and explains missing cron capability with a clear remediation path instead of a dead-end warning (PR #181, PR #197, PR #200).
+**Remote and hybrid installs are less brittle.** ROBIN now supports remote-gateway installation up front via `--gateway-url`, resolves gateway RPC origins from public config for remote workspace access, and explains missing cron capability with a clear remediation path instead of a dead-end warning (PR #181, PR #197, PR #200).
 
 **Session and agent state are less misleading.** The model picker now reflects the active OpenClaw config, duplicate root-agent creation correctly registers suffixed agents in `openclaw.json`, direct-message sessions nest under the correct agent root, and the main root label stays canonical (PR #174, PR #185, PR #192, PR #196).
 
 **Docs and setup guidance caught back up to reality.** AI setup docs landed, setup now prints the right deployment guide links, and stale operator docs were refreshed to match the current runtime and installer behavior (PR #179, PR #182, PR #191).
 
 ### Added
-- Installer support for `--gateway-url` so Nerve can target a remote gateway from first boot (PR #181)
+- Installer support for `--gateway-url` so ROBIN can target a remote gateway from first boot (PR #181)
 - AI agent setup docs and a raw install contract for agent-driven installs (PR #182)
 - A dedicated `GET /api/kanban/tasks/:id` endpoint for direct Kanban task lookup by id (PR #176)
 - An assignee picker for Kanban task forms so users no longer need to enter raw assignee values manually (PR #203)
@@ -29,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Setup now prints deployment guide links after configuration so operators can jump straight to the right topology docs (PR #179)
 - Setup now ensures `sessions_spawn` is allowlisted alongside the other required gateway tools for Kanban execution on current OpenClaw builds (PR #159)
-- Model selection now comes from the active OpenClaw config instead of Nerve-side fallback lists (PR #174)
+- Model selection now comes from the active OpenClaw config instead of ROBIN-side fallback lists (PR #174)
 - Chat input helper text now points users at the command palette more clearly (PR #175)
 
 ### Fixed
@@ -47,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [1.5.1] - 2026-03-25
 
 ### Fixed
-- Restored the browser websocket auth identity to `webchat-ui` so remote deployments do not trip the gateway's stricter Control UI device-identity requirement on non-secure page origins. This fixes the 1.5.0 login failure reported by users connecting to remote gateway endpoints from plain remote HTTP Nerve pages.
+- Restored the browser websocket auth identity to `webchat-ui` so remote deployments do not trip the gateway's stricter Control UI device-identity requirement on non-secure page origins. This fixes the 1.5.0 login failure reported by users connecting to remote gateway endpoints from plain remote HTTP ROBIN pages.
 
 ## [1.5.0] - 2026-03-25
 
@@ -82,12 +82,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Setup defaults now infer `AGENT_NAME` from local identity metadata when the value is not already explicitly set (PR #151)
 
 ### Fixed
-- Subagent session deletion no longer fails on the Nerve side when the gateway closes a proxied WebSocket normally during delete flows (PR #119)
+- Subagent session deletion no longer fails on the ROBIN side when the gateway closes a proxied WebSocket normally during delete flows (PR #119)
 - Agent-scoped workspace switching no longer leaks same-path editor state, save toasts, watcher refreshes, or async file reads across top-level agents (PR #123)
 - Tailscale origin handling is more robust during setup and follow-up gateway patching (PR #116)
 - Small-screen text inputs now stay at 16px so mobile browsers do not auto-zoom the composer and settings controls after font size changes (PR #130)
 - Older top-level agent chats stay visible in the sidebar instead of disappearing once they fall outside the recent-activity query window (PR #134)
-- Kanban runtime data now lives under `${NERVE_DATA_DIR:-~/.nerve}/kanban`, and legacy installs automatically migrate data from old `server-dist/data/kanban` or `server/data/kanban` locations on first run (PR #135)
+- Kanban runtime data now lives under `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`, and legacy installs automatically migrate data from old `server-dist/data/kanban` or `server/data/kanban` locations on first run (PR #135)
 - Setup no longer attempts to approve malformed pending device request IDs, and gateway auth validation now uses a working token probe during defaults and check flows (PR #141)
 - Kanban run completion now accepts stable child identifiers, ignores stale client `run` patches, stops stale pollers after reruns, and normalizes spawn session aliases consistently (PR #143)
 - Remote and sandboxed workspace gateway fallback now authenticates correctly with device identity in real OpenShell-style deployments (PR #145)
@@ -104,7 +104,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Highlights
 
-**Multi-agent support expanded** — Nerve now supports multiple top-level agents, making multi-agent workflows less awkward and more flexible (PR #111).
+**Multi-agent support expanded** — ROBIN now supports multiple top-level agents, making multi-agent workflows less awkward and more flexible (PR #111).
 
 **Installer and startup flow hardened** — setup and service startup are now more resilient around edge cases and failure paths (PR #115).
 
@@ -145,10 +145,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Voice input overhauled** — Free voice input modes improved with better finalization, shortened wake/send chimes, and reduced mic delay from 800ms to 370ms to stop clipping the first word. English phrase fallback no longer bleeds into non-English sessions.
 
-**Kanban skill bundled** — `nerve-kanban` skill now auto-installs during setup. Agents can use the kanban skill to manage the Nerve task board directly: create tasks, move columns, update status, all through natural conversation.
+**Kanban skill bundled** — `ROBIN-kanban` skill now auto-installs during setup. Agents can use the kanban skill to manage the ROBIN task board directly: create tasks, move columns, update status, all through natural conversation.
 
 ### Added
-- Bundled `nerve-kanban` skill with auto-install during setup (PR #83)
+- Bundled `ROBIN-kanban` skill with auto-install during setup (PR #83)
 - Improved free voice input modes and finalization (PR #80)
 
 ### Fixed
@@ -262,7 +262,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [1.4.0] — 2026-02-26
 
 ### Added
-- **`nerve update` command** — git-based updater with automatic rollback. Supports `--dry-run`, `--version`, `--rollback`, `--no-restart`, and `--verbose` flags. See [docs/UPDATING.md](docs/UPDATING.md).
+- **`ROBIN update` command** — git-based updater with automatic rollback. Supports `--dry-run`, `--version`, `--rollback`, `--no-restart`, and `--verbose` flags. See [docs/UPDATING.md](docs/UPDATING.md).
 - Memory filenames are no longer restricted to `YYYY-MM-DD.md` format — any safe filename is accepted (PR #29).
 
 ### Fixed
@@ -291,7 +291,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Primary env key is now `NERVE_LANGUAGE` (legacy `LANGUAGE` remains a read fallback).
 - Wake phrase behavior is single-primary-phrase per language (custom phrase takes precedence).
 - Settings categories are now `Connection`, `Audio`, and `Appearance`.
-- Voice phrase overrides now persist as runtime state at `~/.nerve/voice-phrases.json` (configurable via `NERVE_VOICE_PHRASES_PATH`).
+- Voice phrase overrides now persist as runtime state at `~/.ROBIN/voice-phrases.json` (configurable via `NERVE_VOICE_PHRASES_PATH`).
 - Local STT default model is now multilingual `tiny`.
 - Chat rendering now prefers event-first WebSocket updates instead of periodic full-history polling (PR #16).
 - Setup/config flow now uses one bundled consent prompt for OpenClaw gateway config patches, including `gateway.tools.allow` updates for cron management (PR #15).

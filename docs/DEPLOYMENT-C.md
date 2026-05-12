@@ -1,19 +1,19 @@
 # Deployment: Cloud (Remote Access)
 
-Both Nerve and Gateway hosted remotely. Access from any device, anywhere.
+Both ROBIN and Gateway hosted remotely. Access from any device, anywhere.
 
 ## Topology options
 
 ### Same host (recommended)
 
 ```
-Browser (remote) → Nerve cloud → Gateway cloud (same machine)
+Browser (remote) → ROBIN cloud → Gateway cloud (same machine)
 ```
 
 ### Split hosts
 
 ```
-Browser (remote) → Nerve (host A) → Gateway (host B)
+Browser (remote) → ROBIN (host A) → Gateway (host B)
 ```
 
 Same-host is simpler and has fewer failure points. Use split hosts only if you have a specific reason.
@@ -22,21 +22,21 @@ Same-host is simpler and has fewer failure points. Use split hosts only if you h
 
 - Cloud Linux host with Node.js 22+
 - OpenClaw gateway running
-- Domain or stable IP for Nerve
+- Domain or stable IP for ROBIN
 - TLS termination plan (reverse proxy or direct certs)
 
 ## Same-host setup
 
-### 1. Install Nerve
+### 1. Install ROBIN
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-nerve/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh | bash
 ```
 
 ### 2. Run setup with network access
 
 ```bash
-cd ~/nerve
+cd ~/ROBIN
 npm run setup
 ```
 
@@ -49,13 +49,13 @@ Recommended choices:
 ### 3. Start the service
 
 ```bash
-sudo systemctl restart nerve.service
-sudo systemctl status nerve.service
+sudo systemctl restart ROBIN.service
+sudo systemctl status ROBIN.service
 ```
 
 ### 4. Set up TLS
 
-Put Nerve behind a reverse proxy (Nginx, Caddy, or Traefik) that handles HTTPS and forwards HTTP + WebSocket traffic to Nerve.
+Put ROBIN behind a reverse proxy (Nginx, Caddy, or Traefik) that handles HTTPS and forwards HTTP + WebSocket traffic to ROBIN.
 
 Or generate certs directly:
 
@@ -66,35 +66,35 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -subj "/CN=your-domain.com"
 ```
 
-Nerve auto-detects certificates at `certs/cert.pem` and `certs/key.pem`.
+ROBIN auto-detects certificates at `certs/cert.pem` and `certs/key.pem`.
 
 ## Split-host setup
 
-Follow the same-host steps for Nerve, then add:
+Follow the same-host steps for ROBIN, then add:
 
 ### Install with remote gateway settings up front
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-nerve/master/install.sh \
+curl -fsSL https://raw.githubusercontent.com/daggerhashimoto/openclaw-ROBIN/master/install.sh \
   | bash -s -- --gateway-url https://gw.example.com --gateway-token <token> --skip-setup
 ```
 
-### Point Nerve to remote gateway
+### Point ROBIN to remote gateway
 
 In `.env`:
 
 ```bash
 GATEWAY_URL=<remote-gateway-url>
 WS_ALLOWED_HOSTS=<remote-gateway-hostname-or-ip>
-NERVE_PUBLIC_ORIGIN=https://nerve.example.com
+NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
 ```
 
 ### Patch remote gateway allowed origins
 
-On the gateway host, add Nerve's public origin to `gateway.controlUi.allowedOrigins`:
+On the gateway host, add ROBIN's public origin to `gateway.controlUi.allowedOrigins`:
 
 ```
-https://nerve.example.com
+https://ROBIN.example.com
 ```
 
 ### Ensure gateway tools allowlist
@@ -112,11 +112,11 @@ Restart both services.
 ## Validation
 
 ```bash
-# Nerve host
+# ROBIN host
 curl -sS http://127.0.0.1:3080/health
 
 # Public endpoint
-curl -sS https://<nerve-domain>/health
+curl -sS https://<ROBIN-domain>/health
 ```
 
 In the browser: login screen appears, connect succeeds, sessions load, messages work.
@@ -125,7 +125,7 @@ In the browser: login screen appears, connect succeeds, sessions load, messages 
 
 ### Remote clients may still need manual credentials
 
-Remote clients can still auto-connect when Nerve trusts the request and the browser is using the official gateway URL. In that case `/api/connect-defaults` reports `serverSideAuth=true`, the browser sends an empty token, and Nerve injects `GATEWAY_TOKEN` server-side during the WebSocket handshake.
+Remote clients can still auto-connect when ROBIN trusts the request and the browser is using the official gateway URL. In that case `/api/connect-defaults` reports `serverSideAuth=true`, the browser sends an empty token, and ROBIN injects `GATEWAY_TOKEN` server-side during the WebSocket handshake.
 
 Manual token entry is only required for custom gateway URLs or untrusted access paths.
 
@@ -139,7 +139,7 @@ Wrong IP detection affects rate limiting and logs.
 
 - **Always** enable `NERVE_AUTH=true` for remote access
 - Use HTTPS end-to-end or at least at the edge
-- Keep the gateway on loopback when Nerve and Gateway share a host
+- Keep the gateway on loopback when ROBIN and Gateway share a host
 - Rotate gateway token on access changes
 
 ## Recommendation

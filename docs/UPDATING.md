@@ -1,6 +1,6 @@
-# Updating Nerve
+# Updating ROBIN
 
-Nerve ships a built-in updater that pulls the latest published release from GitHub, rebuilds, restarts the service, and verifies health — all in one command.
+ROBIN ships a built-in updater that pulls the latest published release from GitHub, rebuilds, restarts the service, and verifies health — all in one command.
 
 ## Prerequisites
 
@@ -92,7 +92,7 @@ Before making changes, the updater saves:
 - A SHA-256 hash of `.env`
 - A timestamped backup of `.env`
 
-Snapshots are stored in `~/.nerve/updater/`. The `.env` file is **never overwritten** during an update — only backed up.
+Snapshots are stored in `~/.ROBIN/updater/`. The `.env` file is **never overwritten** during an update — only backed up.
 
 ### Rollback
 
@@ -119,7 +119,7 @@ A PID-based lock file prevents concurrent updates. The lock is acquired with `wx
 ### Service detection
 
 The updater auto-detects the service manager:
-- **systemd** — `systemctl restart nerve`
+- **systemd** — `systemctl restart ROBIN`
 - **launchd** — `launchctl kickstart -k`
 
 If no service manager is found, the updater skips restart and prints manual start instructions.
@@ -128,25 +128,25 @@ If no service manager is found, the updater skips restart and prints manual star
 
 | Path | Purpose |
 |------|---------|
-| `~/.nerve/updater/last-good.json` | Last-known-good snapshot |
-| `~/.nerve/updater/last-run.json` | Result of the most recent update attempt |
-| `~/.nerve/updater/snapshots/<timestamp>/.env` | Backed-up `.env` files |
-| `~/.nerve/updater/nerve-update.lock` | PID lock file |
+| `~/.ROBIN/updater/last-good.json` | Last-known-good snapshot |
+| `~/.ROBIN/updater/last-run.json` | Result of the most recent update attempt |
+| `~/.ROBIN/updater/snapshots/<timestamp>/.env` | Backed-up `.env` files |
+| `~/.ROBIN/updater/ROBIN-update.lock` | PID lock file |
 
 ## Upgrade notes
 
 ### 1.5.0, Kanban data path migration
 
-On first start after upgrading to 1.5.0, Nerve automatically migrates legacy Kanban runtime data from:
+On first start after upgrading to 1.5.0, ROBIN automatically migrates legacy Kanban runtime data from:
 - `server-dist/data/kanban`
 - `server/data/kanban`
 
 into the canonical runtime location:
-- `${NERVE_DATA_DIR:-~/.nerve}/kanban`
+- `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`
 
 What to do:
 - Let the first post-upgrade start complete before judging the migration
-- Update backup scripts to follow `${NERVE_DATA_DIR:-~/.nerve}/kanban`
+- Update backup scripts to follow `${NERVE_DATA_DIR:-~/.ROBIN}/kanban`
 - Do not keep writing to the old `server-dist` or `server` data paths after upgrade
 
 ## Troubleshooting
@@ -169,13 +169,13 @@ Another update process is running, or a stale lock file exists.
 
 **Fix:** Check if an update is actually running:
 ```bash
-cat ~/.nerve/updater/nerve-update.lock   # Shows the PID
+cat ~/.ROBIN/updater/ROBIN-update.lock   # Shows the PID
 ps -p <pid>                               # Check if it's alive
 ```
 
 If the process is gone, the lock is stale — delete it:
 ```bash
-rm ~/.nerve/updater/nerve-update.lock
+rm ~/.ROBIN/updater/ROBIN-update.lock
 ```
 
 ### Health check fails with version mismatch
@@ -188,7 +188,7 @@ The service restarted but `/api/version` reports the old version.
 
 **Fix:** Restart manually and check:
 ```bash
-systemctl restart nerve
+systemctl restart ROBIN
 curl http://127.0.0.1:3080/api/version
 ```
 
@@ -198,8 +198,8 @@ curl http://127.0.0.1:3080/api/version
 
 **Fix:** The updater will attempt automatic rollback. If rollback also fails (exit 70), restore manually:
 ```bash
-cat ~/.nerve/updater/last-good.json           # Get the snapshot ref
+cat ~/.ROBIN/updater/last-good.json           # Get the snapshot ref
 git checkout --force <ref>
 npm install && npm run build && npm run build:server
-systemctl restart nerve
+systemctl restart ROBIN
 ```

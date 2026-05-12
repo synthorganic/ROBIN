@@ -1,4 +1,4 @@
-# Contributing to Nerve
+# Contributing to ROBIN
 
 Thanks for wanting to help! This guide covers everything you need to start contributing.
 

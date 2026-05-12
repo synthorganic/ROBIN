@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common issues and solutions for Nerve.
+Common issues and solutions for ROBIN.
 
 ---
 
@@ -117,26 +117,26 @@ The server detects `EADDRINUSE` and exits with a clear error (see `server/index.
 **Causes:**
 1. Wrong gateway token
 2. Gateway not running
-3. Token mismatch between Nerve server config and gateway
+3. Token mismatch between ROBIN server config and gateway
 
 **Fix:**
 - Verify the gateway is running: `openclaw gateway status`
 - Check token: the server reads `GATEWAY_TOKEN` or `OPENCLAW_GATEWAY_TOKEN` env var
-- For trusted official-gateway access, `/api/connect-defaults` advertises `serverSideAuth=true` and Nerve connects with an empty browser-side token
+- For trusted official-gateway access, `/api/connect-defaults` advertises `serverSideAuth=true` and ROBIN connects with an empty browser-side token
 - For custom gateway URLs or untrusted access, enter the token manually in the connection dialog
 
 ### Connection drops and "SIGNAL LOST" banner
 
 **Symptom:** Red reconnecting banner appears periodically.
 
-**Cause:** WebSocket connection to gateway dropped. Nerve auto-reconnects with exponential backoff (1s base, 30s max).
+**Cause:** WebSocket connection to gateway dropped. ROBIN auto-reconnects with exponential backoff (1s base, 30s max).
 
 **Diagnosis:**
 ```bash
 # Check gateway health
 curl http://127.0.0.1:18789/health
 
-# Check Nerve health (includes gateway probe)
+# Check ROBIN health (includes gateway probe)
 curl http://127.0.0.1:3080/health
 # Returns: { "status": "ok", "uptime": ..., "gateway": "ok"|"unreachable" }
 ```
@@ -177,8 +177,8 @@ curl http://127.0.0.1:3080/health
 **Fix:**
 ```bash
 # Remove and regenerate device identity
-rm ~/.nerve/device-identity.json
-# Restart Nerve — a new keypair will be generated
+rm ~/.ROBIN/device-identity.json
+# Restart ROBIN — a new keypair will be generated
 ```
 
 ### "Target not allowed" WebSocket error
@@ -196,15 +196,15 @@ WS_ALLOWED_HOSTS=mygateway.local npm start
 
 **Symptom:** Chat connects, but remote workspace panels like Files, Memory, Config, or Skills fail with gateway `origin not allowed` errors.
 
-**Cause:** Those panels can use the server-side gateway RPC fallback, which opens its own WebSocket to the gateway. If Nerve does not know its real browser-facing origin, that fallback can present the wrong origin even though the browser chat path is already working.
+**Cause:** Those panels can use the server-side gateway RPC fallback, which opens its own WebSocket to the gateway. If ROBIN does not know its real browser-facing origin, that fallback can present the wrong origin even though the browser chat path is already working.
 
 **Fix:** Set the exact browser origin in `.env` and allow the same origin on the gateway:
 
 ```bash
-NERVE_PUBLIC_ORIGIN=https://nerve.example.com
+NERVE_PUBLIC_ORIGIN=https://ROBIN.example.com
 ```
 
-Also add `https://nerve.example.com` to `gateway.controlUi.allowedOrigins`, then restart both Nerve and the gateway.
+Also add `https://ROBIN.example.com` to `gateway.controlUi.allowedOrigins`, then restart both ROBIN and the gateway.
 
 ### "device token mismatch" on WebSocket connect
 
@@ -212,7 +212,7 @@ Also add `https://nerve.example.com` to `gateway.controlUi.allowedOrigins`, then
 
 **Causes:**
 1. **Stale browser config.** The browser may still have an old manually-entered token saved in `localStorage` (`oc-config`), often from an older build or a custom gateway connection.
-2. **Token mismatch across config files.** OpenClaw 2026.2.19 has a known bug where `openclaw onboard` writes different tokens to the systemd service file and `openclaw.json`. The gateway uses the systemd env var; Nerve reads from `.env`.
+2. **Token mismatch across config files.** OpenClaw 2026.2.19 has a known bug where `openclaw onboard` writes different tokens to the systemd service file and `openclaw.json`. The gateway uses the systemd env var; ROBIN reads from `.env`.
 
 **Fix (stale browser config):**
 Clear site data or remove `localStorage.oc-config`, then reload so the official managed gateway path can reconnect with an empty token.
@@ -230,7 +230,7 @@ grep OPENCLAW_GATEWAY_TOKEN ~/.config/systemd/user/openclaw-gateway.service
 
 # These must all match:
 grep gateway.auth.token ~/.openclaw/openclaw.json     # CLI config
-grep GATEWAY_TOKEN .env                                 # Nerve config
+grep GATEWAY_TOKEN .env                                 # ROBIN config
 ```
 
 ### "Missing scope" errors after connecting
@@ -246,7 +246,7 @@ grep GATEWAY_TOKEN .env                                 # Nerve config
 # Check pending devices
 openclaw devices list
 
-# Approve the Nerve device
+# Approve the ROBIN device
 openclaw devices approve <requestId>
 ```
 
@@ -263,7 +263,7 @@ After approval, reconnect from the browser (refresh the page or click reconnect)
 ["cron", "gateway", "sessions_spawn"]
 ```
 
-If Nerve and the gateway are on the same machine, re-running `npm run setup` can patch it for you.
+If ROBIN and the gateway are on the same machine, re-running `npm run setup` can patch it for you.
 
 ### Messages buffered indefinitely
 
@@ -303,7 +303,7 @@ If Nerve and the gateway are on the same machine, re-running `npm run setup` can
 
 **Cause:** TTS cache serving stale entries. The cache is an LRU with TTL expiry (configurable via `config.ttsCacheTtlMs`), 100 MB memory budget.
 
-**Fix:** Restart the Nerve server to clear the in-memory TTS cache.
+**Fix:** Restart the ROBIN server to clear the in-memory TTS cache.
 
 ### Edge TTS fails silently
 
@@ -334,7 +334,7 @@ If Nerve and the gateway are on the same machine, re-running `npm run setup` can
   openssl req -x509 -newkey rsa:2048 -nodes \
     -keyout certs/key.pem -out certs/cert.pem -days 365 \
     -subj "/CN=localhost"
-  # Nerve auto-detects certs and starts HTTPS on port 3443
+  # ROBIN auto-detects certs and starts HTTPS on port 3443
   ```
 
 ### Whisper transcription fails
@@ -348,7 +348,7 @@ If Nerve and the gateway are on the same machine, re-running `npm run setup` can
 **Fix (local STT):**
 - Models auto-download on first use. Check server logs for download progress or errors
 - Ensure `ffmpeg` is installed (the installer handles this): `ffmpeg -version`
-- Check model file exists: `ls ~/.nerve/models/ggml-base.bin`
+- Check model file exists: `ls ~/.ROBIN/models/ggml-base.bin`
 
 **Fix (OpenAI STT):**
 - Set `STT_PROVIDER=openai` and `OPENAI_API_KEY` in `.env`
@@ -376,12 +376,12 @@ If Nerve and the gateway are on the same machine, re-running `npm run setup` can
 
 **Symptom:** Custom stop/cancel/wake phrases disappear after refresh or restart.
 
-**Cause:** Phrase overrides are stored on disk at `~/.nerve/voice-phrases.json` (or `NERVE_VOICE_PHRASES_PATH` if set). Write failures usually come from path/permission issues.
+**Cause:** Phrase overrides are stored on disk at `~/.ROBIN/voice-phrases.json` (or `NERVE_VOICE_PHRASES_PATH` if set). Write failures usually come from path/permission issues.
 
 **Fix:**
 - Verify file location and permissions:
   ```bash
-  ls -l ~/.nerve/voice-phrases.json
+  ls -l ~/.ROBIN/voice-phrases.json
   ```
 - If using a custom path, ensure `NERVE_VOICE_PHRASES_PATH` points to a writable location
 - Re-save phrases via Settings and watch server logs for `/api/voice-phrases` errors
@@ -454,7 +454,7 @@ MEMORY_PATH=/path/to/.openclaw/workspace/MEMORY.md
 
 **Symptom:** "Timed out waiting for subagent to spawn" error.
 
-**Cause:** Nerve requested a child session, but the gateway never surfaced a matching worker session before the timeout. Depending on the path, that usually means the selected root session could not launch the child, the normal `sessions_spawn` path failed, or the child session metadata never became visible to Nerve's poller.
+**Cause:** ROBIN requested a child session, but the gateway never surfaced a matching worker session before the timeout. Depending on the path, that usually means the selected root session could not launch the child, the normal `sessions_spawn` path failed, or the child session metadata never became visible to ROBIN's poller.
 
 **Fix:**
 - Make sure the selected root agent exists and is healthy
@@ -503,7 +503,7 @@ That means failures can come from a missing assignee root, a child-session creat
 
 **Fix:**
 - Verify the expected models are configured in OpenClaw (`agents.defaults.model` / `agents.defaults.models`)
-- Check that Nerve can read the active OpenClaw config file
+- Check that ROBIN can read the active OpenClaw config file
 - Check server logs for `gateway/models` read errors
 - After fixing config, reopen the spawn dialog or refresh the page
 
@@ -515,7 +515,7 @@ That means failures can come from a missing assignee root, a child-session creat
 - **Model changes** can fall back to `POST /api/gateway/session-patch`
 - **Thinking changes** must go through WebSocket RPC `sessions.patch`
 
-If you call the HTTP fallback with only `thinkingLevel`, it returns **501**. If Nerve cannot find an active root session and you omitted `sessionKey`, it can return **409**.
+If you call the HTTP fallback with only `thinkingLevel`, it returns **501**. If ROBIN cannot find an active root session and you omitted `sessionKey`, it can return **409**.
 
 **Fix:**
 - For model changes, verify the HTTP fallback returned `{ ok: true }`
@@ -635,9 +635,9 @@ git tag -l                 # Confirm tags exist locally
 
 **Fix:**
 ```bash
-cat ~/.nerve/updater/nerve-update.lock   # Shows the PID
+cat ~/.ROBIN/updater/ROBIN-update.lock   # Shows the PID
 ps -p <pid>                               # Check if alive
-rm ~/.nerve/updater/nerve-update.lock     # Remove if stale
+rm ~/.ROBIN/updater/ROBIN-update.lock     # Remove if stale
 ```
 
 ### Health check version mismatch (exit 60)
@@ -648,7 +648,7 @@ rm ~/.nerve/updater/nerve-update.lock     # Remove if stale
 
 **Fix:**
 ```bash
-systemctl restart nerve
+systemctl restart ROBIN
 curl http://127.0.0.1:3080/api/version   # Verify version
 ```
 
@@ -658,10 +658,10 @@ curl http://127.0.0.1:3080/api/version   # Verify version
 
 **Fix:** Manual recovery:
 ```bash
-cat ~/.nerve/updater/last-good.json       # Get snapshot ref
+cat ~/.ROBIN/updater/last-good.json       # Get snapshot ref
 git checkout --force <ref>
 npm install && npm run build && npm run build:server
-systemctl restart nerve
+systemctl restart ROBIN
 ```
 
 ---

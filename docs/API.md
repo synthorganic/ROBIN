@@ -1,6 +1,6 @@
 # API Reference
 
-Nerve exposes a REST + SSE API served by [Hono](https://hono.dev/) on the configured `PORT` (default **3080**). All API routes are prefixed with `/api/` except the health endpoint. Responses are JSON unless otherwise noted.
+ROBIN exposes a REST + SSE API served by [Hono](https://hono.dev/) on the configured `PORT` (default **3080**). All API routes are prefixed with `/api/` except the health endpoint. Responses are JSON unless otherwise noted.
 
 > **Authentication:** When `NERVE_AUTH=true`, all API endpoints (except `/api/auth/*` and `/health`) require a valid session cookie. Obtain one via `POST /api/auth/login`. When `NERVE_AUTH=false` (default for localhost), no authentication is required. See [SECURITY.md](./SECURITY.md) for details.
 
@@ -76,7 +76,7 @@ Authenticate with a password and receive a session cookie.
 { "ok": true }
 ```
 
-Sets an `HttpOnly` session cookie (`nerve_session_{PORT}`) on success.
+Sets an `HttpOnly` session cookie (`ROBIN_session_{PORT}`) on success.
 
 **Error Responses:**
 
@@ -170,7 +170,7 @@ Returns the application name and version from `package.json`.
 ```json
 {
   "version": "1.3.0",
-  "name": "openclaw-nerve"
+  "name": "openclaw-ROBIN"
 }
 ```
 
@@ -180,7 +180,7 @@ Returns the application name and version from `package.json`.
 
 ### `GET /api/connect-defaults`
 
-Provides the official gateway WebSocket URL and trust metadata for the frontend's auto-connect flow. The `token` field is always `null`; when `serverSideAuth` is `true`, Nerve expects the browser to connect with an empty token and injects `GATEWAY_TOKEN` server-side during the WebSocket handshake.
+Provides the official gateway WebSocket URL and trust metadata for the frontend's auto-connect flow. The `token` field is always `null`; when `serverSideAuth` is `true`, ROBIN expects the browser to connect with an empty token and injects `GATEWAY_TOKEN` server-side during the WebSocket handshake.
 
 **Rate Limit:** General (`60 requests / minute`)
 
@@ -208,9 +208,9 @@ Provides the official gateway WebSocket URL and trust metadata for the frontend'
 }
 ```
 
-`serverSideAuth` becomes `true` when Nerve can safely inject the configured gateway token for this request, such as:
+`serverSideAuth` becomes `true` when ROBIN can safely inject the configured gateway token for this request, such as:
 - loopback / tunneled local access to the official gateway URL
-- authenticated sessions on a network-exposed Nerve instance
+- authenticated sessions on a network-exposed ROBIN instance
 
 If the browser is pointed at a custom gateway URL, or the request is not trusted for server-side injection, the connect dialog keeps the token field visible and the user must supply it manually.
 
@@ -434,7 +434,7 @@ Transcribes audio using the configured STT provider.
 | `base.en` | 142 MB | Fast | English-only variant |
 | `small.en` | 466 MB | Moderate | English-only variant |
 
-Configure model via `WHISPER_MODEL`. Language hints come from `NERVE_LANGUAGE` (or `PUT /api/language` / `PUT /api/transcribe/config`). Models auto-download from HuggingFace on first use and are stored in `WHISPER_MODEL_DIR` (default `~/.nerve/models/`).
+Configure model via `WHISPER_MODEL`. Language hints come from `NERVE_LANGUAGE` (or `PUT /api/language` / `PUT /api/transcribe/config`). Models auto-download from HuggingFace on first use and are stored in `WHISPER_MODEL_DIR` (default `~/.ROBIN/models/`).
 
 **Request:** `multipart/form-data` with a `file` field containing audio data.
 
@@ -651,7 +651,7 @@ Saves per-language custom phrase overrides.
 
 At least one of `stopPhrases`, `cancelPhrases`, or `wakePhrases` is required.
 
-Custom phrase overrides are stored in `~/.nerve/voice-phrases.json` (created on first save).
+Custom phrase overrides are stored in `~/.ROBIN/voice-phrases.json` (created on first save).
 
 ---
 
@@ -698,7 +698,7 @@ Session data is cached for 60 seconds to avoid repeated filesystem scans.
 
 ## Memories
 
-All memory routes accept an optional `agentId` scope. If omitted, Nerve uses `main`. The UI normally derives this from the owning top-level agent when you switch sessions.
+All memory routes accept an optional `agentId` scope. If omitted, ROBIN uses `main`. The UI normally derives this from the owning top-level agent when you switch sessions.
 
 ### `GET /api/memories`
 
@@ -936,7 +936,7 @@ HTTP fallback for **model changes** when the frontend cannot apply `sessions.pat
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `sessionKey` | `string` | No | Target session. If omitted, Nerve tries to pick a preferred active root session |
+| `sessionKey` | `string` | No | Target session. If omitted, ROBIN tries to pick a preferred active root session |
 | `model` | `string` | No | Model to apply via the gateway's `session_status` tool |
 | `thinkingLevel` | `string \| null` | No | Accepted by the schema, but not applied by this HTTP fallback |
 
@@ -1044,7 +1044,7 @@ If the transcript cannot be found, the endpoint returns `{ "ok": true, "model": 
 
 ## Workspace Files
 
-Workspace file routes accept an optional `agentId` scope. If omitted, Nerve uses the `main` workspace.
+Workspace file routes accept an optional `agentId` scope. If omitted, ROBIN uses the `main` workspace.
 
 ### `GET /api/workspace`
 
@@ -1179,7 +1179,7 @@ Returns the last 10 run history entries for a cron job.
 
 Lists all OpenClaw skills via `openclaw skills list --json` for the selected workspace agent.
 
-Nerve scopes this by creating a temporary OpenClaw config whose `agents.defaults.workspace` points at the selected agent workspace, then runs the CLI against that workspace.
+ROBIN scopes this by creating a temporary OpenClaw config whose `agents.defaults.workspace` points at the selected agent workspace, then runs the CLI against that workspace.
 
 **Rate Limit:** General (60/min)
 
@@ -1216,7 +1216,7 @@ Nerve scopes this by creating a temporary OpenClaw config whose `agents.defaults
 
 Browse, read, and edit workspace files. All paths are restricted to the selected workspace directory with traversal protection.
 
-All file-browser routes accept an optional `agentId` scope. If omitted, Nerve uses `main`. If `FILE_BROWSER_ROOT` is set, file-browser agent scoping is bypassed and all sessions browse the same custom root.
+All file-browser routes accept an optional `agentId` scope. If omitted, ROBIN uses `main`. If `FILE_BROWSER_ROOT` is set, file-browser agent scoping is bypassed and all sessions browse the same custom root.
 
 ### `GET /api/files/tree`
 
@@ -1737,7 +1737,7 @@ Execute a task and move it to `in-progress`. The launch path depends on the task
 **Response:** The updated `KanbanTask` object with `status: "in-progress"` and a `run` object.
 
 **Execution paths:**
-- **Assigned tasks** create a real child session beneath the assignee's live root. Nerve verifies that the parent root exists, creates the child with `sessions.create(parentSessionKey=...)`, then sends the task into that child with `sessions.send`.
+- **Assigned tasks** create a real child session beneath the assignee's live root. ROBIN verifies that the parent root exists, creates the child with `sessions.create(parentSessionKey=...)`, then sends the task into that child with `sessions.send`.
 - **Unassigned or `operator` tasks** use the normal `sessions_spawn` path.
 - **macOS fallback rule:** unassigned or `operator` tasks are rejected. Assign the task to a live worker root first.
 
@@ -1753,7 +1753,7 @@ Execute a task and move it to `in-progress`. The launch path depends on the task
 **Notes:**
 - The spawned worker receives the task title and description as its prompt.
 - Assigned-task runs keep both a deterministic run correlation key and the real `childSessionKey`.
-- When an assigned child session finishes or fails, Nerve sends a completion report back to the parent root session.
+- When an assigned child session finishes or fails, ROBIN sends a completion report back to the parent root session.
 - Backend pollers run every 5 seconds for up to **720 attempts / 60 minutes**.
 - On success the task moves to `review`. On error it moves back to `todo`.
 

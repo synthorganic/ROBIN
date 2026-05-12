@@ -1,16 +1,16 @@
-# Deployment: Remote Gateway + Local Nerve
+# Deployment: Remote Gateway + Local ROBIN
 
-Nerve runs on your laptop, Gateway runs on a cloud host. Good when you want local UI responsiveness but your OpenClaw runtime lives in the cloud.
+ROBIN runs on your laptop, Gateway runs on a cloud host. Good when you want local UI responsiveness but your OpenClaw runtime lives in the cloud.
 
 ## Topology
 
 ```
-Browser (localhost) → Nerve local (127.0.0.1:3080) → Gateway cloud (<host>:18789)
+Browser (localhost) → ROBIN local (127.0.0.1:3080) → Gateway cloud (<host>:18789)
 ```
 
 ## Prerequisites
 
-- Nerve installed on your laptop
+- ROBIN installed on your laptop
 - Cloud Gateway reachable from your laptop
 - Gateway token from the cloud host
 - Access to cloud host config (`~/.openclaw/openclaw.json`)
@@ -30,10 +30,10 @@ openclaw gateway status
 curl -sS http://127.0.0.1:18789/health
 ```
 
-### 2. Configure Nerve locally
+### 2. Configure ROBIN locally
 
 ```bash
-cd ~/nerve
+cd ~/ROBIN
 npm run setup
 ```
 
@@ -50,11 +50,11 @@ If your gateway hostname isn't localhost, add it to `.env`:
 WS_ALLOWED_HOSTS=<gateway-hostname-or-ip>
 ```
 
-Restart Nerve after.
+Restart ROBIN after.
 
 ### 4. Patch remote gateway allowed origins
 
-On the cloud host, add your local Nerve origin to the gateway allowlist in `~/.openclaw/openclaw.json`:
+On the cloud host, add your local ROBIN origin to the gateway allowlist in `~/.openclaw/openclaw.json`:
 
 - `http://localhost:3080`
 - `http://127.0.0.1:3080`
@@ -103,7 +103,7 @@ Connection works but actions fail with scope errors.
 
 - Use private addressing and strict firewall rules
 - Rotate gateway token if it's been shared
-- If you expose local Nerve to LAN, enable `NERVE_AUTH=true`
+- If you expose local ROBIN to LAN, enable `NERVE_AUTH=true`
 
 ## Recommendation
 
