@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { OPS_MAP_ASSET_TYPES, buildOpsMapLayers, opsMapStore, type OpsMapAsset } from '../lib/ops-map-store.js';
 import { opsGeoSourceService } from '../lib/ops-geo-sources.js';
+import { fetchAirQualityOverlay } from '../lib/ops-air-quality.js';
 import { broadcast } from './events.js';
 
 const app = new Hono();
@@ -68,6 +69,20 @@ app.post('/api/map/sources/refresh', async (c) => {
   return c.json({ ok: true, ...snapshot });
 });
 
+app.get('/api/map/air-quality', async (c) => {
+  const west = Number(c.req.query('west'));
+  const south = Number(c.req.query('south'));
+  const east = Number(c.req.query('east'));
+  const north = Number(c.req.query('north'));
+  const zoom = Number(c.req.query('zoom') ?? 4);
+  if (![west, south, east, north, zoom].every((value) => Number.isFinite(value))) {
+    return c.json({ ok: false, error: 'west, south, east, north, and zoom are required' }, 400);
+  }
+
+  const overlay = await fetchAirQualityOverlay({ west, south, east, north, zoom });
+  return c.json({ ok: true, overlay });
+});
+
 app.post('/api/map/assets', async (c) => {
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
   if (typeof body.title !== 'string' || !isAssetType(body.type)) {
@@ -92,6 +107,12 @@ app.post('/api/map/assets', async (c) => {
     confidence: isConfidence(body.confidence) ? body.confidence : undefined,
     observedAt: typeof body.observedAt === 'string' ? body.observedAt : undefined,
     live: body.live === true,
+    createdAt: typeof body.createdAt === 'string' ? body.createdAt : undefined,
+    updatedAt: typeof body.updatedAt === 'string' ? body.updatedAt : undefined,
+    heading: typeof body.heading === 'number' ? body.heading : Number(body.heading),
+    speed: typeof body.speed === 'number' ? body.speed : Number(body.speed),
+    altitude: typeof body.altitude === 'number' ? body.altitude : Number(body.altitude),
+    trail: Array.isArray(body.trail) ? body.trail : undefined,
   });
 
   void emitMapSnapshot();
@@ -123,6 +144,11 @@ app.put('/api/map/assets/:id', async (c) => {
       ...(isConfidence(body.confidence) ? { confidence: body.confidence } : {}),
       ...(typeof body.observedAt === 'string' ? { observedAt: body.observedAt } : {}),
       ...(typeof body.live === 'boolean' ? { live: body.live } : {}),
+      ...(typeof body.createdAt === 'string' ? { createdAt: body.createdAt } : {}),
+      ...(typeof body.heading === 'number' || typeof body.heading === 'string' ? { heading: Number(body.heading) } : {}),
+      ...(typeof body.speed === 'number' || typeof body.speed === 'string' ? { speed: Number(body.speed) } : {}),
+      ...(typeof body.altitude === 'number' || typeof body.altitude === 'string' ? { altitude: Number(body.altitude) } : {}),
+      ...(Array.isArray(body.trail) ? { trail: body.trail } : {}),
     });
     void emitMapSnapshot();
     return c.json({ ok: true, asset });

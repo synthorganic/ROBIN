@@ -69,6 +69,12 @@ export interface MapAsset {
   confidence?: 'low' | 'medium' | 'high';
   observedAt?: string;
   live?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  heading?: number;
+  speed?: number;
+  altitude?: number;
+  trail?: Array<{ lat: number; lng: number; observedAt?: string }>;
 }
 
 export interface MapLayer {
@@ -93,6 +99,8 @@ export interface MapSourceStatus {
     | 'eurdep'
     | 'safecast'
     | 'gmcmap'
+    | 'nrcevents'
+    | 'nrcreactorstatus'
     | 'ntad'
     | 'faf'
     | 'marinecadastre'

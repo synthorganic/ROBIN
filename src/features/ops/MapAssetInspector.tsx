@@ -130,12 +130,22 @@ function formatObservedAt(value: string | undefined) {
 }
 
 function sourceDataRows(asset: MapAsset) {
+  const aircraftRows = asset.sourceId === 'trackedflights'
+    ? [
+      ['Altitude', asset.altitude == null ? null : `${Math.round(asset.altitude)} ft`],
+      ['Speed', asset.speed == null ? null : `${Math.round(asset.speed)} kt`],
+      ['Heading', asset.heading == null ? null : `${Math.round(asset.heading)}°`],
+      ['Trail', asset.trail?.length ? `${asset.trail.length} points` : null],
+    ]
+    : [];
   return [
     ['Source', asset.sourceName || asset.sourceId || 'Operator'],
     ['Status', asset.status || 'Unspecified'],
     ['Severity', asset.severity || 'Unspecified'],
     ['Confidence', asset.confidence || 'Unspecified'],
     ['Observed', formatObservedAt(asset.observedAt) || 'Unspecified'],
+    ['Saved', formatObservedAt(asset.createdAt) || null],
+    ...aircraftRows,
     ['Location', locationLabel(asset)],
   ].filter(([, value]) => value);
 }
@@ -170,6 +180,7 @@ export default function MapAssetInspector({ asset, currentSessionId }: MapAssetI
           {asset.sourceName ? <span className="ops-badge">{asset.sourceName}</span> : null}
           {asset.severity ? <span className="ops-badge">{asset.severity}</span> : null}
           {asset.confidence ? <span className="ops-badge">{asset.confidence} confidence</span> : null}
+          {asset.sourceId === 'manual' ? <span className="ops-badge">saved</span> : null}
           {asset.status ? <span className="ops-badge">{asset.status}</span> : null}
           {linkedToCurrent ? <span className="ops-badge">linked to current agent</span> : null}
         </div>

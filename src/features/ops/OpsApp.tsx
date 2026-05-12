@@ -21,6 +21,7 @@ import {
   LoaderCircle,
   LogOut,
   MapPinned,
+  MapPin,
   Route,
   Orbit,
   Paperclip,
@@ -66,6 +67,7 @@ import './ops.css';
 type OpsTab = 'map' | 'status' | 'agent';
 type RailMode = 'chat' | 'briefings';
 type SignalFamily = 'logistics' | 'biological' | 'ordnance' | 'nuclear' | 'general';
+type SourceGroupId = 'operator' | 'news' | 'disaster' | 'earthquakes' | 'weather' | 'wildfire' | 'nuclear' | 'traffic' | 'aviation' | 'transport';
 
 interface OpsAppProps {
   onLogout: () => Promise<void>;
@@ -82,6 +84,234 @@ const SIGNAL_FAMILIES: Array<{
   { id: 'nuclear', label: 'Nuclear', description: 'Radiological, reactor, or nuclear-adjacent activity.' },
   { id: 'general', label: 'General Intel', description: 'Unclassified notes, reports, and general watch items.' },
 ];
+
+const SOURCE_GROUPS: Array<{
+  id: SourceGroupId;
+  label: string;
+  description: string;
+  icon: 'folder' | 'globe' | 'alert' | 'radio' | 'shield' | 'flame' | 'orbit' | 'camera' | 'plane' | 'route';
+  sourceIds: string[];
+}> = [
+  {
+    id: 'operator',
+    label: 'Operator / Internal',
+    description: 'Saved locations, watched facilities, custom pins, and internal records.',
+    icon: 'folder',
+    sourceIds: ['manual'],
+  },
+  {
+    id: 'news',
+    label: 'Global Events / News Signals',
+    description: 'Geo-coded news and event awareness.',
+    icon: 'globe',
+    sourceIds: ['gdelt'],
+  },
+  {
+    id: 'disaster',
+    label: 'Disaster Alerts',
+    description: 'Coordination and incident alert feeds.',
+    icon: 'alert',
+    sourceIds: ['gdacs'],
+  },
+  {
+    id: 'earthquakes',
+    label: 'Earthquakes',
+    description: 'Magnitude updates and seismic events.',
+    icon: 'radio',
+    sourceIds: ['usgs'],
+  },
+  {
+    id: 'weather',
+    label: 'Weather / Public Safety Alerts',
+    description: 'Weather hazards, warnings, and public safety notices.',
+    icon: 'shield',
+    sourceIds: ['nws'],
+  },
+  {
+    id: 'wildfire',
+    label: 'Wildfires / Thermal Activity',
+    description: 'Active fire and thermal anomaly detection.',
+    icon: 'flame',
+    sourceIds: ['firms'],
+  },
+  {
+    id: 'nuclear',
+    label: 'Radiation / Nuclear Monitoring',
+    description: 'Radiological monitoring, reactor status, and nuclear-regulated event reporting.',
+    icon: 'orbit',
+    sourceIds: ['radnet', 'nrcevents', 'nrcreactorstatus', 'eurdep', 'safecast', 'gmcmap'],
+  },
+  {
+    id: 'traffic',
+    label: 'Traffic / Camera Feeds',
+    description: 'Live traffic camera feeds and stills.',
+    icon: 'camera',
+    sourceIds: ['trafficcams'],
+  },
+  {
+    id: 'aviation',
+    label: 'Aviation',
+    description: 'Live aircraft positions and flight paths.',
+    icon: 'plane',
+    sourceIds: ['trackedflights'],
+  },
+  {
+    id: 'transport',
+    label: 'Transportation / Reference',
+    description: 'Infrastructure, freight, maritime, transit, and map reference layers.',
+    icon: 'route',
+    sourceIds: ['ntad', 'faf', 'marinecadastre', 'mobilitydb', 'tigerline'],
+  },
+];
+
+const SOURCE_DETAILS: Record<string, {
+  groupId: SourceGroupId;
+  title: string;
+  source: string;
+  description: string;
+}> = {
+  manual: {
+    groupId: 'operator',
+    title: 'Saved Points of Interest',
+    source: 'Operator-provided assets, internal points, custom records',
+    description: 'Saved locations, watched facilities, important infrastructure, custom pins, and previously selected investigation points.',
+  },
+  gdelt: {
+    groupId: 'news',
+    title: 'Global Event Intelligence',
+    source: 'GDELT — Global Database of Events, Language, and Tone',
+    description: 'Global geocoded news and event awareness.',
+  },
+  gdacs: {
+    groupId: 'disaster',
+    title: 'Disaster Alerts & Coordination Reports',
+    source: 'GDACS — Global Disaster Alert and Coordination System',
+    description: 'International disaster alerts and coordination reports.',
+  },
+  usgs: {
+    groupId: 'earthquakes',
+    title: 'Earthquake Events',
+    source: 'USGS Earthquakes — United States Geological Survey earthquake feeds',
+    description: 'Earthquake events and magnitude updates.',
+  },
+  nws: {
+    groupId: 'weather',
+    title: 'Weather & Public Safety Alerts',
+    source: 'NOAA / NWS Alerts — National Oceanic and Atmospheric Administration / National Weather Service alerts',
+    description: 'Weather hazards, warnings, and public safety alerts.',
+  },
+  firms: {
+    groupId: 'wildfire',
+    title: 'Wildfire & Thermal Anomalies',
+    source: 'NASA FIRMS — Fire Information for Resource Management System',
+    description: 'Active fire and thermal anomaly detection.',
+  },
+  radnet: {
+    groupId: 'nuclear',
+    title: 'Radiation Monitoring',
+    source: 'EPA RadNet — Environmental Protection Agency radiation monitoring network',
+    description: 'Near-real-time gamma radiation monitoring.',
+  },
+  nrcevents: {
+    groupId: 'nuclear',
+    title: 'NRC Event Notifications',
+    source: 'NRC — U.S. Nuclear Regulatory Commission event notification reports',
+    description: 'Recent event reports and raw data files for nuclear-regulated incidents.',
+  },
+  nrcreactorstatus: {
+    groupId: 'nuclear',
+    title: 'NRC Power Reactor Status',
+    source: 'NRC — U.S. Nuclear Regulatory Commission power reactor status reports',
+    description: 'Daily reactor power-status data for commercial reactors.',
+  },
+  eurdep: {
+    groupId: 'nuclear',
+    title: 'EURDEP Radiological Exchange',
+    source: 'EURDEP — European Radiological Data Exchange Platform',
+    description: 'European near-real-time radiological monitoring exchange.',
+  },
+  safecast: {
+    groupId: 'nuclear',
+    title: 'Safecast Radiation Data',
+    source: 'Safecast — CC0 global radiation dataset',
+    description: 'Community and fixed-sensor radiation measurements.',
+  },
+  gmcmap: {
+    groupId: 'nuclear',
+    title: 'Community Geiger Network',
+    source: 'GMCMap — global community Geiger counter map',
+    description: 'Real-time community Geiger counter readings with variable quality.',
+  },
+  trafficcams: {
+    groupId: 'traffic',
+    title: 'Traffic Cameras',
+    source: 'LFUCG Traffic Cameras — Lexington-Fayette Urban County Government traffic cameras',
+    description: 'Live traffic camera feeds and stills.',
+  },
+  trackedflights: {
+    groupId: 'aviation',
+    title: 'Live Aircraft & Flight Paths',
+    source: 'ADS-B / flight tracking provider',
+    description: 'Live aircraft positions with trails and flight metadata.',
+  },
+  ntad: {
+    groupId: 'transport',
+    title: 'Transportation Infrastructure',
+    source: 'BTS NTAD — Bureau of Transportation Statistics National Transportation Atlas Database',
+    description: 'U.S. multimodal infrastructure backbone.',
+  },
+  faf: {
+    groupId: 'transport',
+    title: 'Freight Flow Priors',
+    source: 'BTS FAF — Bureau of Transportation Statistics Freight Analysis Framework',
+    description: 'U.S. freight flow estimates by mode, commodity, origin/destination.',
+  },
+  marinecadastre: {
+    groupId: 'transport',
+    title: 'Maritime AIS Movement',
+    source: 'MarineCadastre AIS — NOAA / BOEM vessel traffic downloads',
+    description: 'Port and vessel movement, maritime congestion, and logistics context.',
+  },
+  mobilitydb: {
+    groupId: 'transport',
+    title: 'Transit Schedules & Realtime',
+    source: 'Mobility Database / GTFS — public transit schedules and GTFS-RT feeds',
+    description: 'Urban mobility, transit disruption spillover, and access context.',
+  },
+  tigerline: {
+    groupId: 'transport',
+    title: 'Geographic Reference Layer',
+    source: 'Census TIGER/Line — U.S. roads, boundaries, and geographic reference files',
+    description: 'Stable U.S. geospatial reference layer.',
+  },
+};
+
+function sourceGroupIcon(icon: (typeof SOURCE_GROUPS)[number]['icon']) {
+  switch (icon) {
+    case 'folder':
+      return <Folder size={16} />;
+    case 'globe':
+      return <Globe2 size={16} />;
+    case 'alert':
+      return <AlertTriangle size={16} />;
+    case 'radio':
+      return <RadioTower size={16} />;
+    case 'shield':
+      return <ShieldCheck size={16} />;
+    case 'flame':
+      return <Flame size={16} />;
+    case 'orbit':
+      return <Orbit size={16} />;
+    case 'camera':
+      return <Camera size={16} />;
+    case 'plane':
+      return <Plane size={16} />;
+    case 'route':
+      return <Route size={16} />;
+    default:
+      return <Folder size={16} />;
+  }
+}
 
 function emptyBridge(): BridgeStatus {
   return { activeJob: null, recentJobs: [] };
@@ -138,6 +368,8 @@ function assetMatchesQuery(asset: MapAsset, query: string) {
     asset.notes ?? '',
     asset.status ?? '',
     asset.linkedSessionId ?? '',
+    asset.sourceId ?? '',
+    asset.sourceName ?? '',
     asset.tags.join(' '),
   ]
     .join(' ')
@@ -162,6 +394,33 @@ function formatRelative(value: string | number | null | undefined) {
   if (elapsedMs < minute) return 'just now';
   if (elapsedMs < hour) return `${Math.round(elapsedMs / minute)}m ago`;
   return `${Math.round(elapsedMs / hour)}h ago`;
+}
+
+function parseTimestamp(value: string | number | Date | null | undefined) {
+  if (value == null || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function assetTimestamp(asset: MapAsset) {
+  return asset.observedAt || asset.updatedAt || asset.createdAt;
+}
+
+function formatDateTimeLocalInput(value: string | number | Date | null | undefined) {
+  const date = value instanceof Date ? value : new Date(value ?? Date.now());
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  const hour = `${date.getHours()}`.padStart(2, '0');
+  const minute = `${date.getMinutes()}`.padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function parseDateTimeLocalInput(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
 }
 
 function classifyAssetFamily(asset: MapAsset): SignalFamily {
@@ -207,13 +466,48 @@ function sourceKey(asset: MapAsset) {
   return asset.sourceId || 'manual';
 }
 
-function sourceLabel(sourceId: string, statuses: MapSourceStatus[]) {
-  if (sourceId === 'manual') return 'Operator Assets';
-  return statuses.find((source) => source.id === sourceId)?.name ?? sourceId.toUpperCase();
+function sourceDisplayMeta(sourceId: string, statuses: MapSourceStatus[]) {
+  const direct = SOURCE_DETAILS[sourceId];
+  if (direct) return direct;
+
+  const source = statuses.find((entry) => entry.id === sourceId);
+  const category = source?.category ?? 'transport';
+  const groupId: SourceGroupId = category === 'news'
+    ? 'news'
+    : category === 'disaster'
+      ? 'disaster'
+      : category === 'seismic'
+        ? 'earthquakes'
+        : category === 'weather'
+          ? 'weather'
+          : category === 'fire'
+            ? 'wildfire'
+            : category === 'nuclear'
+              ? 'nuclear'
+              : category === 'transport'
+                ? 'transport'
+                : category === 'freight'
+                  ? 'transport'
+                  : category === 'maritime'
+                    ? 'transport'
+                    : category === 'mobility'
+                      ? 'transport'
+                      : category === 'reference'
+                        ? 'transport'
+                        : 'transport';
+
+  return {
+    groupId,
+    title: source?.name ?? sourceId.toUpperCase(),
+    source: source ? `${source.name}${source.attribution ? ` — ${source.attribution}` : ''}` : sourceId.toUpperCase(),
+    description: source?.description || source?.attribution || '',
+  };
 }
 
 function sourceIcon(sourceId: string) {
   switch (sourceId) {
+    case 'manual':
+      return <MapPin size={16} />;
     case 'gdelt':
       return <Globe2 size={16} />;
     case 'gdacs':
@@ -225,6 +519,10 @@ function sourceIcon(sourceId: string) {
     case 'firms':
       return <Flame size={16} />;
     case 'radnet':
+      return <Orbit size={16} />;
+    case 'nrcevents':
+      return <Orbit size={16} />;
+    case 'nrcreactorstatus':
       return <Orbit size={16} />;
     case 'trafficcams':
       return <Camera size={16} />;
@@ -379,6 +677,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [localApiPolling, setLocalApiPolling] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MapAsset | null>(null);
   const [mapQuery, setMapQuery] = useState('');
+  const [airQualityEnabled, setAirQualityEnabled] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [dateWindowPreset, setDateWindowPreset] = useState<'last1h' | 'last6h' | 'last24h' | 'last7d' | 'last30d' | 'custom' | 'all'>('last24h');
+  const [dateWindowStart, setDateWindowStart] = useState(() => formatDateTimeLocalInput(Date.now() - 24 * 60 * 60 * 1000));
+  const [dateWindowEnd, setDateWindowEnd] = useState(() => formatDateTimeLocalInput(Date.now()));
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleFamilies, setVisibleFamilies] = useState<Record<SignalFamily, boolean>>({
     logistics: true,
@@ -395,6 +698,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     nws: true,
     firms: true,
     radnet: true,
+    nrcevents: true,
+    nrcreactorstatus: true,
     trafficcams: true,
     trackedflights: true,
     eurdep: true,
@@ -605,6 +910,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   useEffect(() => {
     chatScrollerRef.current?.scrollTo({ top: chatScrollerRef.current.scrollHeight, behavior: 'smooth' });
   }, [session?.history]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!selectedAsset) return;
@@ -902,24 +1212,191 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [clearError],
   );
 
-  const filteredAssets = useMemo(
+  const focusSavedPoint = useCallback((asset: MapAsset) => {
+    setVisibleSources((current) => ({
+      ...current,
+      manual: true,
+    }));
+    setSelectedAsset(asset);
+    clearError();
+  }, [clearError]);
+
+  const mapDateWindow = useMemo(() => {
+    if (dateWindowPreset === 'all') {
+      return { startMs: null as number | null, endMs: null as number | null, label: 'All time' };
+    }
+
+    if (dateWindowPreset === 'custom') {
+      const startMs = parseDateTimeLocalInput(dateWindowStart);
+      const endMs = parseDateTimeLocalInput(dateWindowEnd);
+      return {
+        startMs,
+        endMs,
+        label: startMs != null && endMs != null
+          ? `${new Date(startMs).toLocaleDateString([], { month: 'short', day: '2-digit' })} · ${new Date(startMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(endMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : 'Custom range',
+      };
+    }
+
+    const durationMs = dateWindowPreset === 'last1h'
+      ? 60 * 60 * 1000
+      : dateWindowPreset === 'last6h'
+        ? 6 * 60 * 60 * 1000
+        : dateWindowPreset === 'last7d'
+          ? 7 * 24 * 60 * 60 * 1000
+          : dateWindowPreset === 'last30d'
+            ? 30 * 24 * 60 * 60 * 1000
+            : 24 * 60 * 60 * 1000;
+    return {
+      startMs: nowTick - durationMs,
+      endMs: nowTick,
+      label:
+        dateWindowPreset === 'last1h'
+          ? 'Last 1 hour'
+          : dateWindowPreset === 'last6h'
+            ? 'Last 6 hours'
+            : dateWindowPreset === 'last7d'
+              ? 'Last 7 days'
+              : dateWindowPreset === 'last30d'
+                ? 'Last 30 days'
+                : 'Last 24 hours',
+    };
+  }, [dateWindowEnd, dateWindowPreset, dateWindowStart, nowTick]);
+
+  const mapDateWindowRange = useMemo(() => ({
+    start: mapDateWindow.startMs != null ? new Date(mapDateWindow.startMs).toISOString() : null,
+    end: mapDateWindow.endMs != null ? new Date(mapDateWindow.endMs).toISOString() : null,
+    label: mapDateWindow.label,
+  }), [mapDateWindow.endMs, mapDateWindow.label, mapDateWindow.startMs]);
+
+  const isAssetInMapWindow = useCallback((asset: MapAsset) => {
+    const sourceId = sourceKey(asset);
+    if (sourceId === 'manual') return true;
+    if (mapDateWindow.startMs == null && mapDateWindow.endMs == null) return true;
+    const timestamp = parseTimestamp(assetTimestamp(asset)) ?? parseTimestamp(asset.updatedAt) ?? parseTimestamp(asset.createdAt);
+    if (timestamp == null) return true;
+    if (mapDateWindow.startMs != null && timestamp < mapDateWindow.startMs) return false;
+    if (mapDateWindow.endMs != null && timestamp > mapDateWindow.endMs) return false;
+    return true;
+  }, [mapDateWindow.endMs, mapDateWindow.startMs]);
+
+  const mapVisibleAssets = useMemo(
     () => assets.filter((asset) => (
       visibleFamilies[classifyAssetFamily(asset)]
       && (visibleSources[sourceKey(asset)] ?? true)
+      && isAssetInMapWindow(asset)
       && assetMatchesQuery(asset, mapQuery)
     )),
-    [assets, mapQuery, visibleFamilies, visibleSources],
+    [assets, isAssetInMapWindow, mapQuery, visibleFamilies, visibleSources],
+  );
+
+  const savedPointAssets = useMemo(
+    () => assets
+      .filter((asset) => sourceKey(asset) === 'manual' && assetMatchesQuery(asset, mapQuery))
+      .sort((left, right) => {
+        const leftTs = parseTimestamp(assetTimestamp(left)) ?? 0;
+        const rightTs = parseTimestamp(assetTimestamp(right)) ?? 0;
+        return rightTs - leftTs || left.title.localeCompare(right.title);
+      }),
+    [assets, mapQuery],
   );
 
   useEffect(() => {
-    const selectedStillVisible = selectedAsset ? filteredAssets.some((asset) => asset.id === selectedAsset.id) : false;
+    const selectedStillVisible = selectedAsset ? mapVisibleAssets.some((asset) => asset.id === selectedAsset.id) : false;
     if (selectedStillVisible) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- keep the detail rail pinned to a visible asset when filters change
-    setSelectedAsset(filteredAssets[0] ?? null);
-  }, [filteredAssets, selectedAsset]);
+    setSelectedAsset(mapVisibleAssets[0] ?? null);
+  }, [mapVisibleAssets, selectedAsset]);
 
-  const assistantSeed = latestAssistantMessage(session?.history);
-  const latestUser = latestUserMessage(session?.history);
+  const mapFamilyCounts = useMemo<Record<SignalFamily, number>>(
+    () => mapVisibleAssets.reduce<Record<SignalFamily, number>>((counts, asset) => {
+      counts[classifyAssetFamily(asset)] += 1;
+      return counts;
+    }, {
+      logistics: 0,
+      biological: 0,
+      ordnance: 0,
+      nuclear: 0,
+      general: 0,
+    }),
+    [mapVisibleAssets],
+  );
+
+  const mapSourceCounts = useMemo(
+    () => mapVisibleAssets.reduce<Record<string, number>>((counts, asset) => {
+      const key = sourceKey(asset);
+      counts[key] = (counts[key] ?? 0) + 1;
+      return counts;
+    }, {}),
+    [mapVisibleAssets],
+  );
+
+  const sourceDefinitions = useMemo(() => {
+    const ids = Array.from(new Set([
+      ...SOURCE_GROUPS.flatMap((group) => group.sourceIds),
+      'manual',
+      ...sourceStatuses.map((source) => source.id),
+      ...assets.map(sourceKey),
+    ]));
+    return ids
+      .map((id) => {
+        const meta = sourceDisplayMeta(id, sourceStatuses);
+        const status = sourceStatuses.find((entry) => entry.id === id);
+        return {
+          id,
+          title: meta.title,
+          source: meta.source,
+          description: meta.description,
+          groupId: meta.groupId,
+          status,
+          count: mapSourceCounts[id] ?? 0,
+        };
+      })
+      .sort((left, right) => {
+        const leftGroup = SOURCE_GROUPS.findIndex((group) => group.id === left.groupId);
+        const rightGroup = SOURCE_GROUPS.findIndex((group) => group.id === right.groupId);
+        return (leftGroup === rightGroup ? 0 : leftGroup - rightGroup) || left.title.localeCompare(right.title);
+      });
+  }, [assets, mapSourceCounts, sourceStatuses]);
+
+  const sourceGroups = useMemo(
+    () => SOURCE_GROUPS
+      .map((group) => ({
+        ...group,
+        sources: sourceDefinitions.filter((source) => group.sourceIds.includes(source.id)),
+      }))
+      .filter((group) => group.sources.length > 0),
+    [sourceDefinitions],
+  );
+
+  const visibleSourceToggleCount = useMemo(
+    () => sourceDefinitions.filter((source) => visibleSources[source.id] ?? true).length,
+    [sourceDefinitions, visibleSources],
+  );
+
+  const mapActiveThreatCount = useMemo(
+    () => mapVisibleAssets.filter((asset) => {
+      const family = classifyAssetFamily(asset);
+      const details = `${asset.title} ${asset.status ?? ''} ${asset.notes ?? ''}`.toLowerCase();
+      return family !== 'general' || /(alert|watch|warning|anomaly|critical|threat)/.test(details);
+    }).length,
+    [mapVisibleAssets],
+  );
+
+  const mapReportCount = useMemo(
+    () => mapVisibleAssets.filter((asset) => asset.type === 'document' || asset.type === 'note').length,
+    [mapVisibleAssets],
+  );
+
+  const mapAnalyticsCount = useMemo(
+    () => mapVisibleAssets.filter((asset) => asset.type === 'video' || asset.type === 'link').length + bridge.recentJobs.length,
+    [bridge.recentJobs.length, mapVisibleAssets],
+  );
+
+  const visibleMapLayerCount = useMemo(
+    () => activeLayerCount(layers, mapVisibleAssets),
+    [layers, mapVisibleAssets],
+  );
 
   const runningTerminalCount = useMemo(
     () => Object.values(terminals).filter((terminal) => terminal.running).length,
@@ -940,25 +1417,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [assets],
   );
 
-  const sourceCounts = useMemo(
-    () => assets.reduce<Record<string, number>>((counts, asset) => {
-      const key = sourceKey(asset);
-      counts[key] = (counts[key] ?? 0) + 1;
-      return counts;
-    }, {}),
-    [assets],
-  );
-
-  const sourceOptions = useMemo(() => {
-    const ids = Array.from(new Set(['manual', ...sourceStatuses.map((source) => source.id), ...assets.map(sourceKey)]));
-    return ids.map((id) => ({
-      id,
-      label: sourceLabel(id, sourceStatuses),
-      status: sourceStatuses.find((source) => source.id === id),
-      count: sourceCounts[id] ?? 0,
-    }));
-  }, [assets, sourceCounts, sourceStatuses]);
-
   const liveSourceCount = useMemo(
     () => sourceStatuses.filter((source) => !source.catalogOnly && source.enabled && source.ok).length,
     [sourceStatuses],
@@ -967,11 +1425,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const catalogSourceCount = useMemo(
     () => sourceStatuses.filter((source) => source.catalogOnly).length,
     [sourceStatuses],
-  );
-
-  const visibleMapLayerCount = useMemo(
-    () => activeLayerCount(layers, filteredAssets),
-    [filteredAssets, layers],
   );
 
   const activeThreatCount = useMemo(
@@ -993,6 +1446,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [assets, bridge.recentJobs],
   );
 
+  const assistantSeed = latestAssistantMessage(session?.history);
+  const latestUser = latestUserMessage(session?.history);
+
   const operationalPosture = useMemo(() => {
     if (error) {
       return {
@@ -1008,11 +1464,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         detail: `CLI handoff ${bridge.activeJob.state}. Session ${bridge.activeJob.sessionId} is in motion.`,
       };
     }
-    if (activeThreatCount > 0) {
+    if (mapActiveThreatCount > 0) {
       return {
         label: 'Monitoring',
         tone: 'watch',
-        detail: `${activeThreatCount} tracked signals are currently under watch across the network.`,
+        detail: `${mapActiveThreatCount} tracked signals are currently under watch across the current map window.`,
       };
     }
     return {
@@ -1020,27 +1476,27 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       tone: 'nominal',
       detail: 'All systems stable. No immediate threats detected.',
     };
-  }, [activeThreatCount, bridge.activeJob, error]);
+  }, [bridge.activeJob, error, mapActiveThreatCount]);
 
   const readinessScore = useMemo(() => {
     const score = 58
-      + Math.min(activeLayerCount(layers), 5) * 5
-      + Math.min(assets.length, 6) * 3
-      + Math.min(liveSourceCount, 5) * 2
+      + Math.min(activeLayerCount(layers, mapVisibleAssets), 5) * 5
+      + Math.min(mapVisibleAssets.length, 6) * 3
+      + Math.min(visibleSourceToggleCount, 5) * 2
       + runningTerminalCount * 4
       - (bridge.activeJob ? 8 : 0)
       - (error ? 18 : 0);
     return Math.max(32, Math.min(94, score));
-  }, [assets.length, bridge.activeJob, error, layers, liveSourceCount, runningTerminalCount]);
+  }, [bridge.activeJob, error, mapVisibleAssets, runningTerminalCount, visibleSourceToggleCount, layers]);
 
   const familySummaryCards = useMemo(
     () => [
-      { key: 'ordnance', label: 'Ordnance', count: familyCounts.ordnance, note: 'Alerts under review' },
-      { key: 'biological', label: 'Biological', count: familyCounts.biological, note: 'Signals being monitored' },
-      { key: 'general', label: 'Intelligence', count: familyCounts.general + assets.filter((asset) => asset.type === 'link').length, note: 'Cross-source watch' },
-      { key: 'nuclear', label: 'Nuclear', count: familyCounts.nuclear, note: 'Alerts currently tagged' },
+      { key: 'ordnance', label: 'Ordnance', count: mapFamilyCounts.ordnance, note: 'Alerts under review' },
+      { key: 'biological', label: 'Biological', count: mapFamilyCounts.biological, note: 'Signals being monitored' },
+      { key: 'general', label: 'Intelligence', count: mapFamilyCounts.general + mapVisibleAssets.filter((asset) => asset.type === 'link').length, note: 'Cross-source watch' },
+      { key: 'nuclear', label: 'Nuclear', count: mapFamilyCounts.nuclear, note: 'Alerts currently tagged' },
     ],
-    [assets, familyCounts],
+    [mapFamilyCounts, mapVisibleAssets],
   );
 
   const briefingItems = useMemo(
@@ -1048,35 +1504,35 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       {
         id: 'threats',
         label: 'Threat Picture',
-        title: activeThreatCount ? `${activeThreatCount} monitored signals` : 'No active threats',
-        detail: activeThreatCount
-          ? `${familyCounts.ordnance} ordnance, ${familyCounts.biological} bio, ${familyCounts.nuclear} nuclear.`
+        title: mapActiveThreatCount ? `${mapActiveThreatCount} monitored signals` : 'No active threats',
+        detail: mapActiveThreatCount
+          ? `${mapFamilyCounts.ordnance} ordnance, ${mapFamilyCounts.biological} bio, ${mapFamilyCounts.nuclear} nuclear.`
           : 'Coverage is clear across tagged threat families.',
       },
       {
         id: 'logistics',
         label: 'Logistics',
-        title: familyCounts.logistics ? `${familyCounts.logistics} logistics-linked items` : 'No logistics markers',
-        detail: familyCounts.logistics
+        title: mapFamilyCounts.logistics ? `${mapFamilyCounts.logistics} logistics-linked items` : 'No logistics markers',
+        detail: mapFamilyCounts.logistics
           ? 'Route, cargo, or shipping activity is represented in the current map assets.'
           : 'Awaiting logistics-linked documents, links, or feeds.',
       },
       {
         id: 'analytics',
         label: 'Analytics',
-        title: `${analyticsCount} analytics signals`,
-        detail: `${layers.length} map layers visible and ${bridge.recentJobs.length} bridge jobs tracked.`,
+        title: `${mapAnalyticsCount} analytics signals`,
+        detail: `${visibleMapLayerCount} map layers visible and ${bridge.recentJobs.length} bridge jobs tracked.`,
       },
       {
         id: 'reports',
         label: 'Reports',
-        title: `${reportCount} report assets`,
-        detail: reportCount
+        title: `${mapReportCount} report assets`,
+        detail: mapReportCount
           ? 'Documents and notes are ready for review in the document center.'
           : 'No reports have been linked into the map store yet.',
       },
     ],
-    [activeThreatCount, analyticsCount, bridge.recentJobs.length, familyCounts, layers.length, reportCount],
+    [bridge.recentJobs.length, mapActiveThreatCount, mapAnalyticsCount, mapFamilyCounts, mapReportCount, visibleMapLayerCount],
   );
 
   const statusCards = useMemo(
@@ -1143,13 +1599,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     () => session?.history.filter((message) => message.role === 'assistant' || message.role === 'user').slice(-4) ?? [],
     [session?.history],
   );
-
-  const documentCenterAssets = useMemo(() => {
-    const ordered = selectedAsset
-      ? [selectedAsset, ...filteredAssets.filter((asset) => asset.id !== selectedAsset.id)]
-      : filteredAssets;
-    return ordered.slice(0, 4);
-  }, [filteredAssets, selectedAsset]);
 
   const documentGroups = useMemo(() => groupDocumentsByProject(documents), [documents]);
   const toolGroups = useMemo(() => groupToolsByCategory(toolCatalog?.tools ?? []), [toolCatalog]);
@@ -1362,11 +1811,86 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     )}
                   </div>
 
+                  <div className="ops-rail-card ops-filter-card">
+                    <div className="ops-source-card-head">
+                      <div>
+                        <div className="ops-section-kicker">Operational Filters</div>
+                        <strong>Air Quality / AQI and date window</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="ops-button ghost"
+                        aria-pressed={airQualityEnabled}
+                        onClick={() => setAirQualityEnabled((current) => !current)}
+                        title="Toggle the Air Quality / AQI overlay"
+                      >
+                        <Orbit size={16} /> {airQualityEnabled ? 'AQI On' : 'AQI Off'}
+                      </button>
+                    </div>
+                    <div className="ops-filter-stack">
+                      <label className="ops-filter-field">
+                        <span>Visible window</span>
+                        <select
+                          className="ops-input ops-select"
+                          value={dateWindowPreset}
+                          onChange={(event) => {
+                            const nextPreset = event.target.value as typeof dateWindowPreset;
+                            setDateWindowPreset(nextPreset);
+                            if (nextPreset === 'custom') {
+                              setDateWindowStart(formatDateTimeLocalInput(Date.now() - 24 * 60 * 60 * 1000));
+                              setDateWindowEnd(formatDateTimeLocalInput(Date.now()));
+                            }
+                          }}
+                        >
+                          <option value="last1h">Last 1 hour</option>
+                          <option value="last6h">Last 6 hours</option>
+                          <option value="last24h">Last 24 hours</option>
+                          <option value="last7d">Last 7 days</option>
+                          <option value="last30d">Last 30 days</option>
+                          <option value="custom">Custom range</option>
+                          <option value="all">All time</option>
+                        </select>
+                      </label>
+                      {dateWindowPreset === 'custom' ? (
+                        <div className="ops-filter-range">
+                          <label className="ops-filter-field">
+                            <span>Start</span>
+                            <input
+                              className="ops-input"
+                              type="datetime-local"
+                              value={dateWindowStart}
+                              onChange={(event) => setDateWindowStart(event.target.value)}
+                            />
+                          </label>
+                          <label className="ops-filter-field">
+                            <span>End</span>
+                            <input
+                              className="ops-input"
+                              type="datetime-local"
+                              value={dateWindowEnd}
+                              onChange={(event) => setDateWindowEnd(event.target.value)}
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                      <div className="ops-filter-footer">
+                        <button
+                          type="button"
+                          className="ops-button ghost"
+                          onClick={() => setDateWindowPreset('all')}
+                        >
+                          Clear
+                        </button>
+                        <span className="ops-helper">Window: {mapDateWindowRange.label}. Filtered records hide stale events unless the window includes them.</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="ops-rail-card ops-source-card">
                     <div className="ops-source-card-head">
                       <div>
                         <div className="ops-section-kicker">Data Sources</div>
-                        <strong>{liveSourceCount} live feeds · {catalogSourceCount} reference sources</strong>
+                        <strong>{visibleSourceToggleCount} visible sources · {sourceGroups.length} data-type groups · {catalogSourceCount} reference entries</strong>
                       </div>
                       <button
                         type="button"
@@ -1378,36 +1902,55 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         {sourceRefreshing ? <LoaderCircle className="spinning" size={16} /> : <RefreshCw size={16} />}
                       </button>
                     </div>
-                    <div className="ops-source-list">
-                      {sourceOptions.map((source) => (
-                        <button
-                          key={source.id}
-                          type="button"
-                          className="ops-source-toggle"
-                          data-active={visibleSources[source.id] ?? true}
-                          data-tone={sourceStatusTone(source.status)}
-                          onClick={() => {
-                            setVisibleSources((current) => ({
-                              ...current,
-                              [source.id]: !(current[source.id] ?? true),
-                            }));
-                          }}
-                          title={source.status?.lastError || source.status?.description || source.status?.attribution || source.label}
-                        >
-                          <span className="ops-layer-label">
-                            {sourceIcon(source.id)}
-                            <span className="ops-source-copy">
-                              <strong>{source.label}</strong>
-                              {source.status?.description ? <small>{source.status.description}</small> : null}
-                            </span>
-                          </span>
-                          <span className="ops-source-meta">
-                            <span>{source.count}</span>
-                            {source.status?.requiresKey && !source.status.enabled ? <span>key</span> : null}
-                            {source.status?.catalogOnly ? <span>ref</span> : null}
-                          </span>
-                        </button>
-                      ))}
+                    <div className="ops-source-groups">
+                      {sourceGroups.map((group) => {
+                        const totalCount = group.sources.reduce((sum, source) => sum + source.count, 0);
+                        return (
+                          <section key={group.id} className="ops-source-group">
+                            <div className="ops-source-group-head">
+                              <span className="ops-source-group-title">
+                                {sourceGroupIcon(group.icon)}
+                                <span>
+                                  <strong>{group.label}</strong>
+                                  <small>{group.description}</small>
+                                </span>
+                              </span>
+                              <span className="ops-mini-badge">{totalCount} visible</span>
+                            </div>
+                            <div className="ops-source-list">
+                              {group.sources.map((source) => (
+                                <button
+                                  key={source.id}
+                                  type="button"
+                                  className="ops-source-toggle"
+                                  data-active={visibleSources[source.id] ?? true}
+                                  data-tone={sourceStatusTone(source.status)}
+                                  onClick={() => {
+                                    setVisibleSources((current) => ({
+                                      ...current,
+                                      [source.id]: !(current[source.id] ?? true),
+                                    }));
+                                  }}
+                                  title={source.status?.lastError || source.status?.description || source.source}
+                                >
+                                  <span className="ops-layer-label">
+                                    {sourceIcon(source.id)}
+                                    <span className="ops-source-copy">
+                                      <strong>{source.title}</strong>
+                                      <small>Source: {source.source}</small>
+                                    </span>
+                                  </span>
+                                  <span className="ops-source-meta">
+                                    <span>{source.count}</span>
+                                    {source.status?.requiresKey && !source.status?.enabled ? <span>key</span> : null}
+                                    {source.status?.catalogOnly ? <span>ref</span> : null}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </section>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1448,8 +1991,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       <h2>Geo-linked signal picture</h2>
                     </div>
                     <div className="ops-stage-meta">
-                      Showing {filteredAssets.length} assets across {Object.values(visibleFamilies).filter(Boolean).length}/
-                      {SIGNAL_FAMILIES.length} signal families and {Object.values(visibleSources).filter(Boolean).length} data sources.
+                      Showing {mapVisibleAssets.length} assets across {Object.values(visibleFamilies).filter(Boolean).length}/
+                      {SIGNAL_FAMILIES.length} signal families and {visibleSourceToggleCount} data sources.
+                      {mapDateWindowRange.label ? <span> Window {mapDateWindowRange.label}.</span> : null}
                       {clickedCoords ? (
                         <span> Last click {clickedCoords.lat.toFixed(3)}, {clickedCoords.lng.toFixed(3)}</span>
                       ) : null}
@@ -1464,19 +2008,35 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         onChange={(event) => setMapQuery(event.target.value)}
                         placeholder="Filter signals by title, notes, tags, or source..."
                       />
+                      <button
+                        type="button"
+                        className="ops-button ghost"
+                        aria-pressed={airQualityEnabled}
+                        onClick={() => setAirQualityEnabled((current) => !current)}
+                        title="Toggle the Air Quality / AQI overlay"
+                      >
+                        <Orbit size={14} /> {airQualityEnabled ? 'AQI On' : 'AQI Off'}
+                      </button>
                       <span className="ops-mini-badge">
                         <Layers3 size={14} /> {visibleMapLayerCount} visible map layers
                       </span>
                       <span className="ops-mini-badge">
-                        <DatabaseZap size={14} /> {assets.filter((asset) => asset.live).length} live source points
+                        <DatabaseZap size={14} /> {mapVisibleAssets.filter((asset) => asset.live).length} live source points
+                      </span>
+                      <span className="ops-mini-badge">
+                        <Orbit size={14} /> {mapDateWindowRange.label}
                       </span>
                     </div>
 
                     <LeafletMap
-                      assets={filteredAssets}
+                      assets={mapVisibleAssets}
                       selectedAssetId={selectedAsset?.id ?? null}
                       onSelectAsset={setSelectedAsset}
                       onMapClick={handleMapClick}
+                      airQualityEnabled={airQualityEnabled}
+                      timeWindowStart={mapDateWindowRange.start}
+                      timeWindowEnd={mapDateWindowRange.end}
+                      timeWindowLabel={mapDateWindowRange.label}
                     />
 
                     <div className="ops-floating-card ops-floating-layers">
@@ -1501,7 +2061,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                               {familyIcon(family.id)}
                               {family.label}
                             </span>
-                            <span className="ops-layer-count">{familyCounts[family.id]}</span>
+                            <span className="ops-layer-count">{mapFamilyCounts[family.id]}</span>
                           </button>
                         ))}
                       </div>
@@ -1554,28 +2114,28 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
 
                   <div className="ops-detail-card">
                     <div className="ops-panel-header">
-                      <h3>Document Center</h3>
-                      <span className="ops-mini-badge">{documentCenterAssets.length} linked items</span>
+                      <h3>Saved Points of Interest</h3>
+                      <span className="ops-mini-badge">{savedPointAssets.length} saved points</span>
                     </div>
                     <div className="ops-panel-body">
-                      {documentCenterAssets.length === 0 ? (
+                      {savedPointAssets.length === 0 ? (
                         <div className="ops-helper">
-                          No linked documents or feeds yet. Once assets are added, they will appear here for quick drill-in.
+                          No saved points yet. Save a location, watched facility, or custom pin to pin it here.
                         </div>
                       ) : (
-                        <div className="ops-document-list">
-                          {documentCenterAssets.map((asset) => (
+                        <div className="ops-poi-list">
+                          {savedPointAssets.map((asset) => (
                             <button
                               key={asset.id}
                               type="button"
-                              className="ops-document-card"
-                              onClick={() => setSelectedAsset(asset)}
+                              className="ops-poi-card"
+                              onClick={() => focusSavedPoint(asset)}
                             >
-                              <span className="ops-document-card-icon">{familyIcon(classifyAssetFamily(asset))}</span>
-                              <span className="ops-document-card-copy">
+                              <span className="ops-poi-card-icon"><MapPin size={16} /></span>
+                              <span className="ops-poi-card-copy">
                                 <strong>{asset.title}</strong>
                                 <small>
-                                  {familyLabel(classifyAssetFamily(asset))} · {asset.status || asset.type}
+                                  {asset.sourceName || 'Operator asset'} · {asset.status || asset.type} · {formatRelative(asset.createdAt || asset.updatedAt || asset.observedAt)}
                                 </small>
                               </span>
                             </button>
@@ -1642,109 +2202,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       <p>{card.detail}</p>
                     </article>
                   ))}
-                </div>
-
-                <div className="ops-panel ops-documents-panel">
-                  <div className="ops-panel-header">
-                    <h3>Documents</h3>
-                    <span className="ops-mini-badge">{documents.length} uploaded docs</span>
-                  </div>
-                  <div className="ops-panel-body ops-documents-body">
-                    <div
-                      className="ops-upload-drop"
-                      data-active={documentDragActive}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        setDocumentDragActive(true);
-                      }}
-                      onDragLeave={() => setDocumentDragActive(false)}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        void uploadDocuments(event.dataTransfer.files);
-                      }}
-                    >
-                      <div className="ops-upload-copy">
-                        <FileUp size={22} />
-                        <div>
-                          <strong>Drop documents here</strong>
-                          <span>Text, markdown, CSV, JSON, PDF, Word, and reference files.</span>
-                        </div>
-                      </div>
-                      <div className="ops-upload-controls">
-                        <input
-                          className="ops-input"
-                          value={documentProject}
-                          onChange={(event) => setDocumentProject(event.target.value)}
-                          placeholder="Project"
-                        />
-                        <label className="ops-button primary ops-file-picker">
-                          <Upload size={16} />
-                          {documentUploading ? 'Uploading...' : 'Upload'}
-                          <input
-                            type="file"
-                            multiple
-                            accept=".txt,.md,.markdown,.pdf,.doc,.docx,.rtf,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.log"
-                            onChange={(event) => {
-                              const files = event.currentTarget.files;
-                              if (files) void uploadDocuments(files);
-                              event.currentTarget.value = '';
-                            }}
-                            disabled={documentUploading}
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="ops-document-groups">
-                      {documentGroups.length === 0 ? (
-                        <div className="ops-helper">No project documents uploaded yet.</div>
-                      ) : (
-                        documentGroups.map((group) => (
-                          <details key={group.project} className="ops-document-project" open>
-                            <summary>
-                              <ChevronRight size={15} />
-                              <strong>{group.project}</strong>
-                              <span>{group.documents.length}</span>
-                            </summary>
-                            <div className="ops-document-table">
-                              {group.documents.map((document) => {
-                                const selected = selectedDocumentIds.includes(document.id);
-                                return (
-                                  <div key={document.id} className="ops-document-row" data-selected={selected}>
-                                    <button
-                                      type="button"
-                                      className="ops-document-ref"
-                                      onClick={() => toggleDocumentContext(document.id)}
-                                      title={selected ? 'Remove from agent context' : 'Add to agent context'}
-                                    >
-                                      <Paperclip size={14} />
-                                    </button>
-                                    <div className="ops-document-row-main">
-                                      <strong>{document.title}</strong>
-                                      <small>
-                                        {document.kind.toUpperCase()} · {formatBytes(document.sizeBytes)} · {formatRelative(document.uploadedAt)} · {document.id}
-                                      </small>
-                                    </div>
-                                    <a className="ops-document-path" href={document.sourceUrl} download title={document.storagePath}>
-                                      {document.fileName}
-                                    </a>
-                                    <button
-                                      type="button"
-                                      className="ops-icon-button"
-                                      onClick={() => { void deleteDocument(document.id); }}
-                                      title="Delete document"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </details>
-                        ))
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 <div className="ops-status-columns">
@@ -2044,37 +2501,104 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
 
                     <div className="ops-panel">
                       <div className="ops-panel-header">
-                        <h3>Project Documents</h3>
+                        <h3>Document Center</h3>
                         <span className="ops-mini-badge">{selectedDocumentIds.length || 'all'} in context</span>
                       </div>
                       <div className="ops-panel-body ops-agent-doc-list">
-                        {documentGroups.length === 0 ? (
-                          <div className="ops-helper">Upload documents from Status Overview.</div>
-                        ) : (
-                          documentGroups.map((group) => (
-                            <details key={group.project} className="ops-agent-side-details" open>
-                              <summary>
-                                <ChevronRight size={14} />
-                                {group.project}
-                                <span>{group.documents.length}</span>
-                              </summary>
-                              {group.documents.map((document) => (
-                                <button
-                                  key={document.id}
-                                  type="button"
-                                  className="ops-agent-doc-button"
-                                  data-selected={selectedDocumentIds.includes(document.id)}
-                                  onClick={() => toggleDocumentContext(document.id)}
-                                  title={document.storagePath}
-                                >
-                                  <FileText size={14} />
-                                  <span>{document.title}</span>
-                                  <small>{document.kind} · {formatBytes(document.sizeBytes)}</small>
-                                </button>
-                              ))}
-                            </details>
-                          ))
-                        )}
+                        <div
+                          className="ops-upload-drop"
+                          data-active={documentDragActive}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            setDocumentDragActive(true);
+                          }}
+                          onDragLeave={() => setDocumentDragActive(false)}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            void uploadDocuments(event.dataTransfer.files);
+                          }}
+                        >
+                          <div className="ops-upload-copy">
+                            <FileUp size={22} />
+                            <div>
+                              <strong>Drop documents here</strong>
+                              <span>Text, markdown, CSV, JSON, PDF, Word, and reference files.</span>
+                            </div>
+                          </div>
+                          <div className="ops-upload-controls">
+                            <input
+                              className="ops-input"
+                              value={documentProject}
+                              onChange={(event) => setDocumentProject(event.target.value)}
+                              placeholder="Project"
+                            />
+                            <label className="ops-button primary ops-file-picker">
+                              <Upload size={16} />
+                              {documentUploading ? 'Uploading...' : 'Upload'}
+                              <input
+                                type="file"
+                                multiple
+                                accept=".txt,.md,.markdown,.pdf,.doc,.docx,.rtf,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.log"
+                                onChange={(event) => {
+                                  const files = event.currentTarget.files;
+                                  if (files) void uploadDocuments(files);
+                                  event.currentTarget.value = '';
+                                }}
+                                disabled={documentUploading}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="ops-document-groups">
+                          {documentGroups.length === 0 ? (
+                            <div className="ops-helper">No project documents uploaded yet.</div>
+                          ) : (
+                            documentGroups.map((group) => (
+                              <details key={group.project} className="ops-document-project" open>
+                                <summary>
+                                  <ChevronRight size={15} />
+                                  <strong>{group.project}</strong>
+                                  <span>{group.documents.length}</span>
+                                </summary>
+                                <div className="ops-document-table">
+                                  {group.documents.map((document) => {
+                                    const selected = selectedDocumentIds.includes(document.id);
+                                    return (
+                                      <div key={document.id} className="ops-document-row" data-selected={selected}>
+                                        <button
+                                          type="button"
+                                          className="ops-document-ref"
+                                          onClick={() => toggleDocumentContext(document.id)}
+                                          title={selected ? 'Remove from agent context' : 'Add to agent context'}
+                                        >
+                                          <Paperclip size={14} />
+                                        </button>
+                                        <div className="ops-document-row-main">
+                                          <strong>{document.title}</strong>
+                                          <small>
+                                            {document.kind.toUpperCase()} · {formatBytes(document.sizeBytes)} · {formatRelative(document.uploadedAt)} · {document.id}
+                                          </small>
+                                        </div>
+                                        <a className="ops-document-path" href={document.sourceUrl} download title={document.storagePath}>
+                                          {document.fileName}
+                                        </a>
+                                        <button
+                                          type="button"
+                                          className="ops-icon-button"
+                                          onClick={() => { void deleteDocument(document.id); }}
+                                          title="Delete document"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </details>
+                            ))
+                          )}
+                        </div>
                       </div>
                     </div>
 

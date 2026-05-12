@@ -26,6 +26,12 @@ export interface OpsMapAsset {
   confidence?: 'low' | 'medium' | 'high';
   observedAt?: string;
   live?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  heading?: number;
+  speed?: number;
+  altitude?: number;
+  trail?: Array<{ lat: number; lng: number; observedAt?: string }>;
 }
 
 export interface OpsMapLayer {
@@ -55,6 +61,11 @@ function normalizeString(value: unknown) {
 function normalizeOptionalString(value: unknown) {
   const normalized = normalizeString(value);
   return normalized || undefined;
+}
+
+function normalizeOptionalNumber(value: unknown) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : undefined;
 }
 
 function normalizeTags(value: unknown) {
@@ -113,6 +124,12 @@ function normalizeAssetRecord(value: unknown): OpsMapAsset | null {
     confidence: normalizeConfidence(record.confidence),
     observedAt: normalizeOptionalString(record.observedAt),
     live: record.live === true,
+    createdAt: normalizeOptionalString(record.createdAt),
+    updatedAt: normalizeOptionalString(record.updatedAt),
+    heading: normalizeOptionalNumber(record.heading),
+    speed: normalizeOptionalNumber(record.speed),
+    altitude: normalizeOptionalNumber(record.altitude),
+    trail: normalizeTrail(record.trail),
   };
 }
 
@@ -124,6 +141,26 @@ function normalizeSeverity(value: unknown): OpsMapAsset['severity'] | undefined 
 function normalizeConfidence(value: unknown): OpsMapAsset['confidence'] | undefined {
   if (value === 'low' || value === 'medium' || value === 'high') return value;
   return undefined;
+}
+
+function normalizeTrailPoint(value: unknown) {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const lat = normalizeOptionalNumber(record.lat);
+  const lng = normalizeOptionalNumber(record.lng);
+  if (lat == null || lng == null) return null;
+  return {
+    lat,
+    lng,
+    observedAt: normalizeOptionalString(record.observedAt),
+  };
+}
+
+function normalizeTrail(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((point) => normalizeTrailPoint(point))
+    .filter((point): point is NonNullable<ReturnType<typeof normalizeTrailPoint>> => Boolean(point));
 }
 
 function normalizeStoreShape(value: unknown): OpsMapStoreShape {
@@ -161,6 +198,12 @@ function normalizeAssetInput(input: Omit<OpsMapAsset, 'id'>): Omit<OpsMapAsset, 
     confidence: normalizeConfidence(input.confidence),
     observedAt: normalizeOptionalString(input.observedAt),
     live: input.live === true,
+    createdAt: normalizeOptionalString(input.createdAt),
+    updatedAt: normalizeOptionalString(input.updatedAt),
+    heading: normalizeOptionalNumber(input.heading),
+    speed: normalizeOptionalNumber(input.speed),
+    altitude: normalizeOptionalNumber(input.altitude),
+    trail: normalizeTrail(input.trail),
   };
 }
 
@@ -205,9 +248,12 @@ class OpsMapStore {
 
   async create(input: Omit<OpsMapAsset, 'id'>) {
     const store = await this.read();
+    const now = new Date().toISOString();
     const asset: OpsMapAsset = {
       ...normalizeAssetInput(input),
       id: `asset-${randomUUID().slice(0, 10)}`,
+      createdAt: normalizeOptionalString(input.createdAt) || now,
+      updatedAt: now,
     };
     store.assets.push(asset);
     sortAssets(store.assets);
@@ -221,6 +267,7 @@ class OpsMapStore {
     const index = store.assets.findIndex((asset) => asset.id === id);
     if (index === -1) throw new Error(`Asset '${id}' not found`);
 
+    const now = new Date().toISOString();
     store.assets[index] = {
       ...store.assets[index],
       ...(patch.title != null ? { title: normalizeString(patch.title) } : {}),
@@ -234,6 +281,12 @@ class OpsMapStore {
       ...(patch.tags !== undefined ? { tags: normalizeTags(patch.tags) } : {}),
       ...(patch.status !== undefined ? { status: normalizeOptionalString(patch.status) } : {}),
       ...(patch.linkedSessionId !== undefined ? { linkedSessionId: normalizeOptionalString(patch.linkedSessionId) } : {}),
+      ...(patch.createdAt !== undefined ? { createdAt: normalizeOptionalString(patch.createdAt) } : {}),
+      ...(patch.heading !== undefined ? { heading: normalizeOptionalNumber(patch.heading) } : {}),
+      ...(patch.speed !== undefined ? { speed: normalizeOptionalNumber(patch.speed) } : {}),
+      ...(patch.altitude !== undefined ? { altitude: normalizeOptionalNumber(patch.altitude) } : {}),
+      ...(patch.trail !== undefined ? { trail: normalizeTrail(patch.trail) } : {}),
+      updatedAt: now,
       id,
     };
 

@@ -20,7 +20,7 @@ import type { MiddlewareHandler } from 'hono';
  * - style-src: Allow self, inline styles (needed for some UI libraries), and Google Fonts
  * - font-src: Allow self and Google Fonts CDN
  * - connect-src: Allow self and WebSocket connections to localhost
- * - img-src: Allow self, data URIs, and blob URLs (for generated images)
+ * - img-src: Allow self, data URIs, blob URLs, and remote map tile domains
  * - frame-ancestors 'none': Prevent framing (like X-Frame-Options: DENY)
  */
 // Build connect-src dynamically: always include localhost, plus any extra CSP sources
@@ -54,7 +54,7 @@ function getCspDirectives(): string {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     `connect-src ${connectSrc}`,
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://server.arcgisonline.com",
     "media-src 'self' blob:",  // Allow blob: URLs for TTS audio playback
     "frame-src https://s3.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com https://s.tradingview.com",
     "frame-ancestors 'none'",

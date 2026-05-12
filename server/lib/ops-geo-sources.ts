@@ -13,6 +13,8 @@ export type OpsGeoSourceId =
   | 'eurdep'
   | 'safecast'
   | 'gmcmap'
+  | 'nrcevents'
+  | 'nrcreactorstatus'
   | 'ntad'
   | 'faf'
   | 'marinecadastre'
@@ -181,7 +183,7 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}) {
   }
 }
 
-async function fetchJson(url: string) {
+export async function fetchJson(url: string) {
   const response = await fetchWithTimeout(url);
   return response.json() as Promise<unknown>;
 }
@@ -218,6 +220,12 @@ function sourceAsset(
     confidence: input.confidence,
     observedAt: input.observedAt,
     live: true,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+    heading: input.heading,
+    speed: input.speed,
+    altitude: input.altitude,
+    trail: input.trail,
   };
 }
 
@@ -257,6 +265,153 @@ function splitList(value: unknown) {
     .split(/[;,|\t]/)
     .map((entry) => cleanText(entry))
     .filter(Boolean);
+}
+
+interface GeoPoint {
+  lat: number;
+  lng: number;
+  sourceLabel?: string;
+}
+
+const locationGeocodeCache = new Map<string, Promise<GeoPoint | null>>();
+const locationGeocodeResultCache = new Map<string, GeoPoint | null>();
+
+function locationKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function parseGeoPointFromNominatim(payload: unknown): GeoPoint | null {
+  if (!Array.isArray(payload) || payload.length === 0) return null;
+  const candidate = payload[0];
+  if (!isRecord(candidate)) return null;
+  const lat = parseNumber(candidate.lat);
+  const lng = parseNumber(candidate.lon ?? candidate.lng);
+  if (lat == null || lng == null) return null;
+  return {
+    lat,
+    lng,
+    sourceLabel: cleanText(candidate.display_name || candidate.name),
+  };
+}
+
+function parseGeoPointFromOpenMeteo(payload: unknown): GeoPoint | null {
+  if (!isRecord(payload)) return null;
+  const results = asArray(payload.results);
+  if (!results.length) return null;
+  const candidate = results[0];
+  if (!isRecord(candidate)) return null;
+  const lat = parseNumber(candidate.latitude);
+  const lng = parseNumber(candidate.longitude);
+  if (lat == null || lng == null) return null;
+  return {
+    lat,
+    lng,
+    sourceLabel: cleanText(candidate.name || candidate.admin1 || candidate.country),
+  };
+}
+
+async function geocodeQuery(query: string): Promise<GeoPoint | null> {
+  const normalized = locationKey(query);
+  if (!normalized) return null;
+  if (locationGeocodeResultCache.has(normalized)) return locationGeocodeResultCache.get(normalized) ?? null;
+  if (locationGeocodeCache.has(normalized)) return locationGeocodeCache.get(normalized) ?? null;
+
+  const promise = (async () => {
+    const encoded = encodeURIComponent(query);
+
+    try {
+      const nominatim = await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encoded}`);
+      const point = parseGeoPointFromNominatim(nominatim);
+      if (point) return point;
+    } catch {
+      // fall through to Open-Meteo geocoding
+    }
+
+    try {
+      const openMeteo = await fetchJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encoded}&count=1&language=en&format=json`);
+      const point = parseGeoPointFromOpenMeteo(openMeteo);
+      if (point) return point;
+    } catch {
+      // ignore geocoding fallback failures
+    }
+
+    return null;
+  })();
+
+  locationGeocodeCache.set(normalized, promise);
+  const result = await promise;
+  locationGeocodeResultCache.set(normalized, result);
+  return result;
+}
+
+function parseNrcDateTime(dateText: string, timeText: string) {
+  const dateMatch = String(dateText || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const timeMatch = String(timeText || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!dateMatch || !timeMatch) return undefined;
+
+  const [, month, day, year] = dateMatch;
+  const [, hourText, minuteText, secondText] = timeMatch;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText ?? '0');
+  const date = new Date(Number(year), Number(month) - 1, Number(day), hour, minute, second);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function splitNrcEventRecords(text: string) {
+  const lines = text.replace(/\r/g, '').split('\n').map((line) => line.trimEnd()).filter(Boolean);
+  const header = lines[0] ?? '';
+  const records: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of lines.slice(1)) {
+    if (/^[A-Za-z][^|]*\|\d+\|/.test(line)) {
+      if (current.length) records.push(current);
+      current = [line];
+      continue;
+    }
+
+    if (!current.length) continue;
+    current.push(line);
+  }
+
+  if (current.length) records.push(current);
+  return { header, records };
+}
+
+function parseNrcEventRecord(recordLines: string[], headerIndex: Record<string, number>) {
+  const firstLine = recordLines[0] ?? '';
+  const values = firstLine.split('|');
+  const value = (name: string) => cleanText(values[headerIndex[name]] ?? '');
+  const eventDesc = value('Event Desc');
+  const eventNo = value('En No');
+  const siteName = value('Site Name');
+  const licenseeName = value('Licensee Name');
+  const cityName = value('City Name');
+  const stateCd = value('State Cd');
+  const notificationDt = value('Notification Dt');
+  const notificationTime = value('Notification Time');
+  const eventDt = value('Event Dt');
+  const eventTime = value('Event Time');
+  const emergencyClass = value('Emergency Class');
+  const eventText = [values.slice(headerIndex['Event Text'] >= 0 ? headerIndex['Event Text'] : values.length).join('|'), ...recordLines.slice(1)]
+    .join(' ')
+    .trim();
+
+  return {
+    eventDesc,
+    eventNo,
+    siteName,
+    licenseeName,
+    cityName,
+    stateCd,
+    notificationDt,
+    notificationTime,
+    eventDt,
+    eventTime,
+    emergencyClass,
+    eventText,
+  };
 }
 
 function hostnameFromUrl(url: string) {
@@ -724,6 +879,8 @@ const DEFAULT_TRACKED_FLIGHTS: TrackedFlightDefinition[] = [
   },
 ];
 
+const trackedFlightHistory = new Map<string, Array<{ lat: number; lng: number; observedAt?: string }>>();
+
 function trackedFlights(): TrackedFlightDefinition[] {
   return DEFAULT_TRACKED_FLIGHTS;
 }
@@ -759,9 +916,17 @@ async function fetchTrackedFlightAssets(): Promise<OpsMapAsset[]> {
     const heading = parseNumber(aircraft.track);
     const verticalRate = parseNumber(aircraft.baro_rate);
     const seen = parseNumber(aircraft.seen_pos) ?? parseNumber(aircraft.seen);
+    if (seen != null && seen > 15 * 60) return null;
     const registration = cleanText(aircraft.r || flight.registration, flight.registration);
     const flightId = cleanText(aircraft.flight || registration, registration);
     const aircraftType = cleanText(aircraft.t || flight.label || 'Aircraft');
+    const observedAt = observedAtFromNow(nowMs, seen);
+    const historyKey = `${flight.icao24.toLowerCase()}|${registration.toLowerCase()}`;
+    const existingHistory = trackedFlightHistory.get(historyKey) ?? [];
+    const nextHistory = [...existingHistory, { lat, lng, observedAt }]
+      .filter((point, index, all) => index === 0 || Math.abs(point.lat - all[index - 1].lat) > 0.0002 || Math.abs(point.lng - all[index - 1].lng) > 0.0002)
+      .slice(-6);
+    trackedFlightHistory.set(historyKey, nextHistory);
     const statusParts = [
       formatRounded(altitude, 'ft'),
       formatRounded(speed, 'kt'),
@@ -787,11 +952,197 @@ async function fetchTrackedFlightAssets(): Promise<OpsMapAsset[]> {
       sourceName: 'Tracked Flights',
       severity: 'info',
       confidence: 'high',
-      observedAt: observedAtFromNow(nowMs, seen),
+      observedAt,
+      heading: heading ?? undefined,
+      speed: speed ?? undefined,
+      altitude: altitude ?? undefined,
+      trail: nextHistory,
     });
   }));
 
   return flights.filter((flight): flight is OpsMapAsset => Boolean(flight));
+}
+
+function severityFromNrcEvent(emergencyClass: string, eventDesc: string): OpsMapAsset['severity'] {
+  const normalized = `${emergencyClass} ${eventDesc}`.toLowerCase();
+  if (normalized.includes('general emergency') || normalized.includes('site area emergency')) return 'critical';
+  if (normalized.includes('alert')) return 'warning';
+  if (normalized.includes('unusual event')) return 'watch';
+  return 'info';
+}
+
+function severityFromReactorPower(power: number): OpsMapAsset['severity'] {
+  if (power <= 0) return 'critical';
+  if (power < 50) return 'warning';
+  if (power < 100) return 'watch';
+  return 'info';
+}
+
+async function geocodeCandidates(candidates: string[]) {
+  for (const candidate of candidates) {
+    const point = await geocodeQuery(candidate);
+    if (point) return point;
+  }
+  return null;
+}
+
+function siteNameFromUnit(unit: string) {
+  return unit.replace(/\s+\d+$/, '').trim();
+}
+
+function summarizeReactorGroup(units: Array<{ unit: string; power: number }>) {
+  return units
+    .sort((left, right) => left.unit.localeCompare(right.unit))
+    .map((entry) => `${entry.unit}: ${entry.power}%`)
+    .join(' · ');
+}
+
+async function fetchNrcEventAssets(): Promise<OpsMapAsset[]> {
+  const rawText = await fetchText('https://www.nrc.gov/sites/default/files/doc_library/reading-rm/doc-collections/event-status/event/event-notification-rpt-lastmonth.txt');
+  const { header, records } = splitNrcEventRecords(rawText);
+  const headerIndex = Object.fromEntries(
+    header.split('|').map((entry, index) => [cleanText(entry), index]),
+  );
+
+  const assets = await Promise.all(records.map(async (recordLines) => {
+    const record = parseNrcEventRecord(recordLines, headerIndex);
+    const observedAt = parseNrcDateTime(record.eventDt || record.notificationDt, record.eventTime || record.notificationTime)
+      || parseNrcDateTime(record.notificationDt, record.notificationTime);
+    const sourceLabel = record.siteName || record.cityName || record.licenseeName || record.eventDesc || 'NRC event';
+    const queryCandidates = record.eventDesc.toLowerCase().includes('power reactor')
+      ? [
+        `${record.siteName} nuclear power plant`,
+        `${record.siteName} power station`,
+        `${record.siteName} power plant`,
+        `${record.siteName} reactor`,
+        `${record.cityName}, ${record.stateCd}, USA`,
+        `${record.siteName}, ${record.cityName}, ${record.stateCd}`,
+      ].filter(Boolean)
+      : [
+        `${record.cityName}, ${record.stateCd}, USA`,
+        `${record.siteName}, ${record.cityName}, ${record.stateCd}`,
+        `${record.siteName}`,
+        `${record.licenseeName}, ${record.cityName}, ${record.stateCd}`,
+      ].filter(Boolean);
+    const point = await geocodeCandidates(queryCandidates);
+    if (!point) return null;
+
+    const textPreview = record.eventText || recordLines.slice(1).join(' ');
+    const notesParts = [
+      record.eventDesc ? `${record.eventDesc} event.` : 'NRC event notification.',
+      record.emergencyClass ? `Emergency class ${record.emergencyClass}.` : null,
+      record.notificationDt ? `Notified ${record.notificationDt}${record.notificationTime ? ` ${record.notificationTime}` : ''}.` : null,
+      textPreview ? cleanText(textPreview) : null,
+    ].filter((entry): entry is string => Boolean(entry));
+
+    return sourceAsset('nrcevents', {
+      idParts: [record.eventNo, record.siteName, record.eventDt, record.eventTime, point.lat, point.lng],
+      type: 'note',
+      title: `NRC Event ${record.eventNo || 'report'}: ${sourceLabel}`,
+      lat: point.lat,
+      lng: point.lng,
+      sourceUrl: 'https://www.nrc.gov/reading-rm/doc-collections/event-status/event/index',
+      notes: truncate(notesParts.join(' '), 900),
+      tags: [
+        'nuclear',
+        'nrc',
+        'event',
+        record.eventDesc,
+        record.emergencyClass,
+        record.stateCd,
+        record.cityName,
+        record.siteName,
+      ],
+      status: [record.eventDesc, record.emergencyClass].filter(Boolean).join(' · ') || 'NRC event notification',
+      sourceName: 'NRC Event Notifications',
+      severity: severityFromNrcEvent(record.emergencyClass, record.eventDesc),
+      confidence: 'high',
+      observedAt,
+    });
+  }));
+
+  return assets.filter((asset): asset is OpsMapAsset => Boolean(asset));
+}
+
+async function fetchNrcReactorStatusAssets(): Promise<OpsMapAsset[]> {
+  const rawText = await fetchText('https://www.nrc.gov/reading-rm/doc-collections/event-status/reactor-status/PowerReactorStatusForLast365Days.txt');
+  const rows: Array<{ date: string; unit: string; power: number }> = [];
+  const regex = /(\d{1,2}\/\d{1,2}\/\d{4} 12:00:00 AM)\|([^|]+)\|(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(rawText))) {
+    rows.push({
+      date: match[1],
+      unit: cleanText(match[2]).replace(/\s+/g, ' '),
+      power: Number(match[3]),
+    });
+  }
+
+  const latestByUnit = new Map<string, { date: string; power: number }>();
+  for (const row of rows) {
+    if (!latestByUnit.has(row.unit)) {
+      latestByUnit.set(row.unit, { date: row.date, power: row.power });
+    }
+  }
+
+  const grouped = new Map<string, Array<{ unit: string; power: number; date: string }>>();
+  for (const [unit, details] of latestByUnit.entries()) {
+    const siteName = siteNameFromUnit(unit);
+    const items = grouped.get(siteName) ?? [];
+    items.push({ unit, power: details.power, date: details.date });
+    grouped.set(siteName, items);
+  }
+
+  const assets = await Promise.all(Array.from(grouped.entries()).map(async ([siteName, units]) => {
+    const latestDate = units
+      .map((entry) => new Date(entry.date).getTime())
+      .reduce((left, right) => Math.max(left, right), 0);
+    const observedAt = Number.isFinite(latestDate) ? new Date(latestDate).toISOString() : undefined;
+    const point = await geocodeCandidates([
+      `${siteName} nuclear power plant`,
+      `${siteName} nuclear generating station`,
+      `${siteName} power station`,
+      `${siteName} power plant`,
+      `${siteName} reactor`,
+      siteName,
+    ]);
+    if (!point) return null;
+
+    const powers = units.map((entry) => entry.power);
+    const averagePower = powers.length ? powers.reduce((sum, power) => sum + power, 0) / powers.length : 0;
+    const minPower = powers.length ? Math.min(...powers) : 0;
+    const maxPower = powers.length ? Math.max(...powers) : 0;
+    const summary = summarizeReactorGroup(units);
+    const notes = [
+      `Latest status for ${units.length} unit${units.length === 1 ? '' : 's'} at ${siteName}.`,
+      summary,
+      observedAt ? `Observed ${observedAt}.` : null,
+    ].filter((entry): entry is string => Boolean(entry)).join(' ');
+
+    return sourceAsset('nrcreactorstatus', {
+      idParts: [siteName, observedAt, minPower, maxPower, point.lat, point.lng],
+      type: 'note',
+      title: `Reactor Status: ${siteName}`,
+      lat: point.lat,
+      lng: point.lng,
+      sourceUrl: 'https://www.nrc.gov/reading-rm/doc-collections/event-status/reactor-status/index',
+      notes: truncate(notes, 800),
+      tags: [
+        'nuclear',
+        'nrc',
+        'reactor',
+        'status',
+        siteName,
+        ...units.map((entry) => entry.unit),
+      ],
+      status: `${Math.round(averagePower)}% average power${minPower < 100 ? ` · low ${Math.round(minPower)}%` : ''}`,
+      sourceName: 'NRC Reactor Status',
+      severity: severityFromReactorPower(minPower),
+      confidence: 'high',
+      observedAt,
+    });
+  }));
+
+  return assets.filter((asset): asset is OpsMapAsset => Boolean(asset));
 }
 
 const SOURCE_DEFINITIONS: SourceDefinition[] = [
@@ -846,6 +1197,24 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     attribution: 'U.S. Environmental Protection Agency RadNet',
     description: 'U.S. near-real-time gamma radiation air monitoring network across all 50 states.',
     fetch: fetchRadNetAssets,
+  },
+  {
+    id: 'nrcevents',
+    name: 'NRC Event Notifications',
+    category: 'nuclear',
+    refreshSeconds: 15 * 60,
+    attribution: 'U.S. Nuclear Regulatory Commission event notification reports',
+    description: 'Recent NRC event notifications covering power reactor, agreement state, and materials events.',
+    fetch: fetchNrcEventAssets,
+  },
+  {
+    id: 'nrcreactorstatus',
+    name: 'NRC Reactor Status',
+    category: 'nuclear',
+    refreshSeconds: 15 * 60,
+    attribution: 'U.S. Nuclear Regulatory Commission power reactor status reports',
+    description: 'Daily power reactor status for operating commercial reactors in the United States.',
+    fetch: fetchNrcReactorStatusAssets,
   },
   {
     id: 'trafficcams',
