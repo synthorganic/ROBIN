@@ -22,10 +22,12 @@ interface LeafletMapInstance {
   flyTo?: (coords: [number, number], zoom?: number, options?: Record<string, unknown>) => void;
   fitBounds: (bounds: LeafletBounds, options?: Record<string, unknown>) => void;
   getBounds: () => { getWest: () => number; getSouth: () => number; getEast: () => number; getNorth: () => number };
+  getCenter?: () => { lat: number; lng: number };
   getZoom: () => number;
   invalidateSize: (options?: Record<string, unknown>) => void;
   on: (event: string, handler: (...args: any[]) => void) => void;
   off: (event: string, handler: (...args: any[]) => void) => void;
+  createPane?: (name: string) => HTMLElement;
   remove?: () => void;
 }
 
@@ -34,10 +36,14 @@ interface LeafletApi {
   tileLayer: (url: string, options: Record<string, unknown>) => LeafletLayer;
   marker: (coords: [number, number], options?: Record<string, unknown>) => LeafletLayer;
   circleMarker: (coords: [number, number], options?: Record<string, unknown>) => LeafletLayer;
+  rectangle: (coords: Array<[number, number]>, options?: Record<string, unknown>) => LeafletLayer;
   polyline: (coords: Array<[number, number]>, options?: Record<string, unknown>) => LeafletLayer;
   layerGroup: (layers?: LeafletLayer[]) => LeafletLayer & { clearLayers?: () => void };
   divIcon: (options: Record<string, unknown>) => Record<string, unknown>;
   latLngBounds: (coords: Array<[number, number]>) => LeafletBounds;
+  control?: {
+    zoom: (options?: Record<string, unknown>) => LeafletLayer;
+  };
 }
 
 declare global {
@@ -51,10 +57,13 @@ interface LeafletMapProps {
   selectedAssetId?: string | null;
   onMapClick: (lat: number, lng: number) => void;
   onSelectAsset: (asset: MapAsset) => void;
+  onViewportChange?: (viewport: { west: number; south: number; east: number; north: number; zoom: number; centerLat: number; centerLng: number }) => void;
   airQualityEnabled?: boolean;
+  airQualityOpacity?: number;
   timeWindowStart?: string | null;
   timeWindowEnd?: string | null;
   timeWindowLabel?: string;
+  onAirQualityStateChange?: (state: OverlayState) => void;
 }
 
 interface OverlayPoint {
@@ -89,6 +98,10 @@ interface OverlayState {
   phase: OverlayPhase;
   name: string;
   detail: string;
+  sampleCount?: number;
+  generatedAt?: string;
+  sourceName?: string;
+  sourceUrl?: string;
 }
 
 interface LayerBundle {
@@ -152,6 +165,13 @@ const AQI_COLORS: Record<OverlayPoint['band'], string> = {
 
 const MAP_PIN_PATH = 'M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0';
 const AIRCRAFT_PATH = 'M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z';
+const MAP_PANES = [
+  ['ops-aqi-pane', 310],
+  ['ops-line-pane', 360],
+  ['ops-point-pane', 420],
+  ['ops-aircraft-pane', 450],
+  ['ops-selected-pane', 500],
+] as const;
 
 function ensureLeaflet(): Promise<LeafletApi> {
   return new Promise((resolve, reject) => {
@@ -228,6 +248,29 @@ function rangeContains(value: string | undefined, start: string | null | undefin
   if (startMs != null && timestamp < startMs) return false;
   if (endMs != null && timestamp > endMs) return false;
   return true;
+}
+
+function uniqueSorted(values: number[]) {
+  return Array.from(new Set(values.filter((value) => Number.isFinite(value)))).sort((left, right) => left - right);
+}
+
+function inferStep(values: number[]) {
+  if (values.length < 2) return null;
+  let minStep = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < values.length; index += 1) {
+    const delta = Math.abs(values[index] - values[index - 1]);
+    if (delta > 0 && delta < minStep) minStep = delta;
+  }
+  return Number.isFinite(minStep) ? minStep : null;
+}
+
+function buildGridCellBounds(point: OverlayPoint, latStep: number | null, lngStep: number | null) {
+  const latPadding = Math.max(latStep ?? 0.12, 0.08) / 2;
+  const lngPadding = Math.max(lngStep ?? 0.12, 0.08) / 2;
+  return [
+    [point.lat - latPadding, point.lng - lngPadding] as [number, number],
+    [point.lat + latPadding, point.lng + lngPadding] as [number, number],
+  ];
 }
 
 function markerColor(asset: MapAsset) {
@@ -319,15 +362,28 @@ function formatBoundsParams(map: LeafletMapInstance) {
   };
 }
 
+function configureMapPanes(map: LeafletMapInstance) {
+  if (!map.createPane) return;
+  // Bottom-to-top map ordering:
+  // base tiles < AQI raster < line overlays < point markers < aircraft < selected highlight < popups/tooltips < app overlays
+  for (const [paneName, zIndex] of MAP_PANES) {
+    const pane = map.createPane(paneName);
+    pane.style.zIndex = String(zIndex);
+  }
+}
+
 export default function LeafletMap({
   assets,
   selectedAssetId,
   onMapClick,
   onSelectAsset,
+  onViewportChange,
   airQualityEnabled = false,
+  airQualityOpacity = 0.48,
   timeWindowStart,
   timeWindowEnd,
   timeWindowLabel,
+  onAirQualityStateChange,
 }: LeafletMapProps) {
   const outerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMapInstance | null>(null);
@@ -356,10 +412,29 @@ export default function LeafletMap({
     detail: airQualityEnabled ? 'Waiting for overlay data...' : 'Off',
   });
 
+  useEffect(() => {
+    onAirQualityStateChange?.(overlayState);
+  }, [onAirQualityStateChange, overlayState]);
+
   const selectedAsset = useMemo(
     () => assets.find((asset) => asset.id === selectedAssetId) ?? null,
     [assets, selectedAssetId],
   );
+
+  const emitViewportChange = useCallback((map: LeafletMapInstance) => {
+    if (!onViewportChange) return;
+    const bounds = map.getBounds();
+    const center = map.getCenter?.();
+    onViewportChange({
+      west: bounds.getWest(),
+      south: bounds.getSouth(),
+      east: bounds.getEast(),
+      north: bounds.getNorth(),
+      zoom: map.getZoom(),
+      centerLat: center?.lat ?? (bounds.getNorth() + bounds.getSouth()) / 2,
+      centerLng: center?.lng ?? (bounds.getEast() + bounds.getWest()) / 2,
+    });
+  }, [onViewportChange]);
 
   const visibleAssetCoords = useMemo(
     () => assets.map((asset) => [asset.lat, asset.lng] as [number, number]),
@@ -498,48 +573,64 @@ export default function LeafletMap({
       overlayLayerRef.current?.clearLayers?.();
 
       if (!filteredPoints.length) {
-        setOverlayState({
+        const nextState = {
           phase: 'empty',
           name: overlay.sourceLabel,
           detail: overlay.emptyReason || 'No AQI values fall within the active date window.',
-        });
+          sampleCount: 0,
+          generatedAt: overlay.generatedAt,
+          sourceName: overlay.sourceName,
+          sourceUrl: overlay.sourceUrl,
+        } satisfies OverlayState;
+        setOverlayState(nextState);
         return;
       }
 
       const overlayLayer = overlayLayerRef.current ?? L.layerGroup().addTo(map);
       overlayLayerRef.current = overlayLayer;
+      const uniqueLatitudes = uniqueSorted(filteredPoints.map((point) => point.lat));
+      const uniqueLongitudes = uniqueSorted(filteredPoints.map((point) => point.lng));
+      const latStep = inferStep(uniqueLatitudes);
+      const lngStep = inferStep(uniqueLongitudes);
 
       filteredPoints.forEach((point) => {
         const color = AQI_COLORS[point.band] ?? AQI_COLORS.unknown;
-        const radius = point.band === 'hazardous' ? 12 : point.band === 'very-unhealthy' ? 11 : point.band === 'unhealthy' ? 10 : point.band === 'usg' ? 9 : 8;
-        const marker = L.circleMarker([point.lat, point.lng], {
-          radius,
-          weight: 1.2,
+        const intensity = point.usAqi ?? point.europeanAqi ?? 0;
+        const fillOpacity = 0.16 + Math.min(0.42, (intensity / 300) * 0.36) * (typeof airQualityOpacity === 'number' ? Math.max(0.12, Math.min(1, airQualityOpacity)) : 1);
+        const rect = L.rectangle(buildGridCellBounds(point, latStep, lngStep), {
+          weight: 0.9,
           color,
           fillColor: color,
-          fillOpacity: 0.34,
-          opacity: 0.9,
-          pane: 'overlayPane',
+          fillOpacity,
+          opacity: 0.76,
+          pane: 'ops-aqi-pane',
         });
-        marker.bindPopup(aqiPopupHtml(point, overlay.sourceLabel, overlay.sourceUrl, overlay.generatedAt), { maxWidth: 280 });
-        overlayLayer.addLayer?.(marker);
+        rect.bindPopup(aqiPopupHtml(point, overlay.sourceLabel, overlay.sourceUrl, overlay.generatedAt), { maxWidth: 280 });
+        overlayLayer.addLayer?.(rect);
       });
 
-      setOverlayState({
+      const nextState = {
         phase: 'ready',
         name: overlay.sourceLabel,
         detail: `${filteredPoints.length} AQI samples loaded from ${overlay.sourceName}.`,
-      });
+        sampleCount: filteredPoints.length,
+        generatedAt: overlay.generatedAt,
+        sourceName: overlay.sourceName,
+        sourceUrl: overlay.sourceUrl,
+      } satisfies OverlayState;
+      setOverlayState(nextState);
     } catch (error) {
       if (controller.signal.aborted) return;
-      setOverlayState({
+      const nextState = {
         phase: 'error',
         name: 'Air Quality / AQI',
         detail: error instanceof Error ? error.message : 'AQI overlay unavailable',
-      });
+        sampleCount: 0,
+      } satisfies OverlayState;
+      setOverlayState(nextState);
       overlayLayerRef.current?.clearLayers?.();
     }
-  }, [airQualityEnabled, timeWindowEnd, timeWindowLabel, timeWindowStart]);
+  }, [airQualityEnabled, airQualityOpacity, timeWindowEnd, timeWindowLabel, timeWindowStart]);
 
   useEffect(() => {
     let disposed = false;
@@ -548,7 +639,7 @@ export default function LeafletMap({
         if (!outerRef.current || disposed || mapRef.current) return;
 
         const map = L.map(outerRef.current, {
-          zoomControl: true,
+          zoomControl: false,
           attributionControl: true,
           scrollWheelZoom: true,
           worldCopyJump: true,
@@ -557,16 +648,28 @@ export default function LeafletMap({
 
         map.setView([20, 0], 2);
         mapRef.current = map;
+        configureMapPanes(map);
+        if (L.control?.zoom) {
+          L.control.zoom({ position: 'bottomright' }).addTo(map);
+        }
         overlayLayerRef.current = L.layerGroup().addTo(map);
         setMapReadyTick((current) => current + 1);
         setBaseLayer(map, L, 0);
+        emitViewportChange(map);
 
         map.on('click', (event: { latlng: { lat: number; lng: number } }) => {
           onMapClick(event.latlng.lat, event.latlng.lng);
         });
 
+        const handleViewportChange = () => emitViewportChange(map);
+        map.on('moveend', handleViewportChange);
+        map.on('zoomend', handleViewportChange);
+
         const resize = () => {
-          window.requestAnimationFrame(() => map.invalidateSize({ pan: false }));
+          window.requestAnimationFrame(() => {
+            map.invalidateSize({ pan: false });
+            emitViewportChange(map);
+          });
         };
 
         if (typeof ResizeObserver !== 'undefined') {
@@ -609,7 +712,7 @@ export default function LeafletMap({
         mapRef.current = null;
       }
     };
-  }, [clearAssetLayers, onMapClick, setBaseLayer]);
+  }, [clearAssetLayers, emitViewportChange, onMapClick, setBaseLayer]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -635,12 +738,16 @@ export default function LeafletMap({
           icon: makePlaneIcon(L, asset.heading, color),
           riseOnHover: true,
           keyboard: false,
+          pane: 'ops-aircraft-pane',
+          zIndexOffset: 200,
         });
       } else if (isSavedPoi) {
         marker = L.marker(point, {
           icon: makePoiIcon(L, color),
           riseOnHover: true,
           keyboard: false,
+          pane: 'ops-point-pane',
+          zIndexOffset: 80,
         });
       } else {
         marker = L.circleMarker(point, {
@@ -650,7 +757,7 @@ export default function LeafletMap({
           fillColor: color,
           fillOpacity: 0.82,
           opacity: 0.92,
-          pane: 'overlayPane',
+          pane: 'ops-point-pane',
         });
       }
 
@@ -667,7 +774,7 @@ export default function LeafletMap({
           lineCap: 'round',
           lineJoin: 'round',
           dashArray: isAircraft ? '7 10' : undefined,
-          pane: 'overlayPane',
+          pane: 'ops-line-pane',
         });
         trailLayer.addTo(map);
         trailLayer.on('click', () => onSelectAsset(asset));

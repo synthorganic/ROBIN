@@ -65,9 +65,43 @@ import {
 import './ops.css';
 
 type OpsTab = 'map' | 'status' | 'agent';
-type RailMode = 'chat' | 'briefings';
+type RailMode = 'overview' | 'chat';
 type SignalFamily = 'logistics' | 'biological' | 'ordnance' | 'nuclear' | 'general';
-type SourceGroupId = 'operator' | 'news' | 'disaster' | 'earthquakes' | 'weather' | 'wildfire' | 'nuclear' | 'traffic' | 'aviation' | 'transport';
+type SourceGroupId = 'operator' | 'news' | 'disaster' | 'earthquakes' | 'weather' | 'environmental' | 'wildfire' | 'nuclear' | 'traffic' | 'aviation' | 'transport';
+
+type AirQualityPhase = 'off' | 'loading' | 'ready' | 'empty' | 'error';
+
+interface AirQualityLayerState {
+  phase: AirQualityPhase;
+  name: string;
+  detail: string;
+  sampleCount: number;
+  generatedAt?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+}
+
+interface MapViewportBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+  zoom: number;
+  centerLat: number;
+  centerLng: number;
+}
+
+interface SourceDefinition {
+  id: string;
+  title: string;
+  source: string;
+  description: string;
+  groupId: SourceGroupId;
+  status?: MapSourceStatus;
+  count: number;
+  tone: 'ok' | 'stale' | 'error' | 'muted' | 'catalog' | 'loading' | 'idle';
+  kind: 'source' | 'overlay';
+}
 
 interface OpsAppProps {
   onLogout: () => Promise<void>;
@@ -126,6 +160,13 @@ const SOURCE_GROUPS: Array<{
     description: 'Weather hazards, warnings, and public safety notices.',
     icon: 'shield',
     sourceIds: ['nws'],
+  },
+  {
+    id: 'environmental',
+    label: 'Environmental Conditions',
+    description: 'Spatial environmental surfaces such as AQI and smoke risk.',
+    icon: 'orbit',
+    sourceIds: ['aqi'],
   },
   {
     id: 'wildfire',
@@ -199,6 +240,12 @@ const SOURCE_DETAILS: Record<string, {
     title: 'Weather & Public Safety Alerts',
     source: 'NOAA / NWS Alerts — National Oceanic and Atmospheric Administration / National Weather Service alerts',
     description: 'Weather hazards, warnings, and public safety alerts.',
+  },
+  aqi: {
+    groupId: 'environmental',
+    title: 'Air Quality / AQI',
+    source: 'Open-Meteo — CAMS air quality forecast',
+    description: 'Type: heatmap / raster / gridded environmental layer.',
   },
   firms: {
     groupId: 'wildfire',
@@ -406,6 +453,18 @@ function assetTimestamp(asset: MapAsset) {
   return asset.observedAt || asset.updatedAt || asset.createdAt;
 }
 
+function approximateDistanceKm(firstLat: number, firstLng: number, secondLat: number, secondLng: number) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const deltaLat = toRadians(secondLat - firstLat);
+  const deltaLng = toRadians(secondLng - firstLng);
+  const lat1 = toRadians(firstLat);
+  const lat2 = toRadians(secondLat);
+  const a = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function formatDateTimeLocalInput(value: string | number | Date | null | undefined) {
   const date = value instanceof Date ? value : new Date(value ?? Date.now());
   if (Number.isNaN(date.getTime())) return '';
@@ -466,7 +525,18 @@ function sourceKey(asset: MapAsset) {
   return asset.sourceId || 'manual';
 }
 
-function sourceDisplayMeta(sourceId: string, statuses: MapSourceStatus[]) {
+function sourceDisplayMeta(sourceId: string, statuses: MapSourceStatus[], airQualityState?: AirQualityLayerState | null) {
+  if (sourceId === 'aqi') {
+    return {
+      groupId: 'environmental' as const,
+      title: 'Air Quality / AQI',
+      source: airQualityState?.sourceName || SOURCE_DETAILS.aqi.source,
+      description: airQualityState
+        ? `${SOURCE_DETAILS.aqi.description} ${airQualityState.detail}`
+        : SOURCE_DETAILS.aqi.description,
+    };
+  }
+
   const direct = SOURCE_DETAILS[sourceId];
   if (direct) return direct;
 
@@ -516,6 +586,8 @@ function sourceIcon(sourceId: string) {
       return <RadioTower size={16} />;
     case 'nws':
       return <ShieldCheck size={16} />;
+    case 'aqi':
+      return <Orbit size={16} />;
     case 'firms':
       return <Flame size={16} />;
     case 'radnet':
@@ -547,6 +619,38 @@ function sourceIcon(sourceId: string) {
     default:
       return <Folder size={16} />;
   }
+}
+
+function SourceGroupCheckbox({
+  checked,
+  indeterminate,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  const checkboxRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+
+  return (
+    <label className="ops-source-group-check">
+      <input
+        ref={checkboxRef}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
+  );
 }
 
 function sourceStatusTone(source: MapSourceStatus | undefined) {
@@ -640,7 +744,7 @@ function toolCallsToTraceItems(toolCalls: AgentToolCall[] = []): AnimatedTraceIt
 
 export default function OpsApp({ onLogout }: OpsAppProps) {
   const [activeTab, setActiveTab] = useState<OpsTab>('map');
-  const [railMode, setRailMode] = useState<RailMode>('chat');
+  const [railMode, setRailMode] = useState<RailMode>('overview');
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<AgentSession | null>(null);
   const [bridge, setBridge] = useState<BridgeStatus>(emptyBridge());
@@ -677,11 +781,20 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [localApiPolling, setLocalApiPolling] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MapAsset | null>(null);
   const [mapQuery, setMapQuery] = useState('');
-  const [airQualityEnabled, setAirQualityEnabled] = useState(false);
+  const [aqiOpacity, setAqiOpacity] = useState(0.48);
+  const [airQualityState, setAirQualityState] = useState<AirQualityLayerState>({
+    phase: 'off',
+    name: 'Air Quality / AQI',
+    detail: 'Overlay off.',
+    sampleCount: 0,
+  });
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [dateWindowPreset, setDateWindowPreset] = useState<'last1h' | 'last6h' | 'last24h' | 'last7d' | 'last30d' | 'custom' | 'all'>('last24h');
   const [dateWindowStart, setDateWindowStart] = useState(() => formatDateTimeLocalInput(Date.now() - 24 * 60 * 60 * 1000));
   const [dateWindowEnd, setDateWindowEnd] = useState(() => formatDateTimeLocalInput(Date.now()));
+  const [mapLeftCollapsed, setMapLeftCollapsed] = useState(false);
+  const [viewportFilterEnabled, setViewportFilterEnabled] = useState(false);
+  const [mapViewportBounds, setMapViewportBounds] = useState<MapViewportBounds | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [visibleFamilies, setVisibleFamilies] = useState<Record<SignalFamily, boolean>>({
     logistics: true,
@@ -700,6 +813,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     radnet: true,
     nrcevents: true,
     nrcreactorstatus: true,
+    aqi: true,
     trafficcams: true,
     trackedflights: true,
     eurdep: true,
@@ -727,6 +841,55 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
 
   const handleError = useCallback((nextError: unknown) => {
     setError(formatError(nextError));
+  }, []);
+
+  const airQualityEnabled = visibleSources.aqi ?? true;
+  const setAirQualityEnabled = useCallback((enabled: boolean) => {
+    setVisibleSources((current) => ({
+      ...current,
+      aqi: enabled,
+    }));
+  }, []);
+
+  const handleAirQualityStateChange = useCallback((state: {
+    phase: AirQualityPhase;
+    name: string;
+    detail: string;
+    sampleCount?: number;
+    generatedAt?: string;
+    sourceName?: string;
+    sourceUrl?: string;
+  }) => {
+    const nextState: AirQualityLayerState = {
+      phase: state.phase,
+      name: state.name,
+      detail: state.detail,
+      sampleCount: state.sampleCount ?? 0,
+      generatedAt: state.generatedAt,
+      sourceName: state.sourceName,
+      sourceUrl: state.sourceUrl,
+    };
+    setAirQualityState((current) => (
+      current.phase === nextState.phase
+      && current.name === nextState.name
+      && current.detail === nextState.detail
+      && current.sampleCount === nextState.sampleCount
+      && current.generatedAt === nextState.generatedAt
+      && current.sourceName === nextState.sourceName
+      && current.sourceUrl === nextState.sourceUrl
+        ? current
+        : nextState
+    ));
+  }, []);
+
+  const setSourceGroupVisibility = useCallback((sourceIds: string[], enabled: boolean) => {
+    setVisibleSources((current) => {
+      const next = { ...current };
+      for (const sourceId of sourceIds) {
+        next[sourceId] = enabled;
+      }
+      return next;
+    });
   }, []);
 
   const applyTerminalState = useCallback((terminal: TerminalState) => {
@@ -1221,6 +1384,40 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     clearError();
   }, [clearError]);
 
+  const saveMapPoint = useCallback(async (seed?: MapAsset | null) => {
+    const lat = seed?.lat ?? clickedCoords?.lat ?? mapViewportBounds?.centerLat;
+    const lng = seed?.lng ?? clickedCoords?.lng ?? mapViewportBounds?.centerLng;
+    if (lat == null || lng == null) return;
+
+    try {
+      const response = await opsApi.createAsset({
+        title: seed ? `Saved: ${seed.title}` : `Saved map point ${lat.toFixed(3)}, ${lng.toFixed(3)}`,
+        type: 'note',
+        lat,
+        lng,
+        sourceUrl: seed?.sourceUrl || `geo:${lat},${lng}`,
+        notes: seed
+          ? `Operator-saved point from ${seed.title}. ${seed.notes ?? ''}`.trim()
+          : 'Operator-saved point from the current map view.',
+        tags: Array.from(new Set([...(seed?.tags ?? []), 'saved-poi', 'operator-saved'])),
+        status: 'Saved POI',
+        linkedSessionId: sessionId ?? undefined,
+        sourceId: 'manual',
+        sourceName: 'Operator saved',
+        severity: seed?.severity ?? 'info',
+        confidence: seed?.confidence ?? 'high',
+        observedAt: seed?.observedAt ?? new Date().toISOString(),
+        live: false,
+      });
+      setAssets((current) => [response.asset, ...current.filter((asset) => asset.id !== response.asset.id)]);
+      setSelectedAsset(response.asset);
+      setVisibleSources((current) => ({ ...current, manual: true }));
+      clearError();
+    } catch (nextError) {
+      handleError(nextError);
+    }
+  }, [clearError, clickedCoords, handleError, mapViewportBounds, sessionId]);
+
   const mapDateWindow = useMemo(() => {
     if (dateWindowPreset === 'all') {
       return { startMs: null as number | null, endMs: null as number | null, label: 'All time' };
@@ -1280,15 +1477,66 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     return true;
   }, [mapDateWindow.endMs, mapDateWindow.startMs]);
 
+  const isAssetInViewport = useCallback((asset: MapAsset) => {
+    if (!viewportFilterEnabled || !mapViewportBounds) return true;
+    if (asset.lat < mapViewportBounds.south || asset.lat > mapViewportBounds.north) return false;
+    if (mapViewportBounds.west <= mapViewportBounds.east) {
+      return asset.lng >= mapViewportBounds.west && asset.lng <= mapViewportBounds.east;
+    }
+    return asset.lng >= mapViewportBounds.west || asset.lng <= mapViewportBounds.east;
+  }, [mapViewportBounds, viewportFilterEnabled]);
+
   const mapVisibleAssets = useMemo(
     () => assets.filter((asset) => (
       visibleFamilies[classifyAssetFamily(asset)]
       && (visibleSources[sourceKey(asset)] ?? true)
       && isAssetInMapWindow(asset)
+      && isAssetInViewport(asset)
       && assetMatchesQuery(asset, mapQuery)
     )),
-    [assets, isAssetInMapWindow, mapQuery, visibleFamilies, visibleSources],
+    [assets, isAssetInMapWindow, isAssetInViewport, mapQuery, visibleFamilies, visibleSources],
   );
+
+  const sendAssetToAgent = useCallback((asset: MapAsset) => {
+    const nearby = mapVisibleAssets
+      .filter((candidate) => candidate.id !== asset.id)
+      .map((candidate) => ({
+        asset: candidate,
+        distance: approximateDistanceKm(asset.lat, asset.lng, candidate.lat, candidate.lng),
+      }))
+      .filter((entry) => entry.distance <= 100)
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, 5);
+
+    setPrompt([
+      `Analyze selected map item: ${asset.title}`,
+      `Source: ${asset.sourceName || asset.sourceId || 'Unknown'}`,
+      `Status: ${asset.status || 'Unspecified'}; severity: ${asset.severity || 'info'}; confidence: ${asset.confidence || 'unknown'}`,
+      `Observed: ${asset.observedAt || asset.updatedAt || asset.createdAt || 'Unknown'}`,
+      `Coordinates: ${asset.lat.toFixed(4)}, ${asset.lng.toFixed(4)}`,
+      `Active time window: ${mapDateWindowRange.label}`,
+      nearby.length
+        ? `Nearby context: ${nearby.map((entry) => `${entry.asset.title} (${entry.distance.toFixed(0)} km)`).join('; ')}`
+        : 'Nearby context: no related visible items within 100 km.',
+      asset.sourceUrl ? `Open-source link: ${asset.sourceUrl}` : '',
+      'Produce a concise situation brief, source comparison, freshness assessment, and next checks.',
+    ].filter(Boolean).join('\n'));
+    setRailMode('chat');
+    setMapLeftCollapsed(false);
+  }, [mapDateWindowRange.label, mapVisibleAssets]);
+
+  const selectedNearbyAssets = useMemo(() => {
+    if (!selectedAsset) return [];
+    return mapVisibleAssets
+      .filter((asset) => asset.id !== selectedAsset.id)
+      .map((asset) => ({
+        asset,
+        distance: approximateDistanceKm(selectedAsset.lat, selectedAsset.lng, asset.lat, asset.lng),
+      }))
+      .filter((entry) => entry.distance <= 100)
+      .sort((left, right) => left.distance - right.distance)
+      .slice(0, 5);
+  }, [mapVisibleAssets, selectedAsset]);
 
   const savedPointAssets = useMemo(
     () => assets
@@ -1302,10 +1550,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   );
 
   useEffect(() => {
-    const selectedStillVisible = selectedAsset ? mapVisibleAssets.some((asset) => asset.id === selectedAsset.id) : false;
+    if (!selectedAsset) return;
+    const selectedStillVisible = mapVisibleAssets.some((asset) => asset.id === selectedAsset.id);
     if (selectedStillVisible) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- keep the detail rail pinned to a visible asset when filters change
-    setSelectedAsset(mapVisibleAssets[0] ?? null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- close contextual details when filters remove the selected item
+    setSelectedAsset(null);
   }, [mapVisibleAssets, selectedAsset]);
 
   const mapFamilyCounts = useMemo<Record<SignalFamily, number>>(
@@ -1331,7 +1580,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [mapVisibleAssets],
   );
 
-  const sourceDefinitions = useMemo(() => {
+  const sourceDefinitions = useMemo<SourceDefinition[]>(() => {
     const ids = Array.from(new Set([
       ...SOURCE_GROUPS.flatMap((group) => group.sourceIds),
       'manual',
@@ -1340,8 +1589,19 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     ]));
     return ids
       .map((id) => {
-        const meta = sourceDisplayMeta(id, sourceStatuses);
+        const meta = sourceDisplayMeta(id, sourceStatuses, airQualityState);
         const status = sourceStatuses.find((entry) => entry.id === id);
+        const tone: SourceDefinition['tone'] = id === 'aqi'
+          ? airQualityState.phase === 'loading'
+            ? 'loading'
+            : airQualityState.phase === 'error'
+              ? 'error'
+              : airQualityState.phase === 'empty'
+                ? 'stale'
+                : airQualityState.phase === 'ready'
+                  ? 'ok'
+                  : 'idle'
+          : sourceStatusTone(status);
         return {
           id,
           title: meta.title,
@@ -1349,7 +1609,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
           description: meta.description,
           groupId: meta.groupId,
           status,
-          count: mapSourceCounts[id] ?? 0,
+          count: id === 'aqi' ? airQualityState.sampleCount : (mapSourceCounts[id] ?? 0),
+          tone,
+          kind: id === 'aqi' ? 'overlay' as const : 'source' as const,
         };
       })
       .sort((left, right) => {
@@ -1357,7 +1619,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         const rightGroup = SOURCE_GROUPS.findIndex((group) => group.id === right.groupId);
         return (leftGroup === rightGroup ? 0 : leftGroup - rightGroup) || left.title.localeCompare(right.title);
       });
-  }, [assets, mapSourceCounts, sourceStatuses]);
+  }, [airQualityState, assets, mapSourceCounts, sourceStatuses]);
 
   const sourceGroups = useMemo(
     () => SOURCE_GROUPS
@@ -1744,8 +2006,38 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         {!loading && (
           <main className="ops-main">
             {activeTab === 'map' && (
-              <section className="ops-map-overview">
-                <aside className="ops-map-rail ops-map-rail-left">
+              <section className={`ops-map-overview ${mapLeftCollapsed ? 'left-collapsed' : ''}`}>
+                <aside className={`ops-map-rail ops-map-rail-left ${mapLeftCollapsed ? 'collapsed' : ''}`}>
+                  <div className="ops-left-panel-head">
+                    {!mapLeftCollapsed ? (
+                      <div className="ops-rail-switcher">
+                        <button
+                          type="button"
+                          className={`ops-rail-switch ${railMode === 'overview' ? 'active' : ''}`}
+                          onClick={() => setRailMode('overview')}
+                        >
+                          Overview
+                        </button>
+                        <button
+                          type="button"
+                          className={`ops-rail-switch ${railMode === 'chat' ? 'active' : ''}`}
+                          onClick={() => setRailMode('chat')}
+                        >
+                          Chat
+                        </button>
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="ops-icon-button"
+                      onClick={() => setMapLeftCollapsed((current) => !current)}
+                      title={mapLeftCollapsed ? 'Expand map panel' : 'Collapse map panel'}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+                  {!mapLeftCollapsed && railMode === 'overview' ? (
+                  <>
                   <div className="ops-rail-card ops-system-card" data-tone={operationalPosture.tone}>
                     <div className="ops-section-kicker">System Status</div>
                     <div className="ops-system-head">
@@ -1760,55 +2052,15 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                   </div>
 
                   <div className="ops-rail-card">
-                    <div className="ops-rail-switcher">
-                      <button
-                        type="button"
-                        className={`ops-rail-switch ${railMode === 'chat' ? 'active' : ''}`}
-                        onClick={() => setRailMode('chat')}
-                      >
-                        Chat
-                      </button>
-                      <button
-                        type="button"
-                        className={`ops-rail-switch ${railMode === 'briefings' ? 'active' : ''}`}
-                        onClick={() => setRailMode('briefings')}
-                      >
-                        Briefings
-                      </button>
+                    <div className="ops-briefing-list ops-overview-metrics">
+                      {familySummaryCards.map((card) => (
+                        <article key={card.key} className="ops-briefing-card">
+                          <span className="ops-section-kicker">{card.label}</span>
+                          <strong>{card.count}</strong>
+                          <p>{card.note}</p>
+                        </article>
+                      ))}
                     </div>
-
-                    {railMode === 'chat' ? (
-                      <div className="ops-chat-feed" ref={chatScrollerRef}>
-                        {messageFeed.length === 0 ? (
-                          <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
-                        ) : (
-                          messageFeed.map((message) => (
-                            <article
-                              key={message.id}
-                              className={`ops-chat-card ops-chat-card-${message.role}`}
-                            >
-                              <div className="ops-chat-card-head">
-                                <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
-                                <time>{formatClock(message.createdAt)}</time>
-                              </div>
-                              <div className="ops-chat-card-body">
-                                {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
-                              </div>
-                            </article>
-                          ))
-                        )}
-                      </div>
-                    ) : (
-                      <div className="ops-briefing-list">
-                        {briefingItems.map((item) => (
-                          <article key={item.id} className="ops-briefing-card">
-                            <span className="ops-section-kicker">{item.label}</span>
-                            <strong>{item.title}</strong>
-                            <p>{item.detail}</p>
-                          </article>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   <div className="ops-rail-card ops-filter-card">
@@ -1821,7 +2073,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         type="button"
                         className="ops-button ghost"
                         aria-pressed={airQualityEnabled}
-                        onClick={() => setAirQualityEnabled((current) => !current)}
+                        onClick={() => setAirQualityEnabled(!airQualityEnabled)}
                         title="Toggle the Air Quality / AQI overlay"
                       >
                         <Orbit size={16} /> {airQualityEnabled ? 'AQI On' : 'AQI Off'}
@@ -1873,6 +2125,27 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                           </label>
                         </div>
                       ) : null}
+                      <label className="ops-toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={viewportFilterEnabled}
+                          onChange={(event) => setViewportFilterEnabled(event.target.checked)}
+                        />
+                        <span>Filter to visible map area</span>
+                      </label>
+                      <label className="ops-filter-field">
+                        <span>AQI opacity</span>
+                        <input
+                          className="ops-range"
+                          type="range"
+                          min="0.18"
+                          max="0.85"
+                          step="0.01"
+                          value={aqiOpacity}
+                          onChange={(event) => setAqiOpacity(Number(event.target.value))}
+                          disabled={!airQualityEnabled}
+                        />
+                      </label>
                       <div className="ops-filter-footer">
                         <button
                           type="button"
@@ -1905,9 +2178,12 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     <div className="ops-source-groups">
                       {sourceGroups.map((group) => {
                         const totalCount = group.sources.reduce((sum, source) => sum + source.count, 0);
+                        const enabledCount = group.sources.filter((source) => visibleSources[source.id] ?? true).length;
+                        const allEnabled = enabledCount === group.sources.length;
+                        const partlyEnabled = enabledCount > 0 && enabledCount < group.sources.length;
                         return (
-                          <section key={group.id} className="ops-source-group">
-                            <div className="ops-source-group-head">
+                          <details key={group.id} className="ops-source-group" open data-empty={totalCount === 0}>
+                            <summary className="ops-source-group-head">
                               <span className="ops-source-group-title">
                                 {sourceGroupIcon(group.icon)}
                                 <span>
@@ -1916,6 +2192,16 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                                 </span>
                               </span>
                               <span className="ops-mini-badge">{totalCount} visible</span>
+                            </summary>
+                            <div className="ops-source-group-actions">
+                              <SourceGroupCheckbox
+                                checked={allEnabled}
+                                indeterminate={partlyEnabled}
+                                label={`${enabledCount}/${group.sources.length} enabled`}
+                                onChange={(checked) => setSourceGroupVisibility(group.sourceIds, checked)}
+                              />
+                              <button type="button" className="ops-link-button" onClick={() => setSourceGroupVisibility(group.sourceIds, true)}>Select all</button>
+                              <button type="button" className="ops-link-button" onClick={() => setSourceGroupVisibility(group.sourceIds, false)}>Deselect all</button>
                             </div>
                             <div className="ops-source-list">
                               {group.sources.map((source) => (
@@ -1924,7 +2210,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                                   type="button"
                                   className="ops-source-toggle"
                                   data-active={visibleSources[source.id] ?? true}
-                                  data-tone={sourceStatusTone(source.status)}
+                                  data-tone={source.tone}
                                   onClick={() => {
                                     setVisibleSources((current) => ({
                                       ...current,
@@ -1944,13 +2230,94 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                                     <span>{source.count}</span>
                                     {source.status?.requiresKey && !source.status?.enabled ? <span>key</span> : null}
                                     {source.status?.catalogOnly ? <span>ref</span> : null}
+                                    {source.kind === 'overlay' ? <span>map</span> : null}
                                   </span>
                                 </button>
                               ))}
                             </div>
-                          </section>
+                          </details>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  <div className="ops-rail-card ops-poi-panel">
+                    <div className="ops-source-card-head">
+                      <div>
+                        <div className="ops-section-kicker">Saved Points of Interest</div>
+                        <strong>{savedPointAssets.length} saved points</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="ops-button ghost"
+                        onClick={() => { void saveMapPoint(); }}
+                        disabled={!clickedCoords && !mapViewportBounds}
+                        title="Save the last clicked point or current map center"
+                      >
+                        <MapPin size={16} /> Save
+                      </button>
+                    </div>
+                    {savedPointAssets.length === 0 ? (
+                      <div className="ops-helper">
+                        No saved points yet. Save facilities, watched locations, custom pins, or selected incidents here.
+                      </div>
+                    ) : (
+                      <div className="ops-poi-list">
+                        {savedPointAssets.map((asset) => (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            className="ops-poi-card"
+                            onClick={() => focusSavedPoint(asset)}
+                          >
+                            <span className="ops-poi-card-icon"><MapPin size={16} /></span>
+                            <span className="ops-poi-card-copy">
+                              <strong>{asset.title}</strong>
+                              <small>
+                                {asset.sourceName || 'Operator asset'} · {asset.status || asset.type} · {formatRelative(asset.createdAt || asset.updatedAt || asset.observedAt)}
+                              </small>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  </>
+                  ) : !mapLeftCollapsed && railMode === 'chat' ? (
+                  <>
+                  <div className="ops-rail-card">
+                    <div className="ops-chat-feed" ref={chatScrollerRef}>
+                      {messageFeed.length === 0 ? (
+                        <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
+                      ) : (
+                        messageFeed.map((message) => (
+                          <article
+                            key={message.id}
+                            className={`ops-chat-card ops-chat-card-${message.role}`}
+                          >
+                            <div className="ops-chat-card-head">
+                              <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
+                              <time>{formatClock(message.createdAt)}</time>
+                            </div>
+                            <div className="ops-chat-card-body">
+                              {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="ops-rail-card">
+                    <div className="ops-section-kicker">Suggested Actions</div>
+                    <div className="ops-briefing-list">
+                      {briefingItems.map((item) => (
+                        <article key={item.id} className="ops-briefing-card">
+                          <span className="ops-section-kicker">{item.label}</span>
+                          <strong>{item.title}</strong>
+                          <p>{item.detail}</p>
+                        </article>
+                      ))}
                     </div>
                   </div>
 
@@ -1982,6 +2349,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       </button>
                     </div>
                   </div>
+                  </>
+                  ) : null}
                 </aside>
 
                 <div className="ops-map-stage">
@@ -2012,7 +2381,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         type="button"
                         className="ops-button ghost"
                         aria-pressed={airQualityEnabled}
-                        onClick={() => setAirQualityEnabled((current) => !current)}
+                        onClick={() => setAirQualityEnabled(!airQualityEnabled)}
                         title="Toggle the Air Quality / AQI overlay"
                       >
                         <Orbit size={14} /> {airQualityEnabled ? 'AQI On' : 'AQI Off'}
@@ -2034,9 +2403,12 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       onSelectAsset={setSelectedAsset}
                       onMapClick={handleMapClick}
                       airQualityEnabled={airQualityEnabled}
+                      airQualityOpacity={aqiOpacity}
                       timeWindowStart={mapDateWindowRange.start}
                       timeWindowEnd={mapDateWindowRange.end}
                       timeWindowLabel={mapDateWindowRange.label}
+                      onViewportChange={setMapViewportBounds}
+                      onAirQualityStateChange={handleAirQualityStateChange}
                     />
 
                     <div className="ops-floating-card ops-floating-layers">
@@ -2096,55 +2468,96 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         <small>{bridge.activeJob ? 'Bridge in motion' : 'Stable posture'}</small>
                       </div>
                     </div>
+
+                    <details className="ops-map-legend">
+                      <summary><Layers3 size={14} /> Legend</summary>
+                      <div className="ops-map-legend-body">
+                        {airQualityEnabled ? (
+                          <div className="ops-aqi-legend">
+                            <span>Air Quality / AQI</span>
+                            {[
+                              ['Good', '#7bd88f'],
+                              ['Moderate', '#f5dc69'],
+                              ['USG', '#ffae57'],
+                              ['Unhealthy', '#ff6f6f'],
+                              ['Very unhealthy', '#b070ff'],
+                            ].map(([label, color]) => (
+                              <small key={label}><i style={{ backgroundColor: color }} />{label}</small>
+                            ))}
+                          </div>
+                        ) : null}
+                        <span><Plane size={14} /> Live aircraft and paths</span>
+                        <span><MapPin size={14} /> Saved points</span>
+                        <span><AlertTriangle size={14} /> Alerts and events</span>
+                        <span><Orbit size={14} /> Radiation / environmental signals</span>
+                      </div>
+                    </details>
+
+                    <div className="ops-map-operational-stack">
+                      <div className="ops-map-status-chip" data-tone={airQualityState.phase === 'error' ? 'error' : airQualityState.phase === 'ready' ? 'ok' : airQualityState.phase === 'loading' ? 'loading' : 'muted'}>
+                        <strong>{operationalPosture.label}</strong>
+                        <span>
+                          {mapVisibleAssets.length} visible items · {viewportFilterEnabled ? 'viewport filtered' : 'global view'} · AQI {airQualityState.phase}
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedAsset ? (
+                      <aside className="ops-selected-drawer">
+                        <div className="ops-panel-header">
+                          <h3>{selectedAsset.title}</h3>
+                          <span className="ops-mini-badge">{familyLabel(classifyAssetFamily(selectedAsset))}</span>
+                          <button
+                            type="button"
+                            className="ops-icon-button"
+                            onClick={() => setSelectedAsset(null)}
+                            title="Close selected item"
+                          >
+                            <Square size={14} />
+                          </button>
+                        </div>
+                        <div className="ops-panel-body">
+                          <MapAssetInspector asset={selectedAsset} currentSessionId={sessionId} />
+                          <div className="ops-drawer-actions">
+                            {selectedAsset.sourceUrl ? (
+                              <a className="ops-button ghost" href={selectedAsset.sourceUrl} target="_blank" rel="noreferrer">
+                                <Globe2 size={14} /> Open source
+                              </a>
+                            ) : null}
+                            <button type="button" className="ops-button ghost" onClick={() => { void saveMapPoint(selectedAsset); }}>
+                              <MapPin size={14} /> Save as POI
+                            </button>
+                            <button type="button" className="ops-button ghost" onClick={() => sendAssetToAgent(selectedAsset)}>
+                              <Bot size={14} /> Send to Agent
+                            </button>
+                          </div>
+                          <div className="ops-nearby-context">
+                            <div className="ops-section-kicker">Nearby Context</div>
+                            {selectedNearbyAssets.length === 0 ? (
+                              <div className="ops-helper">No related visible items within 100 km.</div>
+                            ) : (
+                              selectedNearbyAssets.map((entry) => (
+                                <button
+                                  key={entry.asset.id}
+                                  type="button"
+                                  className="ops-poi-card"
+                                  onClick={() => setSelectedAsset(entry.asset)}
+                                >
+                                  <span className="ops-poi-card-icon">{sourceIcon(sourceKey(entry.asset))}</span>
+                                  <span className="ops-poi-card-copy">
+                                    <strong>{entry.asset.title}</strong>
+                                    <small>{entry.distance.toFixed(0)} km · {entry.asset.sourceName || entry.asset.sourceId || 'source unknown'}</small>
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </aside>
+                    ) : null}
                   </div>
                 </div>
 
-                <aside className="ops-map-rail ops-map-rail-right">
-                  <div className="ops-detail-card">
-                    <div className="ops-panel-header">
-                      <h3>{selectedAsset ? selectedAsset.title : 'Selected Signal'}</h3>
-                      <span className="ops-mini-badge">
-                        {selectedAsset ? familyLabel(classifyAssetFamily(selectedAsset)) : operationalPosture.label}
-                      </span>
-                    </div>
-                    <div className="ops-panel-body">
-                      <MapAssetInspector asset={selectedAsset} currentSessionId={sessionId} />
-                    </div>
-                  </div>
-
-                  <div className="ops-detail-card">
-                    <div className="ops-panel-header">
-                      <h3>Saved Points of Interest</h3>
-                      <span className="ops-mini-badge">{savedPointAssets.length} saved points</span>
-                    </div>
-                    <div className="ops-panel-body">
-                      {savedPointAssets.length === 0 ? (
-                        <div className="ops-helper">
-                          No saved points yet. Save a location, watched facility, or custom pin to pin it here.
-                        </div>
-                      ) : (
-                        <div className="ops-poi-list">
-                          {savedPointAssets.map((asset) => (
-                            <button
-                              key={asset.id}
-                              type="button"
-                              className="ops-poi-card"
-                              onClick={() => focusSavedPoint(asset)}
-                            >
-                              <span className="ops-poi-card-icon"><MapPin size={16} /></span>
-                              <span className="ops-poi-card-copy">
-                                <strong>{asset.title}</strong>
-                                <small>
-                                  {asset.sourceName || 'Operator asset'} · {asset.status || asset.type} · {formatRelative(asset.createdAt || asset.updatedAt || asset.observedAt)}
-                                </small>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </aside>
               </section>
             )}
 

@@ -70,6 +70,13 @@ function classifyAqi(value: number | null): AirQualityPoint['band'] {
   return 'hazardous';
 }
 
+function normalizeUtcTime(value: string | undefined) {
+  if (!value) return undefined;
+  const withTimezone = /(?:z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}Z`;
+  const date = new Date(withTimezone);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
 export async function fetchAirQualityOverlay(bounds: AirQualityBounds): Promise<AirQualitySnapshot> {
   const grid = buildGrid(bounds);
   if (!grid.length) {
@@ -107,7 +114,7 @@ export async function fetchAirQualityOverlay(bounds: AirQualityBounds): Promise<
       lng: grid[index]?.lng ?? 0,
       usAqi: Number.isFinite(usAqi ?? NaN) ? usAqi : null,
       europeanAqi: Number.isFinite(europeanAqi ?? NaN) ? europeanAqi : null,
-      observedAt: currentTime,
+      observedAt: normalizeUtcTime(currentTime),
       band: classifyAqi(aqi ?? null),
     };
   });
