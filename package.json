@@ -63,7 +63,7 @@
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "diff-sequences": "^29.6.3",
-    "dompurify": "^3.3.1",
+    "dompurify": "^3.4.9",
     "dotenv": "^17.2.4",
     "highlight.js": "^11.11.1",
     "hono": "^4.11.7",
