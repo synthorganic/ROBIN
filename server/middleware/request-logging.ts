@@ -2,12 +2,33 @@
  * Request logging middleware with failure tracking
  */
 
+import type { MiddlewareHandler } from 'hono';
+
+interface RequestFailure {
+  endpoint: string;
+  status: number;
+  durationMs: number;
+  timestamp: string;
+}
+
+interface RequestMetrics {
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  failures: RequestFailure[];
+  responseTimes: {
+    min: number;
+    max: number;
+    samples: number[];
+  };
+}
+
 // Track request metrics
-export const requestMetrics = {
+export const requestMetrics: RequestMetrics = {
   totalRequests: 0,
   successfulRequests: 0,
   failedRequests: 0,
-  failures: [] as Array<any>,
+  failures: [],
   responseTimes: { min: Infinity, max: 0, samples: [] as number[] },
 };
 
@@ -39,14 +60,13 @@ export function recordRequest(endpoint: string, status: number, durationMs: numb
     requestMetrics.responseTimes.samples.shift();
   }
   requestMetrics.responseTimes.samples.push(durationMs);
-  const samples = requestMetrics.responseTimes.samples;
   requestMetrics.responseTimes.min = Math.min(requestMetrics.responseTimes.min, durationMs);
   requestMetrics.responseTimes.max = Math.max(requestMetrics.responseTimes.max, durationMs);
 }
 
-export const requestLogging: any = async (c: any, next: any) => {
+export const requestLogging: MiddlewareHandler = async (c, next) => {
   // Handle both Hono context and path string
-  const path = typeof c === 'string' ? c : (c.req?.path || c.url?.pathname || '/');
+  const path = typeof c === 'string' ? c : c.req.path;
   
   // Skip logging for static assets and health checks
   if (
@@ -70,7 +90,7 @@ export const requestLogging: any = async (c: any, next: any) => {
  * Get current health report
  */
 export function getHealthReport() {
-  const samples = requestMetrics.responseTimes.samples || [];
+  const samples = requestMetrics.responseTimes.samples;
   const avgResponseTime =
     samples.reduce((a: number, b: number) => a + b, 0) / (samples.length || 1);
 
@@ -91,7 +111,7 @@ export function getHealthReport() {
     recentFailures: requestMetrics.failures
       .slice(-10)
       .reverse()
-      .map((f: any) => ({
+      .map((f: RequestFailure) => ({
         endpoint: f.endpoint,
         status: f.status,
         durationMs: f.durationMs,

@@ -18,8 +18,8 @@ import { REPLICATE_QWEN_TTS_URL } from '../lib/constants.js';
  * Build Qwen TTS input from tts-config.json settings.
  * Supports voice_design (description-based) and custom_voice (preset speaker) modes.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildQwenInput(text, voice) {
+    void voice;
     const qwen = getTTSConfig().qwen;
     // Use language-aware resolution: config language → qwen3 mapping → fallback to English
     const resolved = resolveQwen3Language();

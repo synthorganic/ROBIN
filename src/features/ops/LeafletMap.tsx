@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MapAsset } from './api';
 
+type LeafletClickEvent = { latlng: { lat: number; lng: number } };
+type LeafletEventHandler = (() => void) | ((event: LeafletClickEvent) => void);
+
 interface LeafletLayer {
   addTo: (map: LeafletMapInstance) => LeafletLayer;
   addLayer?: (layer: LeafletLayer) => LeafletLayer;
   remove?: () => void;
   bindPopup: (content: string, options?: Record<string, unknown>) => LeafletLayer;
   bindTooltip?: (content: string, options?: Record<string, unknown>) => LeafletLayer;
-  on: (event: string, handler: (...args: any[]) => void) => LeafletLayer;
+  on: (event: string, handler: LeafletEventHandler) => LeafletLayer;
   openPopup?: () => LeafletLayer;
   bringToFront?: () => LeafletLayer;
   setStyle?: (options: Record<string, unknown>) => LeafletLayer;
@@ -25,8 +28,8 @@ interface LeafletMapInstance {
   getCenter?: () => { lat: number; lng: number };
   getZoom: () => number;
   invalidateSize: (options?: Record<string, unknown>) => void;
-  on: (event: string, handler: (...args: any[]) => void) => void;
-  off: (event: string, handler: (...args: any[]) => void) => void;
+  on: (event: string, handler: LeafletEventHandler) => void;
+  off: (event: string, handler: LeafletEventHandler) => void;
   createPane?: (name: string) => HTMLElement;
   remove?: () => void;
 }
@@ -657,7 +660,7 @@ export default function LeafletMap({
         setBaseLayer(map, L, 0);
         emitViewportChange(map);
 
-        map.on('click', (event: { latlng: { lat: number; lng: number } }) => {
+        map.on('click', (event: LeafletClickEvent) => {
           onMapClick(event.latlng.lat, event.latlng.lng);
         });
 

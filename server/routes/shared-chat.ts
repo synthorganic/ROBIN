@@ -4,7 +4,7 @@
  * Provides HTTP endpoints for participants to interact with the shared chat.
  */
 import { Hono } from 'hono';
-import { sharedChatService, type ChatMessage } from '../lib/shared-chat.js';
+import { sharedChatService, type ChatMessage, type ParticipantType } from '../lib/shared-chat.js';
 
 const app = new Hono();
 
@@ -24,13 +24,13 @@ app.get('/api/shared-chat/messages', async (c) => {
   const limit = Number(c.req.query('limit') ?? 50);
   const offset = Number(c.req.query('offset') ?? 0);
   const participantId = c.req.query('participantId');
-  const participantType = c.req.query('participantType' as any);
+  const participantType = c.req.query('participantType');
 
   const messages = sharedChatService.getMessages({
     limit,
     offset,
     participantId: participantId?.trim() || undefined,
-    participantType: participantType?.trim() as any,
+    participantType: participantType?.trim() as ParticipantType | undefined,
   });
 
   return c.json({
@@ -85,7 +85,7 @@ app.post('/api/shared-chat/participants', async (c) => {
   const body = await c.req.json().catch(() => ({})) as {
     id: string;
     name: string;
-    type?: string;
+    type?: ParticipantType;
     metadata?: Record<string, unknown>;
   };
 
@@ -93,7 +93,7 @@ app.post('/api/shared-chat/participants', async (c) => {
     await sharedChatService.registerParticipant({
       id: body.id,
       name: body.name,
-      type: (body.type as any) || 'user',
+      type: body.type || 'user',
       metadata: body.metadata,
     });
 

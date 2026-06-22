@@ -11,7 +11,7 @@
  */
 
 import type { ErrorHandler } from 'hono';
-import { requestMetrics, recordRequest } from './request-logging.js';
+import { requestMetrics } from './request-logging.js';
 
 const isDev = process.env.NODE_ENV !== 'production';
 

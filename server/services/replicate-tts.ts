@@ -38,8 +38,8 @@ interface ReplicateModelDef {
  * Build Qwen TTS input from tts-config.json settings.
  * Supports voice_design (description-based) and custom_voice (preset speaker) modes.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildQwenInput(text: string, voice?: string): Record<string, string> {
+  void voice;
   const qwen = getTTSConfig().qwen;
   // Use language-aware resolution: config language → qwen3 mapping → fallback to English
   const resolved = resolveQwen3Language();

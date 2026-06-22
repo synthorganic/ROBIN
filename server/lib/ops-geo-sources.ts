@@ -125,6 +125,15 @@ function pointFromGeometry(geometry: unknown): { lat: number; lng: number } | nu
     return averageCoordinatePairs(pairs);
   }
 
+  if (type === 'LineString' && Array.isArray(coordinates)) {
+    return averageCoordinatePairs(coordinates);
+  }
+
+  if (type === 'MultiLineString' && Array.isArray(coordinates)) {
+    const pairs = coordinates.flatMap((line) => asArray(line));
+    return averageCoordinatePairs(pairs);
+  }
+
   if (type === 'GeometryCollection' && Array.isArray(geometry.geometries)) {
     for (const child of geometry.geometries) {
       const point = pointFromGeometry(child);
@@ -267,6 +276,91 @@ function splitList(value: unknown) {
     .filter(Boolean);
 }
 
+function canonicalizeKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function pickRecordValue(record: Record<string, unknown>, keys: string[]) {
+  const entries = Object.entries(record);
+  for (const key of keys) {
+    const canonical = canonicalizeKey(key);
+    const match = entries.find(([entryKey]) => canonicalizeKey(entryKey) === canonical);
+    if (match && cleanText(match[1])) return match[1];
+  }
+  return undefined;
+}
+
+function firstString(record: Record<string, unknown>, keys: string[], fallback = '') {
+  const value = pickRecordValue(record, keys);
+  return cleanText(value, fallback);
+}
+
+function firstNumber(record: Record<string, unknown>, keys: string[]) {
+  return parseNumber(pickRecordValue(record, keys));
+}
+
+function propertyLabel(key: string) {
+  return key.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function compactPropertyNotes(record: Record<string, unknown>, keys: string[], limit = 6) {
+  const entries = keys
+    .map((key) => {
+      const value = cleanText(pickRecordValue(record, [key]));
+      return value ? `${propertyLabel(key)}: ${value}` : '';
+    })
+    .filter(Boolean);
+  return entries.slice(0, limit).join(' · ');
+}
+
+function scaleEurdepLatitude(value: number) {
+  return Math.abs(value) > 90 ? value / 1000 + 30 : value;
+}
+
+function scaleEurdepLongitude(value: number) {
+  return Math.abs(value) > 180 ? value / 1000 : value;
+}
+
+function scaleEurdepDose(value: number) {
+  return value > 500 ? value / 1000 : value;
+}
+
+function severityFromRadiationValue(value: number | null, unit: string): OpsMapAsset['severity'] {
+  if (value == null || !Number.isFinite(value)) return 'info';
+  const normalized = unit.toLowerCase();
+
+  if (normalized.includes('cpm') || normalized.includes('cps')) {
+    if (value >= 1000) return 'critical';
+    if (value >= 300) return 'warning';
+    if (value >= 100) return 'watch';
+    return 'info';
+  }
+
+  if (normalized.includes('msv')) {
+    if (value >= 5) return 'critical';
+    if (value >= 1) return 'warning';
+    if (value >= 0.5) return 'watch';
+    return 'info';
+  }
+
+  if (normalized.includes('nsv')) {
+    if (value >= 2000) return 'critical';
+    if (value >= 500) return 'warning';
+    if (value >= 200) return 'watch';
+    return 'info';
+  }
+
+  if (normalized.includes('usv') || normalized.includes('µsv') || normalized.includes('μsv')) {
+    if (value >= 5) return 'critical';
+    if (value >= 1) return 'warning';
+    if (value >= 0.25) return 'watch';
+    return 'info';
+  }
+
+  if (value >= 1000) return 'warning';
+  return 'info';
+}
+
 interface GeoPoint {
   lat: number;
   lng: number;
@@ -342,6 +436,214 @@ async function geocodeQuery(query: string): Promise<GeoPoint | null> {
   const result = await promise;
   locationGeocodeResultCache.set(normalized, result);
   return result;
+}
+
+interface ArcGisLayerInfo {
+  id?: number;
+  name?: string;
+  alias?: string;
+  geometryType?: string;
+  objectIdField?: string;
+}
+
+interface ArcGisFeatureRecord {
+  id?: unknown;
+  geometry?: unknown;
+  properties?: Record<string, unknown>;
+  attributes?: Record<string, unknown>;
+}
+
+interface ArcGisQueryFeature {
+  serviceName: string;
+  serviceUrl: string;
+  layer: ArcGisLayerInfo;
+  feature: ArcGisFeatureRecord;
+}
+
+interface ArcGisLayerFetchConfig {
+  serviceUrl: string;
+  serviceName: string;
+  layerNames: string[];
+  tags: string[];
+  titleKeys: string[];
+  statusKeys?: string[];
+  noteKeys?: string[];
+  type?: OpsMapAsset['type'];
+  severity?: OpsMapAsset['severity'];
+  confidence?: OpsMapAsset['confidence'];
+  sourceUrl?: string;
+}
+
+function normalizeArcGisUrl(serviceUrl: string) {
+  return serviceUrl.replace(/\/+$/, '');
+}
+
+function arcGisLayerMatches(layer: ArcGisLayerInfo, candidate: string) {
+  const normalizedLayerName = canonicalizeKey(cleanText(layer.name || layer.alias || ''));
+  const normalizedCandidate = canonicalizeKey(candidate);
+  return Boolean(normalizedLayerName) && (
+    normalizedLayerName === normalizedCandidate
+    || normalizedLayerName.includes(normalizedCandidate)
+    || normalizedCandidate.includes(normalizedLayerName)
+  );
+}
+
+function arcGisLayerFeatureId(feature: ArcGisFeatureRecord, props: Record<string, unknown>) {
+  return cleanText(
+    feature.id
+    ?? pickRecordValue(props, ['OBJECTID', 'OBJECT_ID', 'objectid', 'FID', 'fid', 'ID', 'id', 'OID', 'oid']),
+  );
+}
+
+function arcGisFeatureProps(feature: ArcGisFeatureRecord) {
+  return feature.properties && isRecord(feature.properties)
+    ? feature.properties
+    : feature.attributes && isRecord(feature.attributes)
+      ? feature.attributes
+      : {};
+}
+
+function arcGisLayerTitle(layer: ArcGisLayerInfo) {
+  return cleanText(layer.name || layer.alias, 'ArcGIS layer');
+}
+
+function selectedArcGisLayerNames(layers: ArcGisLayerInfo[], candidates: string[]) {
+  const selected: ArcGisLayerInfo[] = [];
+  const usedIds = new Set<number>();
+
+  for (const candidate of candidates) {
+    const match = layers.find((layer) => {
+      const layerId = Number(layer.id);
+      return !usedIds.has(layerId) && arcGisLayerMatches(layer, candidate);
+    });
+    if (!match) continue;
+    const layerId = Number(match.id);
+    if (Number.isFinite(layerId)) usedIds.add(layerId);
+    selected.push(match);
+  }
+
+  return selected.length ? selected : layers.slice(0, 1);
+}
+
+async function fetchArcGisLayerFeatures(serviceUrl: string, layerNames: string[], limit = Number(process.env.INERTIAI_OPS_ARCGIS_LIMIT || 12)) {
+  const baseUrl = normalizeArcGisUrl(serviceUrl);
+  const metadata = await fetchJson(`${baseUrl}?f=pjson`);
+  const metadataRecord = isRecord(metadata) ? metadata : ({} as Record<string, unknown>);
+  const layers = isRecord(metadata)
+    ? asArray(metadataRecord.layers).filter(isRecord).map((layer) => ({
+      id: parseNumber(layer.id) ?? undefined,
+      name: cleanText(layer.name || layer.alias),
+      alias: cleanText(layer.alias),
+      geometryType: cleanText(layer.geometryType),
+      objectIdField: cleanText(layer.objectIdField || metadataRecord.objectIdField),
+    }))
+    : [];
+
+  const selectedLayers = selectedArcGisLayerNames(layers, layerNames);
+  const serviceName = cleanText(isRecord(metadata) ? (metadataRecord.title || metadataRecord.serviceDescription || metadataRecord.mapName) : '', baseUrl);
+  const features: ArcGisQueryFeature[] = [];
+
+  for (const layer of selectedLayers) {
+    const layerId = parseNumber(layer.id);
+    if (layerId == null) continue;
+
+    const params = new URLSearchParams({
+      where: '1=1',
+      outFields: '*',
+      returnGeometry: 'true',
+      f: 'geojson',
+      resultRecordCount: String(limit),
+      outSR: '4326',
+    });
+
+    if (layer.objectIdField) {
+      params.set('orderByFields', `${layer.objectIdField} ASC`);
+    }
+
+    const payload = await fetchJson(`${baseUrl}/${layerId}/query?${params.toString()}`);
+    const layerFeatures = isRecord(payload) ? asArray(payload.features) : [];
+    for (const feature of layerFeatures) {
+      if (!isRecord(feature)) continue;
+      features.push({
+        serviceName,
+        serviceUrl: baseUrl,
+        layer,
+        feature: feature as ArcGisFeatureRecord,
+      });
+    }
+  }
+
+  return features;
+}
+
+function arcGisAssetFromFeature(
+  sourceId: OpsGeoSourceId,
+  config: ArcGisLayerFetchConfig,
+  entry: ArcGisQueryFeature,
+  observedAt: string,
+): OpsMapAsset | null {
+  const props = arcGisFeatureProps(entry.feature);
+  const point = pointFromGeometry(entry.feature.geometry);
+  if (!point) return null;
+
+  const featureId = arcGisLayerFeatureId(entry.feature, props) || `${entry.layer.id ?? 'layer'}-${point.lat.toFixed(4)}-${point.lng.toFixed(4)}`;
+  const title = firstString(
+    props,
+    config.titleKeys,
+    `${config.serviceName} ${arcGisLayerTitle(entry.layer)} ${featureId}`,
+  );
+  const status = firstString(props, config.statusKeys || [], '');
+  const notes = compactPropertyNotes(props, config.noteKeys || config.titleKeys, 6);
+  const geometry = cleanText(entry.layer.geometryType, 'geometry');
+
+  return sourceAsset(sourceId, {
+    idParts: [config.serviceName, entry.layer.id ?? entry.layer.name, featureId, point.lat, point.lng],
+    type: config.type ?? 'link',
+    title,
+    lat: point.lat,
+    lng: point.lng,
+    sourceUrl: config.sourceUrl || entry.serviceUrl,
+    notes: [
+      `${config.serviceName} ${arcGisLayerTitle(entry.layer)} layer.`,
+      geometry ? `Geometry: ${geometry}.` : '',
+      notes,
+    ].filter(Boolean).join(' '),
+    tags: [sourceId, ...config.tags, arcGisLayerTitle(entry.layer)],
+    status: status || arcGisLayerTitle(entry.layer),
+    sourceName: config.serviceName,
+    severity: config.severity ?? 'info',
+    confidence: config.confidence ?? 'high',
+    observedAt,
+  });
+}
+
+async function fetchArcGisSourceAssets(
+  sourceId: OpsGeoSourceId,
+  configs: ArcGisLayerFetchConfig[],
+  options: { limit?: number; observedAt?: string } = {},
+): Promise<OpsMapAsset[]> {
+  const observedAt = options.observedAt || new Date().toISOString();
+  const limit = options.limit ?? Number(process.env.INERTIAI_OPS_ARCGIS_LIMIT || 12);
+  const assets: OpsMapAsset[] = [];
+  const errors: string[] = [];
+
+  for (const config of configs) {
+    try {
+      const features = await fetchArcGisLayerFeatures(config.serviceUrl, config.layerNames, limit);
+      for (const entry of features) {
+        const asset = arcGisAssetFromFeature(sourceId, config, entry, observedAt);
+        if (asset) assets.push(asset);
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (!assets.length && errors.length) {
+    throw new Error(errors[0]);
+  }
+
+  return assets;
 }
 
 function parseNrcDateTime(dateText: string, timeText: string) {
@@ -761,6 +1063,585 @@ async function fetchRadNetAssets(): Promise<OpsMapAsset[]> {
     .filter((asset): asset is OpsMapAsset => Boolean(asset));
 }
 
+function stripHtmlArtifacts(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ');
+}
+
+function textFromHtml(html: string) {
+  return cleanText(stripHtmlArtifacts(html), '');
+}
+
+function sectionText(text: string, label: string, endLabels: string[]) {
+  const start = text.toLowerCase().indexOf(label.toLowerCase());
+  if (start < 0) return '';
+  const rest = text.slice(start + label.length);
+  let end = rest.length;
+  for (const endLabel of endLabels) {
+    const index = rest.toLowerCase().indexOf(endLabel.toLowerCase());
+    if (index >= 0 && index < end) end = index;
+  }
+  return cleanText(rest.slice(0, end));
+}
+
+function unescapeJsString(value: string) {
+  return value
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t');
+}
+
+function tryParseDate(value: unknown) {
+  const parsed = typeof value === 'number' ? new Date(value) : new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function formatCompactUtcDate(date: Date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  const minute = String(date.getUTCMinutes()).padStart(2, '0');
+  const second = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${year}${month}${day}${hour}${minute}${second}`;
+}
+
+function resolveUrl(baseUrl: string, href: string) {
+  try {
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return href;
+  }
+}
+
+async function fetchSafecastAssets(): Promise<OpsMapAsset[]> {
+  const hours = Math.max(1, Number(process.env.INERTIAI_OPS_SAFECAST_HOURS || 24));
+  const limit = Math.max(1, Number(process.env.INERTIAI_OPS_SAFECAST_LIMIT || 80));
+  const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+  const params = new URLSearchParams({
+    since,
+    order: 'captured_at desc',
+    limit: String(limit),
+  });
+  const payload = await fetchJson(`https://api.safecast.org/measurements.json?${params.toString()}`);
+
+  return asArray(payload)
+    .map((measurement, index) => {
+      if (!isRecord(measurement)) return null;
+      const lat = firstNumber(measurement, ['latitude', 'lat']);
+      const lng = firstNumber(measurement, ['longitude', 'lng', 'lon']);
+      if (lat == null || lng == null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+      const value = firstNumber(measurement, ['value']);
+      const unit = firstString(measurement, ['unit'], 'nSv/h');
+      const capturedAt = firstString(measurement, ['captured_at']);
+      const locationName = firstString(measurement, ['location_name'], 'Safecast measurement');
+      const deviceId = firstString(measurement, ['device_id', 'station_id', 'sensor_id'], 'device');
+      const deviceType = firstString(measurement, ['devicetype_id']);
+      const originalId = firstString(measurement, ['original_id']);
+      const valueText = value == null ? 'n/a' : value.toFixed(value < 10 ? 2 : 1);
+
+      return sourceAsset('safecast', {
+        idParts: [firstString(measurement, ['id'], String(index)), deviceId, capturedAt, lat, lng],
+        title: `${locationName}: ${valueText} ${unit}`.trim(),
+        lat,
+        lng,
+        sourceUrl: 'https://safecast.org/data/download/',
+        notes: [
+          `Safecast measurement from device ${deviceId}.`,
+          capturedAt ? `Captured ${capturedAt}.` : '',
+          originalId ? `Original ID ${originalId}.` : '',
+          deviceType ? `Device type ${deviceType}.` : '',
+        ].filter(Boolean).join(' '),
+        tags: ['radiation', 'safecast', 'gamma', 'community-sensor', unit.toLowerCase(), locationName.toLowerCase()],
+        status: `${valueText} ${unit}`.trim(),
+        sourceName: 'Safecast',
+        severity: severityFromRadiationValue(value, unit),
+        confidence: 'medium',
+        observedAt: capturedAt || undefined,
+      });
+    })
+    .filter((asset): asset is OpsMapAsset => Boolean(asset));
+}
+
+function gmcMapSeverityFromCpm(cpm: number) {
+  if (cpm >= 1000) return 'critical';
+  if (cpm >= 300) return 'warning';
+  if (cpm >= 100) return 'watch';
+  return 'info';
+}
+
+async function fetchGmcMapAssets(): Promise<OpsMapAsset[]> {
+  const limit = Math.max(1, Number(process.env.INERTIAI_OPS_GMCMAP_LIMIT || 80));
+  const dataRange = Math.max(1, Number(process.env.INERTIAI_OPS_GMCMAP_DAYS || 7));
+  const timeZone = process.env.INERTIAI_OPS_GMCMAP_TIMEZONE
+    || String(Math.round(-new Date().getTimezoneOffset() / 60));
+  const endpoint = `https://www.gmcmap.com/ajaxm.asp?OffSet=0&Limit=${limit}&dataRange=${dataRange}&timeZone=${encodeURIComponent(timeZone)}`;
+  const raw = await fetchText(endpoint);
+  const rowPattern = /\[\s*'(?<html>(?:\\.|[^'])*)'\s*,\s*(?<lat>-?\d+(?:\.\d+)?)\s*,\s*(?<lng>-?\d+(?:\.\d+)?)\s*,\s*(?<cpm>-?\d+(?:\.\d+)?)\s*,\s*'(?<color>[^']*)'\s*\]/g;
+
+  return Array.from(raw.matchAll(rowPattern))
+    .map((match, index) => {
+      const groups = match.groups;
+      if (!groups) return null;
+      const lat = parseNumber(groups.lat);
+      const lng = parseNumber(groups.lng);
+      const cpm = parseNumber(groups.cpm);
+      if (lat == null || lng == null || cpm == null || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+      const snippet = textFromHtml(xmlDecode(unescapeJsString(groups.html)).replace(/&nbsp;/g, ' '));
+      const title = truncate(snippet || `GMCMap ${cpm.toFixed(0)} CPM`, 120);
+      const color = cleanText(groups.color);
+
+      return sourceAsset('gmcmap', {
+        idParts: [index, lat, lng, cpm, color, title],
+        title: title || `GMCMap ${cpm.toFixed(0)} CPM`,
+        lat,
+        lng,
+        sourceUrl: 'https://www.gmcmap.com/',
+        notes: [
+          `Community Geiger counter reading.`,
+          snippet ? `Station summary: ${snippet}.` : '',
+          color ? `Display color ${color}.` : '',
+        ].filter(Boolean).join(' '),
+        tags: ['radiation', 'gmcmap', 'geiger', 'community-sensor', 'cpm'],
+        status: `${cpm.toFixed(0)} CPM`,
+        sourceName: 'GMCMap',
+        severity: gmcMapSeverityFromCpm(cpm),
+        confidence: 'medium',
+        observedAt: new Date().toISOString(),
+      });
+    })
+    .filter((asset): asset is OpsMapAsset => Boolean(asset));
+}
+
+async function fetchEurdepAssets(): Promise<OpsMapAsset[]> {
+  const days = Math.max(1, Number(process.env.INERTIAI_OPS_EURDEP_DAYS || 7));
+  const limit = Math.max(1, Number(process.env.INERTIAI_OPS_EURDEP_LIMIT || 120));
+  const now = new Date();
+  const startDate = formatCompactUtcDate(new Date(now.getTime() - days * 24 * 60 * 60_000));
+  const endDate = formatCompactUtcDate(now);
+  const baseUrl = 'https://remap.jrc.ec.europa.eu';
+  const lastUpdatedPayload = await fetchJson(`${baseUrl}/api/stations/all/last-updated`);
+  const lastUpdated = isRecord(lastUpdatedPayload) ? tryParseDate(String(lastUpdatedPayload.lastUpdated ?? '')) : undefined;
+  const stationPayload = await fetchJson(`${baseUrl}/api/stations?type=Last&startDate=${startDate}&endDate=${endDate}`);
+  const stations = asArray(stationPayload)
+    .map((station, index) => {
+      if (!isRecord(station)) return null;
+      const rawLat = firstNumber(station, ['lat']);
+      const rawLng = firstNumber(station, ['long', 'lng', 'lon']);
+      const rawValue = firstNumber(station, ['value']);
+      if (rawLat == null || rawLng == null || rawValue == null) return null;
+
+      const lat = scaleEurdepLatitude(rawLat);
+      const lng = scaleEurdepLongitude(rawLng);
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+      const dose = scaleEurdepDose(rawValue);
+      const code = firstString(station, ['code'], `station-${index + 1}`);
+      const country = firstString(station, ['country']);
+      const observedAt = firstString(station, ['date']) || lastUpdated || undefined;
+
+      return sourceAsset('eurdep', {
+        idParts: [code, observedAt, lat, lng, dose],
+        title: `EURDEP ${dose.toFixed(dose < 10 ? 1 : 0)} nSv/h`,
+        lat,
+        lng,
+        sourceUrl: `${baseUrl}/Advanced.aspx?map=simple`,
+        notes: [
+          `EURDEP hourly gamma dose reading from the JRC radiological monitoring map.`,
+          code ? `Station code ${code}.` : '',
+          country ? `Country ${country}.` : '',
+          observedAt ? `Observed ${observedAt}.` : '',
+          'Measurements are often non-validated and subject to the provider copyright/consent restrictions.',
+        ].filter(Boolean).join(' '),
+        tags: ['radiation', 'eurdep', 'gamma-dose'],
+        status: `${dose.toFixed(1)} nSv/h`,
+        sourceName: 'EURDEP',
+        severity: severityFromRadiationValue(dose, 'nSv/h'),
+        confidence: 'medium',
+        observedAt,
+      });
+    })
+    .filter((asset): asset is OpsMapAsset => Boolean(asset))
+    .sort((left, right) => {
+      const leftValue = Number(left.status?.match(/[\d.]+/)?.[0] ?? '0');
+      const rightValue = Number(right.status?.match(/[\d.]+/)?.[0] ?? '0');
+      return rightValue - leftValue;
+    })
+    .slice(0, limit);
+
+  const overview = sourceAsset('eurdep', {
+    idParts: ['overview', lastUpdated || endDate, stations.length],
+    type: 'note',
+    title: 'EURDEP Gamma Dose Rates',
+    lat: 50.5,
+    lng: 10,
+    sourceUrl: `${baseUrl}/Consent/Advanced.aspx`,
+    notes: [
+      'EURDEP provides hourly gamma dose averages going back up to 35 days from roughly 5,500 stations across Europe.',
+      'Most measurements on the advanced map are non-validated.',
+      'No alerting function is provided; the platform is informational only.',
+      'EURDEP data is subject to the originating provider copyright and consent terms.',
+    ].join(' '),
+    tags: ['radiation', 'eurdep', 'gamma-dose', 'europe'],
+    status: [
+      lastUpdated ? `Last updated ${lastUpdated}` : 'Live EURDEP map',
+      `${stations.length} stations in snapshot`,
+    ].join(' · '),
+    sourceName: 'EURDEP',
+    severity: 'watch',
+    confidence: 'medium',
+    observedAt: lastUpdated || undefined,
+  });
+
+  return [overview, ...stations];
+}
+
+const NTAD_ARCGIS_CONFIGS: ArcGisLayerFetchConfig[] = [
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_North_American_Roads/FeatureServer',
+    serviceName: 'North American Roads',
+    layerNames: ['North American Roads'],
+    tags: ['transport', 'roads', 'highway', 'north-america'],
+    titleKeys: ['FULLNAME', 'NAME', 'ROADNAME', 'RTTYP'],
+    statusKeys: ['MTFCC', 'RTTYP', 'FUNCLASS'],
+    noteKeys: ['FULLNAME', 'NAME', 'MTFCC', 'RTTYP', 'STATE_NAME', 'COUNTY_NAME'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_National_Network/FeatureServer',
+    serviceName: 'National Network',
+    layerNames: ['National Network'],
+    tags: ['transport', 'highway', 'national-network'],
+    titleKeys: ['NAME', 'FULLNAME', 'RTTYP'],
+    statusKeys: ['MTFCC', 'RTTYP'],
+    noteKeys: ['NAME', 'FULLNAME', 'MTFCC', 'RTTYP'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_National_Highway_System/FeatureServer',
+    serviceName: 'National Highway System',
+    layerNames: ['National Highway System'],
+    tags: ['transport', 'highway', 'nhs'],
+    titleKeys: ['FULLNAME', 'NAME', 'RTTYP'],
+    statusKeys: ['MTFCC', 'RTTYP'],
+    noteKeys: ['FULLNAME', 'NAME', 'MTFCC', 'RTTYP'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_National_Highway_Freight_Network/FeatureServer',
+    serviceName: 'National Highway Freight Network',
+    layerNames: ['National Highway Freight Network'],
+    tags: ['transport', 'freight', 'highway', 'nhfn'],
+    titleKeys: ['FULLNAME', 'NAME', 'RTTYP'],
+    statusKeys: ['MTFCC', 'RTTYP'],
+    noteKeys: ['FULLNAME', 'NAME', 'MTFCC', 'RTTYP'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_North_American_Rail_Network_Lines/FeatureServer',
+    serviceName: 'North American Rail Network Lines',
+    layerNames: ['North American Rail Network Lines'],
+    tags: ['transport', 'rail', 'line'],
+    titleKeys: ['NAME', 'LINE_NAME', 'RAILROAD', 'SYSTEM'],
+    statusKeys: ['TYPE', 'OWNER', 'OPERATOR'],
+    noteKeys: ['NAME', 'LINE_NAME', 'RAILROAD', 'SYSTEM', 'TYPE', 'OWNER', 'OPERATOR'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_North_American_Rail_Network_Nodes/FeatureServer',
+    serviceName: 'North American Rail Network Nodes',
+    layerNames: ['North American Rail Network Nodes'],
+    tags: ['transport', 'rail', 'node'],
+    titleKeys: ['NAME', 'STATION', 'NODE_NAME', 'FACILITY'],
+    statusKeys: ['TYPE', 'OWNER', 'OPERATOR'],
+    noteKeys: ['NAME', 'STATION', 'NODE_NAME', 'FACILITY', 'TYPE', 'OWNER', 'OPERATOR'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Commercial_Strategic_Seaports/FeatureServer',
+    serviceName: 'Commercial Strategic Seaports',
+    layerNames: ['Commercial Strategic Seaports'],
+    tags: ['maritime', 'port', 'seaport'],
+    titleKeys: ['PORT_NAME', 'NAME', 'FACILITY', 'SEAPORT'],
+    statusKeys: ['PORTTYPE', 'TYPE', 'MODE'],
+    noteKeys: ['PORT_NAME', 'NAME', 'STATE', 'PORT_CODE', 'OWNER', 'TYPE'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Intermodal_Freight_Facilities_Air_to_Truck/FeatureServer',
+    serviceName: 'Intermodal Freight Facilities Air to Truck',
+    layerNames: ['Intermodal Freight Facilities Air to Truck'],
+    tags: ['transport', 'freight', 'intermodal', 'air', 'truck'],
+    titleKeys: ['FACILITY_NAME', 'NAME', 'AIRPORT', 'PORT_NAME'],
+    statusKeys: ['TYPE', 'MODE'],
+    noteKeys: ['FACILITY_NAME', 'NAME', 'AIRPORT', 'PORT_NAME', 'TYPE', 'MODE'],
+  },
+];
+
+async function fetchNtadAssets(): Promise<OpsMapAsset[]> {
+  return fetchArcGisSourceAssets('ntad', NTAD_ARCGIS_CONFIGS, { limit: Number(process.env.INERTIAI_OPS_NTAD_LIMIT || 12) });
+}
+
+const FAF_ARCGIS_CONFIGS: ArcGisLayerFetchConfig[] = [
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Freight_Analysis_Framework_Network_Links/FeatureServer',
+    serviceName: 'FAF5 Network Links',
+    layerNames: ['Freight Analysis Framework (FAF5) Network Links'],
+    tags: ['freight', 'faf', 'links', 'flow'],
+    titleKeys: ['NAME', 'LINK_NAME', 'ORIG_NAME', 'DEST_NAME'],
+    statusKeys: ['OD', 'ORIG', 'DEST', 'MODE'],
+    noteKeys: ['NAME', 'LINK_NAME', 'ORIG_NAME', 'DEST_NAME', 'MODE', 'COMMODITY'],
+  },
+  {
+    serviceUrl: 'https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/NTAD_Freight_Analysis_Framework_Regions/FeatureServer',
+    serviceName: 'FAF5 Regions',
+    layerNames: ['Freight Analysis Framework (FAF5) Regions'],
+    tags: ['freight', 'faf', 'regions'],
+    titleKeys: ['NAME', 'REGION', 'FAF_NAME', 'AREA_NAME'],
+    statusKeys: ['FAF_ID', 'REGION', 'TYPE'],
+    noteKeys: ['NAME', 'REGION', 'FAF_ID', 'TYPE'],
+    type: 'note',
+  },
+];
+
+async function fetchFafAssets(): Promise<OpsMapAsset[]> {
+  return fetchArcGisSourceAssets('faf', FAF_ARCGIS_CONFIGS, { limit: Number(process.env.INERTIAI_OPS_FAF_LIMIT || 12) });
+}
+
+const TIGER_ARCGIS_CONFIGS: ArcGisLayerFetchConfig[] = [
+  {
+    serviceUrl: 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Transportation_LargeScale/MapServer',
+    serviceName: 'TIGERweb Transportation',
+    layerNames: ['Primary Roads', 'Secondary Roads', 'Local Roads', 'Railroads'],
+    tags: ['tiger', 'transport', 'roads', 'rail', 'reference'],
+    titleKeys: ['FULLNAME', 'NAME', 'ROADNAME', 'RTTYP', 'MTFCC'],
+    statusKeys: ['MTFCC', 'RTTYP', 'CLASS'],
+    noteKeys: ['FULLNAME', 'NAME', 'MTFCC', 'RTTYP', 'CLASS'],
+  },
+  {
+    serviceUrl: 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer',
+    serviceName: 'TIGERweb States and Counties',
+    layerNames: ['States', 'Counties'],
+    tags: ['tiger', 'boundaries', 'states', 'counties', 'reference'],
+    titleKeys: ['NAME', 'NAMELSAD', 'STATE_NAME', 'COUNTY_NAME', 'STUSAB'],
+    statusKeys: ['STATEFP', 'COUNTYFP', 'STUSAB'],
+    noteKeys: ['NAME', 'NAMELSAD', 'STATE_NAME', 'COUNTY_NAME', 'STATEFP', 'COUNTYFP'],
+    type: 'note',
+  },
+  {
+    serviceUrl: 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer',
+    serviceName: 'TIGERweb Places',
+    layerNames: ['Incorporated Places', 'Census Designated Places'],
+    tags: ['tiger', 'boundaries', 'places', 'reference'],
+    titleKeys: ['NAME', 'NAMELSAD', 'BASENAME'],
+    statusKeys: ['LSAD', 'STUSAB'],
+    noteKeys: ['NAME', 'NAMELSAD', 'LSAD', 'STUSAB'],
+    type: 'note',
+  },
+  {
+    serviceUrl: 'https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Tracts_Blocks/MapServer',
+    serviceName: 'TIGERweb Census Reference',
+    layerNames: ['Census Tracts', 'Census Block Groups'],
+    tags: ['tiger', 'reference', 'tracts', 'blocks'],
+    titleKeys: ['NAMELSAD', 'NAME', 'GEOID', 'BASENAME'],
+    statusKeys: ['GEOID', 'MTFCC'],
+    noteKeys: ['NAME', 'NAMELSAD', 'GEOID', 'MTFCC'],
+    type: 'note',
+  },
+];
+
+async function fetchTigerLineAssets(): Promise<OpsMapAsset[]> {
+  return fetchArcGisSourceAssets('tigerline', TIGER_ARCGIS_CONFIGS, { limit: Number(process.env.INERTIAI_OPS_TIGER_LIMIT || 10) });
+}
+
+async function fetchMarineCadastreAssets(): Promise<OpsMapAsset[]> {
+  const pageUrl = 'https://hub.marinecadastre.gov/pages/vesseltraffic';
+  const itemData = await fetchJson('https://www.arcgis.com/sharing/rest/content/items/22fb5273ccb54f6aa423f6667a856761?f=json');
+  const pageHtml = await fetchText(pageUrl);
+  const observedAt = isRecord(itemData) ? tryParseDate(itemData.modified) : undefined;
+  const latestBulkIndex = 'https://noaaocm.blob.core.windows.net/ais/csv2/csv2025/index.html';
+  const trackIndex = 'https://ocmgeodatastor1.blob.core.windows.net/marinecadastre/ais/aistrack/index-aistrack.html';
+  const transitIndex = 'https://ocmgeodatastor1.blob.core.windows.net/marinecadastre/ais/aistransit/index-aistransit.html';
+  const assets: OpsMapAsset[] = [];
+  const itemTitle = isRecord(itemData) ? cleanText(itemData.title, 'Vessel Traffic - Marine Cadastre') : 'Vessel Traffic - Marine Cadastre';
+  const itemSnippet = isRecord(itemData) ? cleanText(itemData.snippet) : '';
+  const itemDescription = isRecord(itemData) ? cleanText(itemData.description) : '';
+  const pageText = textFromHtml(pageHtml);
+
+  assets.push(sourceAsset('marinecadastre', {
+    idParts: ['overview', observedAt, itemTitle],
+    type: 'note',
+    title: itemTitle,
+    lat: 38.5,
+    lng: -97,
+    sourceUrl: pageUrl,
+    notes: [
+      itemSnippet,
+      itemDescription,
+      pageText.includes('AIS') ? 'Marine Cadastre vessel traffic portal.' : '',
+      'The page links to bulk AIS broadcast points, track lines, and transit counts for U.S. coastal waters.',
+    ].filter(Boolean).join(' '),
+    tags: ['maritime', 'ais', 'marinecadastre', 'portal'],
+    status: 'Marine Cadastre AIS portal',
+    sourceName: 'MarineCadastre AIS',
+    severity: 'info',
+    confidence: 'high',
+    observedAt,
+  }));
+
+  if (latestBulkIndex) {
+    const bulkHtml = await fetchText(latestBulkIndex);
+    const csvFiles = Array.from(bulkHtml.matchAll(/href="([^"]+\.csv\.zst)"/gi)).map((match) => resolveUrl(latestBulkIndex, match[1]));
+    assets.push(sourceAsset('marinecadastre', {
+      idParts: ['bulk', latestBulkIndex, csvFiles.length, observedAt],
+      type: 'note',
+      title: `MarineCadastre AIS Bulk Downloads ${latestBulkIndex.match(/csv(\d{4})/i)?.[1] ?? ''}`.trim(),
+      lat: 38.5,
+      lng: -97,
+      sourceUrl: latestBulkIndex,
+      notes: [
+        `Official AIS bulk download index.`,
+        csvFiles.length ? `${csvFiles.length} daily CSV.zst files are listed in the latest year index.` : 'Bulk file index available.',
+      ].join(' '),
+      tags: ['maritime', 'ais', 'bulk-download', 'port-congestion'],
+      status: csvFiles.length ? `${csvFiles.length} daily files` : 'Bulk AIS download index',
+      sourceName: 'MarineCadastre AIS',
+      severity: 'info',
+      confidence: 'high',
+      observedAt,
+    }));
+  }
+
+  if (trackIndex) {
+    const trackHtml = await fetchText(trackIndex);
+    const trackLinks = Array.from(trackHtml.matchAll(/href="([^"]+)"/gi)).map((match) => resolveUrl(trackIndex, match[1]));
+    assets.push(sourceAsset('marinecadastre', {
+      idParts: ['track', trackIndex, trackLinks.length, observedAt],
+      type: 'note',
+      title: 'MarineCadastre AIS Track Lines',
+      lat: 37.5,
+      lng: -74.5,
+      sourceUrl: trackIndex,
+      notes: [
+        'AIS track-line index for vessel movement and port-congestion context.',
+        trackLinks.length ? `${trackLinks.length} links exposed in the index page.` : '',
+      ].filter(Boolean).join(' '),
+      tags: ['maritime', 'ais', 'track-lines', 'port-congestion'],
+      status: trackLinks.length ? `${trackLinks.length} linked files` : 'Track-line index',
+      sourceName: 'MarineCadastre AIS',
+      severity: 'info',
+      confidence: 'high',
+      observedAt,
+    }));
+  }
+
+  if (transitIndex) {
+    const transitHtml = await fetchText(transitIndex);
+    const transitLinks = Array.from(transitHtml.matchAll(/href="([^"]+)"/gi)).map((match) => resolveUrl(transitIndex, match[1]));
+    assets.push(sourceAsset('marinecadastre', {
+      idParts: ['transit', transitIndex, transitLinks.length, observedAt],
+      type: 'note',
+      title: 'MarineCadastre AIS Transit Counts',
+      lat: 29.5,
+      lng: -90,
+      sourceUrl: transitIndex,
+      notes: [
+        'AIS transit-count index for vessel traffic context.',
+        transitLinks.length ? `${transitLinks.length} links exposed in the index page.` : '',
+      ].filter(Boolean).join(' '),
+      tags: ['maritime', 'ais', 'transit-counts', 'port-congestion'],
+      status: transitLinks.length ? `${transitLinks.length} linked files` : 'Transit-count index',
+      sourceName: 'MarineCadastre AIS',
+      severity: 'info',
+      confidence: 'high',
+      observedAt,
+    }));
+  }
+
+  const summaryText = textFromHtml(pageHtml);
+  if (/geoParquet/i.test(summaryText) || /broadcast point data/i.test(summaryText)) {
+    assets.push(sourceAsset('marinecadastre', {
+      idParts: ['broadcast-points', observedAt],
+      type: 'note',
+      title: 'MarineCadastre AIS Broadcast Points',
+      lat: 30.5,
+      lng: -88,
+      sourceUrl: pageUrl,
+      notes: 'MarineCadastre notes that 2024 AIS broadcast point data is published as GeoParquet and that bulk point downloads are available by year.',
+      tags: ['maritime', 'ais', 'broadcast-points', 'port-congestion'],
+      status: '2024 point dataset mentioned in official page notes',
+      sourceName: 'MarineCadastre AIS',
+      severity: 'info',
+      confidence: 'high',
+      observedAt,
+    }));
+  }
+
+  return assets;
+}
+
+const DEFAULT_MOBILITY_FEED_PAGES = [
+  'https://mobilitydatabase.org/feeds/gtfs/mdb-29',
+  'https://mobilitydatabase.org/feeds/gtfs_rt/mdb-3101',
+  'https://mobilitydatabase.org/feeds/gtfs_rt/mdb-2893',
+  'https://mobilitydatabase.org/feeds/gtfs_rt/mdb-3055',
+];
+
+function mobilitySection(text: string, label: string, endLabels: string[]) {
+  return sectionText(text, label, endLabels);
+}
+
+async function fetchMobilityDbAssets(): Promise<OpsMapAsset[]> {
+  const pageUrls = (process.env.INERTIAI_OPS_MOBILITY_PAGES || '')
+    .split(/[\s,;]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const urls = pageUrls.length ? pageUrls : DEFAULT_MOBILITY_FEED_PAGES;
+  const assets = await Promise.all(urls.map(async (pageUrl) => {
+    const html = await fetchText(pageUrl);
+    const text = textFromHtml(html);
+    const title = cleanText(html.match(/<h1[^>]*>(.*?)<\/h1>/i)?.[1] || html.match(/<title>(.*?)<\/title>/i)?.[1] || pageUrl, 'Mobility Database feed');
+    const producerUrl = cleanText(html.match(/data-testid="producer-url"[^>]*>([^<]+)</i)?.[1]);
+    const verificationUpdated = mobilitySection(text, 'Official verification updated:', ['Page generated at:', 'Agency', 'Routes', 'Locations', 'Producer URL', 'License', 'Feed Authentication', 'Related Schedule Feeds', 'Related Realtime Feeds']);
+    const pageGenerated = mobilitySection(text, 'Page generated at:', ['Official verification updated:', 'Agency', 'Routes', 'Locations', 'Producer URL', 'License', 'Feed Authentication', 'Related Schedule Feeds', 'Related Realtime Feeds']);
+    const agency = mobilitySection(text, 'Agency', ['Routes', 'Locations', 'Producer URL', 'License', 'Feed Authentication', 'Related Schedule Feeds', 'Related Realtime Feeds']);
+    const locations = mobilitySection(text, 'Locations', ['Show Details', 'Producer URL', 'License', 'Feed Authentication', 'Related Schedule Feeds', 'Related Realtime Feeds']);
+    const feedAuth = mobilitySection(text, 'Feed Authentication', ['License', 'Related Schedule Feeds', 'Related Realtime Feeds']);
+    const license = mobilitySection(text, 'License', ['Related Schedule Feeds', 'Related Realtime Feeds']);
+    const observedAt = tryParseDate(pageGenerated || verificationUpdated) || undefined;
+    const geocodeQueryText = locations.split(/[+,]/)[0] || agency || title;
+    const point = (await geocodeQuery(geocodeQueryText)) || (await geocodeQuery(agency)) || (await geocodeQuery(title)) || { lat: 39.5, lng: -98.35 };
+    const feedType = pageUrl.includes('/gtfs_rt/') ? 'GTFS Realtime' : 'GTFS Schedule';
+    const realtime = /realtime/i.test(feedType);
+    const agencyNote = agency && agency.length < 120 ? `Agency ${agency}.` : '';
+
+    return sourceAsset('mobilitydb', {
+      idParts: [pageUrl, title, producerUrl, observedAt],
+      title: `MobilityDB ${title}`,
+      lat: point.lat,
+      lng: point.lng,
+      sourceUrl: pageUrl,
+      notes: [
+        feedType ? `Feed type ${feedType}.` : '',
+        agencyNote,
+        locations ? `Locations ${locations}.` : '',
+        producerUrl ? `Producer URL ${producerUrl}.` : '',
+        verificationUpdated ? `Verification updated ${verificationUpdated}.` : '',
+        pageGenerated ? `Page generated at ${pageGenerated}.` : '',
+        feedAuth ? `Authentication ${feedAuth}.` : '',
+        license ? `License ${license}.` : '',
+      ].filter(Boolean).join(' '),
+      tags: ['transit', 'mobilitydb', 'gtfs', realtime ? 'gtfs-realtime' : 'gtfs-schedule', ...splitList(locations.replace(/\+\s*\d+\s+more/gi, ''))],
+      status: [feedType, locations].filter(Boolean).join(' · ') || 'Transit feed metadata',
+      sourceName: 'Mobility Database',
+      severity: 'info',
+      confidence: 'high',
+      observedAt,
+    });
+  }));
+
+  return assets.filter((asset): asset is OpsMapAsset => Boolean(asset));
+}
+
 interface TrafficCameraRecord {
   index: number;
   camera: string;
@@ -854,22 +1735,6 @@ interface TrackedFlightDefinition {
   label?: string;
 }
 
-interface AdsbLolAircraft {
-  hex?: string;
-  flight?: string;
-  r?: string;
-  t?: string;
-  alt_baro?: number | string | null;
-  alt_geom?: number | string | null;
-  gs?: number | string | null;
-  track?: number | string | null;
-  lat?: number | string | null;
-  lon?: number | string | null;
-  seen?: number | string | null;
-  seen_pos?: number | string | null;
-  baro_rate?: number | string | null;
-}
-
 const DEFAULT_TRACKED_FLIGHTS: TrackedFlightDefinition[] = [
   {
     registration: 'N103RV',
@@ -918,7 +1783,6 @@ async function fetchTrackedFlightAssets(): Promise<OpsMapAsset[]> {
     const seen = parseNumber(aircraft.seen_pos) ?? parseNumber(aircraft.seen);
     if (seen != null && seen > 15 * 60) return null;
     const registration = cleanText(aircraft.r || flight.registration, flight.registration);
-    const flightId = cleanText(aircraft.flight || registration, registration);
     const aircraftType = cleanText(aircraft.t || flight.label || 'Aircraft');
     const observedAt = observedAtFromNow(nowMs, seen);
     const historyKey = `${flight.icao24.toLowerCase()}|${registration.toLowerCase()}`;
@@ -1240,9 +2104,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'nuclear',
     refreshSeconds: 15 * 60,
     attribution: 'European Commission Joint Research Centre EURDEP',
-    catalogOnly: true,
     description: 'European radiological monitoring exchange with near-real-time data from participating countries.',
-    fetch: async () => [],
+    fetch: fetchEurdepAssets,
   },
   {
     id: 'safecast',
@@ -1250,9 +2113,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'nuclear',
     refreshSeconds: 15 * 60,
     attribution: 'Safecast open radiation dataset',
-    catalogOnly: true,
     description: 'Global community and fixed-sensor radiation measurements released under CC0.',
-    fetch: async () => [],
+    fetch: fetchSafecastAssets,
   },
   {
     id: 'gmcmap',
@@ -1260,9 +2122,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'nuclear',
     refreshSeconds: 10 * 60,
     attribution: 'GQ Electronics GMCMap community Geiger counter network',
-    catalogOnly: true,
     description: 'Global community Geiger counter map; useful as a weak signal with variable device quality.',
-    fetch: async () => [],
+    fetch: fetchGmcMapAssets,
   },
   {
     id: 'ntad',
@@ -1270,9 +2131,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'transport',
     refreshSeconds: ONE_DAY_SECONDS,
     attribution: 'Bureau of Transportation Statistics National Transportation Atlas Database',
-    catalogOnly: true,
     description: 'U.S. multimodal transportation facilities, modal networks, and intermodal terminals.',
-    fetch: async () => [],
+    fetch: fetchNtadAssets,
   },
   {
     id: 'faf',
@@ -1280,9 +2140,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'freight',
     refreshSeconds: ONE_DAY_SECONDS,
     attribution: 'Bureau of Transportation Statistics Freight Analysis Framework',
-    catalogOnly: true,
     description: 'U.S. freight flow estimates by mode, commodity, and origin/destination.',
-    fetch: async () => [],
+    fetch: fetchFafAssets,
   },
   {
     id: 'marinecadastre',
@@ -1290,9 +2149,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'maritime',
     refreshSeconds: ONE_DAY_SECONDS,
     attribution: 'NOAA Office for Coastal Management / BOEM MarineCadastre.gov AIS',
-    catalogOnly: true,
     description: 'U.S. vessel traffic AIS downloads for maritime movement and port congestion context.',
-    fetch: async () => [],
+    fetch: fetchMarineCadastreAssets,
   },
   {
     id: 'mobilitydb',
@@ -1300,9 +2158,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'mobility',
     refreshSeconds: ONE_DAY_SECONDS,
     attribution: 'MobilityData Mobility Database and GTFS / GTFS-Realtime feeds',
-    catalogOnly: true,
     description: 'Global public transit schedules and realtime feeds for urban mobility context.',
-    fetch: async () => [],
+    fetch: fetchMobilityDbAssets,
   },
   {
     id: 'tigerline',
@@ -1310,9 +2167,8 @@ const SOURCE_DEFINITIONS: SourceDefinition[] = [
     category: 'reference',
     refreshSeconds: ONE_DAY_SECONDS,
     attribution: 'U.S. Census Bureau TIGER/Line and TIGERweb',
-    catalogOnly: true,
     description: 'U.S. roads, boundaries, and geographic reference files.',
-    fetch: async () => [],
+    fetch: fetchTigerLineAssets,
   },
 ];
 

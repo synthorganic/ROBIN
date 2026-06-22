@@ -34,6 +34,20 @@ export interface ChatCompletionResponse {
   };
 }
 
+interface LMStudioErrorResponse {
+  error?: {
+    message?: string;
+  };
+}
+
+interface LMStudioStreamChunk {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+    };
+  }>;
+}
+
 const DEFAULT_MODEL = 'huihui-ai_qwen3-coder-next-abliterated@iq4_nl';
 
 export async function chatCompletion(
@@ -60,10 +74,8 @@ export async function chatCompletion(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as any).error?.message || 'LMStudio API error'
-    );
+    const errorData = await response.json().catch(() => ({} as LMStudioErrorResponse));
+    throw new Error(errorData.error?.message || 'LMStudio API error');
   }
 
   return await response.json();
@@ -117,9 +129,8 @@ export async function* streamChat(
           if (data === '[DONE]') continue;
 
           try {
-            const json = JSON.parse(data);
-            const content =
-              (json as any).choices?.[0]?.delta?.content || '';
+            const json = JSON.parse(data) as LMStudioStreamChunk;
+            const content = json.choices?.[0]?.delta?.content || '';
             if (content) {
               yield content;
             }

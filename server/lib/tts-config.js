@@ -68,7 +68,6 @@ export function saveTTSConfig(cfg) {
     }
 }
 /** Update a partial config (deep merge) and save. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function updateTTSConfig(patch) {
     const current = getTTSConfig();
     const updated = deepMerge(current, patch);
@@ -76,7 +75,6 @@ export function updateTTSConfig(patch) {
     return updated;
 }
 /** Simple deep merge (target ← source). Only merges plain objects, overwrites everything else. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMerge(target, source) {
     const result = { ...target };
     for (const key of Object.keys(source)) {

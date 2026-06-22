@@ -18,6 +18,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const CONFIG_PATH = path.join(PROJECT_ROOT, 'tts-config.json');
 
+type ConfigRecord = Record<string, unknown>;
+
 export interface TTSVoiceConfig {
   /** Qwen / Replicate TTS settings */
   qwen: {
@@ -90,8 +92,10 @@ export function getTTSConfig(): TTSVoiceConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-      cached = deepMerge(DEFAULTS, raw) as TTSVoiceConfig;
-      return cached;
+      if (isRecord(raw)) {
+        cached = deepMerge(DEFAULTS as unknown as ConfigRecord, raw) as unknown as TTSVoiceConfig;
+        return cached;
+      }
     }
   } catch (err) {
     console.warn('[tts-config] Failed to read config, using defaults:', (err as Error).message);
@@ -114,35 +118,29 @@ export function saveTTSConfig(cfg: TTSVoiceConfig): void {
 }
 
 /** Update a partial config (deep merge) and save. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function updateTTSConfig(patch: Record<string, any>): TTSVoiceConfig {
+export function updateTTSConfig(patch: ConfigRecord): TTSVoiceConfig {
   const current = getTTSConfig();
-  const updated = deepMerge(current, patch) as TTSVoiceConfig;
+  const updated = deepMerge(current as unknown as ConfigRecord, patch) as unknown as TTSVoiceConfig;
   saveTTSConfig(updated);
   return updated;
 }
 /** Simple deep merge (target ← source). Only merges plain objects, overwrites everything else. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function deepMerge(target: any, source: any): any {
-  const result = { ...target };
+function isRecord(value: unknown): value is ConfigRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function deepMerge<T extends ConfigRecord, S extends ConfigRecord>(target: T, source: S): T & S {
+  const result: ConfigRecord = { ...target };
   for (const key of Object.keys(source)) {
     const sv = source[key];
     const tv = target[key];
-    if (
-      sv !== undefined &&
-      typeof sv === 'object' &&
-      sv !== null &&
-      !Array.isArray(sv) &&
-      typeof tv === 'object' &&
-      tv !== null &&
-      !Array.isArray(tv)
-    ) {
-      result[key] = deepMerge(tv, sv);
+    if (isRecord(sv) && isRecord(tv)) {
+      result[key] = deepMerge(tv as unknown as ConfigRecord, sv as unknown as ConfigRecord);
     } else if (sv !== undefined) {
       result[key] = sv;
     }
   }
-  return result;
+  return result as T & S;
 }
 
 // ─── Language-aware TTS voice resolution ─────────────────────────────────────
