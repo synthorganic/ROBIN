@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MapAsset } from './api';
 
+// Import shared source marker logic from sourceVisuals module
+import {
+  sourceMarkerKind,
+  sourceMarkerSvgPath,
+} from './sourceVisuals';
+
 type LeafletClickEvent = { latlng: { lat: number; lng: number } };
 type LeafletEventHandler = (() => void) | ((event: LeafletClickEvent) => void);
 
@@ -110,7 +116,7 @@ interface OverlayState {
 interface LayerBundle {
   marker: LeafletLayer;
   trail?: LeafletLayer;
-  kind: 'aircraft' | 'poi' | 'point';
+  kind: 'aircraft' | 'poi' | 'point' | 'source';
 }
 
 const TILE_PROVIDERS = [
@@ -320,6 +326,31 @@ function aqiPopupHtml(point: OverlayPoint, sourceLabel: string, sourceUrl: strin
     `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">Open source</a>`,
   ];
   return `<div class="ops-map-popup">${lines.join('')}</div>`;
+}
+
+function makeSourceMarkerIcon(
+  L: LeafletApi,
+  asset: MapAsset,
+  color: string,
+  selected = false,
+) {
+  const kind = sourceMarkerKind(asset.sourceId);
+  const path = sourceMarkerSvgPath(kind);
+
+  return L.divIcon({
+    className: `ops-map-div-icon ops-map-div-icon-source ops-map-source-${kind}`,
+    html: `
+      <div class="ops-map-icon ops-map-source-marker ${selected ? 'selected' : ''}"
+           style="--ops-marker-color: ${color};">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="${path}"></path>
+        </svg>
+      </div>
+    `,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -13],
+  });
 }
 
 function makePlaneIcon(L: LeafletApi, heading: number | null | undefined, color: string) {
@@ -753,14 +784,12 @@ export default function LeafletMap({
           zIndexOffset: 80,
         });
       } else {
-        marker = L.circleMarker(point, {
-          radius: asset.severity === 'critical' ? 9 : asset.severity === 'warning' ? 8 : asset.severity === 'watch' ? 7.5 : 7,
-          weight: 1.4,
-          color,
-          fillColor: color,
-          fillOpacity: 0.82,
-          opacity: 0.92,
+        marker = L.marker(point, {
+          icon: makeSourceMarkerIcon(L, asset, color, asset.id === selectedAssetId),
+          riseOnHover: true,
+          keyboard: false,
           pane: 'ops-point-pane',
+          zIndexOffset: 80,
         });
       }
 
@@ -783,7 +812,7 @@ export default function LeafletMap({
         trailLayer.on('click', () => onSelectAsset(asset));
       }
 
-      nextBundles[asset.id] = { marker, trail: trailLayer, kind: isAircraft ? 'aircraft' : isSavedPoi ? 'poi' : 'point' };
+      nextBundles[asset.id] = { marker, trail: trailLayer, kind: isAircraft ? 'aircraft' : isSavedPoi ? 'poi' : 'source' };
     });
 
     assetLayerRef.current = nextBundles;

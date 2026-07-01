@@ -65,9 +65,18 @@ export function checkPrerequisites(opts?: { quiet?: boolean }): PrereqResult {
 /** Check if a command exists on the system. */
 function commandExists(cmd: string): boolean {
   try {
-    execSync(`which ${cmd}`, { stdio: 'pipe', timeout: 3000 });
+    // Use 'where' on Windows, 'which' elsewhere
+    const platform = process.platform;
+    const checkCmd = platform === 'win32' ? `where ${cmd}` : `which ${cmd}`;
+    execSync(checkCmd, { stdio: 'pipe', timeout: 3000 });
     return true;
   } catch {
-    return false;
+    // Fallback: try to execute the command directly
+    try {
+      execSync(`${cmd} --version`, { stdio: 'pipe', timeout: 2000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

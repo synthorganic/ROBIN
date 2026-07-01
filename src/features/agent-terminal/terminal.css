@@ -1,0 +1,84 @@
+/* ROBIN Terminal Styles */
+.robin-terminal-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #0f110d;
+}
+
+.robin-terminal-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #1a1d16;
+  border-bottom: 1px solid rgba(184, 167, 103, 0.2);
+  font-size: 12px;
+  color: #dcd5c2;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #75a865;
+}
+
+.status-dot.connecting {
+  background: #b39055;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.status-dot.disconnected {
+  background: #c75b75;
+}
+
+.status-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.robin-terminal-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.robin-terminal-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.robin-terminal-canvas .xterm {
+  padding: 8px;
+}
+
+.robin-terminal-canvas .xterm .xterm-viewport {
+  scrollbar-width: thin;
+}
+
+/* xterm scrollbars */
+.robin-terminal-canvas .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.robin-terminal-canvas .xterm-viewport::-webkit-scrollbar-track {
+  background: #0a0c08;
+}
+
+.robin-terminal-canvas .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #2a2f26;
+  border-radius: 5px;
+}
+
+.robin-terminal-canvas .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #dcd5c2;
+}

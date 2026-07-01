@@ -168,10 +168,28 @@ export async function buildOpsAgentToolContext(selectedToolIds?: string[]) {
   }
 
   const selected = new Set(selectedToolIds ?? []);
+
+  // Build the base catalog info
   const compactLines = catalog.tools.map((tool) => {
     const aliases = tool.aliases.length ? ` aliases=${tool.aliases.join(',')}` : '';
     return `- ${tool.displayName} (${tool.category})${aliases}: ${tool.description.slice(0, 180)}`;
   });
+
+  // Add execute routes documentation if PowerShell is available
+  const hasPowerShell = catalog.tools.some(t =>
+    t.displayName.toLowerCase().includes('powershell') ||
+    t.id.toLowerCase().includes('powershell')
+  );
+
+  const executeDocs = hasPowerShell ? [
+    '',
+    'ROBIN Execute Routes (direct command execution):',
+    '- For immediate PowerShell or bash execution, use POST /api/execute/powershell or POST /api/execute/bash',
+    '- These routes support: command (required), timeoutMs, description parameters',
+    '- Use these for one-off commands rather than creating cron jobs',
+    '- Requires GATEWAY_TOKEN configured in the server',
+  ] : [];
+
   const detailed = catalog.tools
     .filter((tool) => selected.has(tool.id) || selected.has(tool.displayName))
     .slice(0, 8)
@@ -182,5 +200,6 @@ export async function buildOpsAgentToolContext(selectedToolIds?: string[]) {
     'When a task calls for a tool, name the tool and provide concrete arguments. Prefer project documents and file paths exactly as provided.',
     ...compactLines,
     ...detailed,
+    ...executeDocs,
   ].join('\n');
 }

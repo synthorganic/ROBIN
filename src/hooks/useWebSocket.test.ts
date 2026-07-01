@@ -111,7 +111,7 @@ describe('useWebSocket', () => {
   });
 
   describe('Connect handshake payload', () => {
-    it('should identify as the OpenClaw control UI client', async () => {
+    it('should identify as the ROBIN control UI client', async () => {
       const wsInstances: MockWebSocket[] = [];
       const OriginalMockWS = MockWebSocket;
       (globalThis as unknown as { WebSocket: typeof MockWebSocket }).WebSocket = class extends OriginalMockWS {
@@ -139,7 +139,7 @@ describe('useWebSocket', () => {
       const connectReq = getConnectRequest(ws);
       const client = (connectReq?.params as { client?: { id?: string; mode?: string } } | undefined)?.client;
 
-      expect(client?.id).toBe('openclaw-control-ui');
+      expect(client?.id).toBe('robin-control-ui');
       expect(client?.mode).toBe('webchat');
     });
 

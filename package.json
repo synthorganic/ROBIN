@@ -36,6 +36,7 @@
     "start:server": "tsx server/index.ts",
     "prod": "npm run build && node server-dist/index.js",
     "setup": "tsx scripts/setup.ts",
+    "gateway:init": "tsx ./scripts/gateway-init.ts",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "postinstall": "node -e \"try{require('fs').accessSync('.env')}catch{console.log('\\n  Run \\x1b[33mnpm run setup\\x1b[0m to configure ROBIN.\\n')}\""
@@ -82,6 +83,7 @@
     "ws": "^8.19.0",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

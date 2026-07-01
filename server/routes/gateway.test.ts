@@ -378,12 +378,20 @@ describe('gateway routes', () => {
 
     it('uses a long enough timeout for model catalog fetches', async () => {
       vi.resetModules();
-      vi.doMock('node:child_process', () => ({
-        execFile: (...args: unknown[]) => execFileImpl(...args),
-      }));
-      vi.doMock('node:fs/promises', () => ({
-        readFile: (...args: unknown[]) => readFileImpl(...args),
-      }));
+      vi.doMock('node:child_process', async () => {
+        const actual = await vi.importActual('node:child_process');
+        return {
+          ...actual,
+          execFile: (...args: unknown[]) => execFileImpl(...args),
+        };
+      });
+      vi.doMock('node:fs/promises', async () => {
+        const actual = await vi.importActual('node:fs/promises');
+        return {
+          ...actual,
+          readFile: (...args: unknown[]) => readFileImpl(...args),
+        };
+      });
       vi.doMock('../lib/config.js', () => ({
         config: {
           auth: false, port: 3000, host: '127.0.0.1', sslPort: 3443,

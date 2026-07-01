@@ -20,7 +20,7 @@ interface UseWebSocketReturn {
 
 const RECONNECT_BASE_DELAY = 1000;
 const RECONNECT_MAX_DELAY = 30000;
-const INSTANCE_ID_STORAGE_KEY = 'oc-webchat-instance-id';
+const INSTANCE_ID_STORAGE_KEY = 'robin-webchat-instance-id';
 
 function generateInstanceId(): string {
   return crypto.randomUUID ? crypto.randomUUID() : `inst-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -42,7 +42,7 @@ function getOrCreateInstanceId(): string {
 }
 
 /**
- * Low-level WebSocket hook for the OpenClaw gateway protocol.
+ * Low-level WebSocket hook for the ROBIN gateway protocol.
  *
  * Handles connection (with challenge/auth handshake), JSON-RPC requests
  * with timeouts, event dispatch, and automatic reconnection with
@@ -162,7 +162,7 @@ export function useWebSocket(): UseWebSocketReturn {
             params: {
               minProtocol: 3, maxProtocol: 3,
               client: {
-                id: 'openclaw-control-ui',
+                id: 'robin-control-ui',
                 version: '0.1.0',
                 platform: 'web',
                 mode: 'webchat',

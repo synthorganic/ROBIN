@@ -33,6 +33,13 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
+  // Fast-path for ROBIN_MODE=1 embedded mode (xterm terminal in ROBIN Ops Agent)
+  // When set, runs simplified agent loop without Ink TUI, outputs to stdout/stderr
+  if (process.env.ROBIN_MODE === '1') {
+    await import('../robin/robinEmbedded.js');
+    return;
+  }
+
   // Fast-path for --version/-v: zero module loading needed
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
     // MACRO.VERSION is inlined at build time

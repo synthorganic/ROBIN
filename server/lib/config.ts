@@ -215,18 +215,32 @@ export async function probeGateway(): Promise<void> {
       console.warn(`  \x1b[33m⚠\x1b[0m Gateway returned HTTP ${resp.status}`);
     }
   } catch {
-    console.warn('  \x1b[33m⚠\x1b[0m Gateway unreachable — is it running?');
+    const gatewayUrl = config.gatewayUrl || '';
+    const isLocalGateway = ['127.0.0.1', 'localhost'].includes(
+      gatewayUrl.replace(/^https?:\/\//, '').split(':')[0]
+    );
+    if (!isLocalGateway) {
+      console.warn('  \x1b[33m⚠\x1b[0m Gateway unreachable — is it running?');
+    } else {
+      // Local gateway may be starting up - info-level message
+      console.log('  \x1b[36mℹ\x1b[0m Gateway probe failed (local instance may still be starting)');
+    }
   }
 }
 
 /** Log startup warnings and validate critical configuration. */
 export function validateConfig(): void {
-  // Critical: gateway token is the only required config
-  if (!config.gatewayToken) {
+  // Gateway token validation
+  // Empty token is acceptable for localhost with no auth (local ROBIN instance)
+  const gatewayUrl = config.gatewayUrl || '';
+  const isLocalGateway = ['127.0.0.1', 'localhost'].includes(
+    gatewayUrl.replace(/^https?:\/\//, '').split(':')[0]
+  );
+  if (!config.gatewayToken && !isLocalGateway) {
     console.warn(
       '\n  \x1b[33m⚠ GATEWAY_TOKEN is not set\x1b[0m\n' +
       '  Gateway API calls (memories, models, session info) will fail.\n' +
-      '  Run \x1b[36mnpm run setup\x1b[0m to configure ROBIN, or set GATEWAY_TOKEN in .env\n',
+      '  Run \x1b[36mnpm run setup\x1b[0m to configure ROBIN for local development.\n',
     );
   }
 

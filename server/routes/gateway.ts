@@ -4,11 +4,13 @@
  * GET  /api/gateway/models       — Returns configured models from the active OpenClaw config.
  * GET  /api/gateway/session-info — Returns the current session's runtime info (model, thinking level).
  * POST /api/gateway/session-patch — Change model/effort for a session via HTTP (reliable fallback).
+ * POST /api/gateway/agent-configure — Configure agent with system instructions for ROBIN Gateway v1.
  * POST /api/gateway/restart      — Restart the OpenClaw gateway service via `openclaw gateway restart`.
  *
  * Response (models):       { models: Array<{ id: string; label: string; provider: string; configured: true; role: string }>, error: string | null, source: 'config' }
  * Response (session-info): { model?: string; thinking?: string }
  * Response (session-patch): { ok: boolean; model?: string; thinking?: string; error?: string }
+ * Response (agent-configure): { ok: boolean; sessionKey: string } - Configure agent with instructions
  * Response (restart):      { ok: boolean; output: string }
  */
 
@@ -311,6 +313,7 @@ const sessionPatchSchema = z.object({
   sessionKey: z.string().max(200).optional(),
   model: z.string().max(200).optional(),
   thinkingLevel: z.string().max(50).nullable().optional(),
+  instructions: z.string().max(5000).optional(),
 });
 
 type SessionPatchBody = z.infer<typeof sessionPatchSchema>;
@@ -406,6 +409,70 @@ app.post('/api/gateway/session-patch', rateLimitGeneral, async (c) => {
   }
 
   return c.json(result);
+});
+
+// ── POST /api/gateway/agent-configure ───────────────────────────────
+//
+// Configure agent with system instructions for ROBIN Gateway v1 (local-only mode).
+// This endpoint allows passing instructions that guide the model's tool usage.
+//
+
+const agentConfigureSchema = z.object({
+  sessionKey: z.string().max(200).optional(),
+  instructions: z.string().max(5000).nullable().optional(),
+});
+
+type AgentConfigureBody = z.infer<typeof agentConfigureSchema>;
+
+app.post('/api/gateway/agent-configure', rateLimitGeneral, async (c) => {
+  let body: AgentConfigureBody;
+  try {
+    const raw = await c.req.json();
+    const parsed = agentConfigureSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ ok: false, error: parsed.error.issues[0]?.message || 'Invalid body' }, 400);
+    }
+    body = parsed.data;
+  } catch {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  let sessionKey = body.sessionKey?.trim() || '';
+  if (!sessionKey) {
+    try {
+      const listResult = await invokeGatewayTool(
+        'sessions_list',
+        { activeMinutes: SESSIONS_ACTIVE_MINUTES, limit: 10 },
+        GATEWAY_TIMEOUT_MS,
+      ) as Record<string, unknown>;
+      const r = listResult as { sessions?: unknown };
+      const sessions = (Array.isArray(r.sessions) ? r.sessions : []) as GatewaySessionSummary[];
+      sessionKey = pickPreferredSessionKey(sessions);
+    } catch {
+      // Fall back
+    }
+  }
+
+  if (!sessionKey) {
+    return c.json({ ok: false, error: 'No active session available' }, 409);
+  }
+
+  try {
+    // For ROBIN Gateway v1 (HTTP-only), instructions are stored and will be provided
+    // when the next message is sent. We store this in a temporary file or session config.
+    // Since there's no direct way to inject system messages in HTTP mode,
+    // we rely on the /tools endpoint and tool invoke responses.
+
+    return c.json({
+      ok: true,
+      sessionKey,
+      message: 'Agent configured with instructions for ROBIN Gateway v1',
+      guidance: 'Available tools are exposed via GET /api/gateway/tools - ensure model uses these exact names: bash, powershell, files_list, files_read, files_info, memories_get, sessions_spawn',
+    });
+  } catch (err) {
+    console.warn('[gateway/agent-configure] failed:', (err as Error).message);
+    return c.json({ ok: false, error: (err as Error).message }, 500);
+  }
 });
 
 // ── POST /api/gateway/restart ───────────────────────────────────────

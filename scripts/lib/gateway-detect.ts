@@ -9,11 +9,16 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { ExecSyncOptions } from 'node:child_process';
 import { join } from 'node:path';
-import crypto from 'node:crypto';
-import os from 'node:os';
+import * as cryptoImport from 'node:crypto';
+import * as osImport from 'node:os';
+
+const crypto = cryptoImport;
+const os = osImport;
+const { randomBytes: cryptoRandomBytes } = cryptoImport;
 
 const HOME = process.env.HOME || os.homedir();
 const OPENCLAW_CONFIG = join(HOME, '.openclaw', 'openclaw.json');
+const ROBIN_GATEWAY_CONFIG_PATH = join(HOME, '.robin', 'gateway.json');
 
 interface OpenClawConfig {
   gateway?: {
@@ -31,6 +36,23 @@ interface OpenClawConfig {
     };
   };
   [key: string]: unknown;
+}
+
+interface RobinGatewayConfig {
+  gateway?: {
+    port?: number;
+    bind?: string;
+    auth?: {
+      mode?: 'token' | 'none';
+      token?: string;
+    };
+    controlUi?: {
+      allowedOrigins?: string[];
+    };
+    tools?: {
+      allow?: string[];
+    };
+  };
 }
 
 export interface DetectedGateway {
@@ -366,7 +388,7 @@ function bootstrapPairedJson(): { ok: boolean; message: string; needsRestart: bo
     // Use the gateway auth token — the CLI sends this token in connect requests,
     // so the device's stored token must match it.
     const detected = detectGatewayConfig();
-    const token = detected.token || crypto.randomBytes(32).toString('base64url');
+    const token = detected.token || cryptoRandomBytes(32).toString('base64url');
 
     // Create paired.json
     const paired: Record<string, unknown> = {
@@ -641,7 +663,7 @@ export function prePairROBINDevice(gatewayToken?: string): { ok: boolean; messag
     // connect request which includes this token. The gateway validates that
     // the token in the connect request matches the device's stored token.
     const now = Date.now();
-    const token = gatewayToken || detectGatewayConfig().token || crypto.randomBytes(32).toString('base64url');
+    const token = gatewayToken || detectGatewayConfig().token || cryptoRandomBytes(32).toString('base64url');
 
     // Update metadata/token if device already exists
     if (paired[deviceId]) {
@@ -715,7 +737,7 @@ export function prePairROBINDevice(gatewayToken?: string): { ok: boolean; messag
       }
 
       writeFileSync(pairedPath, JSON.stringify(paired, null, 2) + '\n');
-      const fieldsLabel = changedFields.length > 0 ? ` (${[...new Set(changedFields)].join(', ')})` : '';
+      const fieldsLabel = changedFields.length > 0 ? ` (${Array.from(new Set(changedFields)).join(', ')})` : '';
       return {
         ok: true,
         message: `Updated ROBIN paired device ${deviceId.substring(0, 12)}…${fieldsLabel}`,
@@ -925,11 +947,11 @@ export function detectNeededConfigChanges(opts: {
   const trimmedROBINOrigin = opts.robinOrigin?.trim() || undefined;
   const trimmedROBINHttpsOrigin = opts.robinHttpsOrigin?.trim() || undefined;
 
-  const origins = [...new Set([
+  const origins = Array.from(new Set([
     ...(opts.allowedOrigins || []),
     trimmedROBINOrigin,
     trimmedROBINHttpsOrigin,
-  ].map(origin => origin?.trim()).filter((origin): origin is string => Boolean(origin)))];
+  ].map(origin => origin?.trim()).filter((origin): origin is string => Boolean(origin))));
 
   for (const origin of origins) {
     if (!needsOriginPatch(origin)) continue;
@@ -967,4 +989,54 @@ export function restartGateway(): { ok: boolean; message: string } {
       return { ok: false, message: 'Could not restart gateway — restart it manually' };
     }
   }
+}
+
+// ── ROBIN Gateway helpers ────────────────────────────────────────────
+
+export interface RobinGatewayTokenResult {
+  token: string;
+  url: string;
+  configPath: string;
+}
+
+/**
+ * Generate or load a ROBIN Gateway token.
+ * If the config exists with a token, loads it. Otherwise creates a new one.
+ */
+export function getRobinGatewayToken(): RobinGatewayTokenResult {
+  mkdirSync(HOME + '/.robin', { recursive: true });
+
+  let token: string | null = null;
+
+  if (existsSync(ROBIN_GATEWAY_CONFIG_PATH)) {
+    try {
+      const raw = readFileSync(ROBIN_GATEWAY_CONFIG_PATH, 'utf-8');
+      const config = JSON.parse(raw) as RobinGatewayConfig;
+      token = config.gateway?.auth?.token || null;
+    } catch {
+      // Config exists but can't be parsed — generate new token
+    }
+  }
+
+  if (!token) {
+    token = cryptoRandomBytes(32).toString('base64url');
+    const config: RobinGatewayConfig = {
+      gateway: {
+        port: 18789,
+        bind: '127.0.0.1',
+        auth: { mode: 'token', token },
+        controlUi: { allowedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'] },
+        tools: {
+          allow: ['bash', 'powershell', 'files_list', 'memories_get', 'sessions_spawn'],
+        },
+      },
+    };
+    writeFileSync(ROBIN_GATEWAY_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+  }
+
+  return {
+    token,
+    url: 'http://127.0.0.1:18789',
+    configPath: ROBIN_GATEWAY_CONFIG_PATH,
+  };
 }

@@ -2,7 +2,12 @@
 
 ROBIN is the local-first operations workspace for Inertiai Ops. It brings the status overview, project document intake, agent chat, CLI bridge, and geo-linked operations map into one browser UI.
 
-ROBIN can talk directly to a local OpenAI-compatible API such as LM Studio, llama.cpp server, or vLLM. It can also bridge to a compatible agent gateway when that runtime is available.
+ROBIN can talk directly to a local OpenAI-compatible API such as LM Studio, llama.cpp server, or vLLM. It can also use its built-in local gateway for direct command execution without requiring external dependencies.
+
+**New in ROBIN v1.5.2:**
+- Native PowerShell support via `/api/execute/powershell`
+- BASH/shell command execution endpoint
+- Interactive `npm run gateway:init` for easy token generation
 
 ## Features
 
@@ -22,7 +27,7 @@ ROBIN can talk directly to a local OpenAI-compatible API such as LM Studio, llam
 - Node.js >= 22.x
 - npm (bundled with Node)
 - Optional: a local OpenAI-compatible API such as LM Studio on `http://127.0.0.1:1234`
-- Optional: a compatible agent gateway for gateway-backed memory, skill, and session operations
+- Optional: the ROBIN gateway (auto-configured via `npm run gateway:init`)
 
 ### Installation (Linux/macOS)
 
@@ -48,6 +53,18 @@ npm run dev:server # Backend on :3081
 npm start         # Serves built assets from :3080
 ```
 
+### Gateway Setup (Optional - for advanced features)
+
+For ROBIN to access external tools, execute commands via the gateway, or use remote workspace features:
+
+```bash
+# Interactive gateway token generation
+npm run gateway:init
+
+# Or manually edit .env:
+GATEWAY_TOKEN=your_generated_token_here
+```
+
 Visit http://localhost:3080 (or the configured port) to access ROBIN.
 
 ## Configuration
@@ -58,8 +75,8 @@ configuration wizard, or manually edit `.env` with these key options:
 - `LOCAL_API_BASE_URL` — OpenAI-compatible local API base URL, for example `http://127.0.0.1:1234`
 - `LOCAL_API_KEY` — Local API key; LM Studio commonly accepts any non-empty value
 - `LOCAL_API_MODEL` — Default local model when the API does not provide one
-- `GATEWAY_TOKEN` — Authentication token for a compatible agent gateway
-- `GATEWAY_URL` — URL of the gateway server
+- `GATEWAY_TOKEN` — Authentication token for ROBIN's built-in gateway (generate with `npm run gateway:init`)
+- `GATEWAY_URL` — URL of the gateway server (default: http://127.0.0.1:18789)
 - `PORT` — Server port (default: 3080)
 - `HOST` — Bind address (default: 127.0.0.1, set to 0.0.0.0 for network access)
 - `ROBIN_AUTH`/`ROBIN_PASSWORD_HASH` — Enable password protection

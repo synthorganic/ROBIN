@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useGateway, loadConfig, saveConfig } from '@/contexts/GatewayContext';
-import { DEFAULT_GATEWAY_WS } from '@/lib/constants';
+import { DEFAULT_GATEWAY_WS, DEFAULT_GATEWAY_TOKEN } from '@/lib/constants';
 import { areGatewayUrlsEquivalent } from '@/lib/gatewayUrls';
 
 export interface ConnectionManagerState {
@@ -54,7 +54,7 @@ export function useConnectionManager(): ConnectionManagerState {
   // Editable connection settings (local state for settings drawer)
   // Lazy initializers avoid re-parsing sessionStorage on every render
   const [editableUrl, setEditableUrl] = useState(() => loadConfig().url || DEFAULT_GATEWAY_WS);
-  const [editableToken, setEditableToken] = useState(() => loadConfig().token || '');
+  const [editableToken, setEditableToken] = useState(() => loadConfig().token || DEFAULT_GATEWAY_TOKEN);
   const [serverSideAuth, setServerSideAuth] = useState(false);
   const [officialUrl, setOfficialUrl] = useState<string | null>(null);
 

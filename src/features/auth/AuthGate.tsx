@@ -5,7 +5,7 @@
  * unauthenticated, or renders the ROBIN shell when authenticated.
  */
 import { LoginPage } from './LoginPage';
-import OpsApp from '@/features/ops/OpsApp';
+import App from '@/App';
 import { useAuth } from './useAuth';
 
 export function AuthGate() {
@@ -23,5 +23,5 @@ export function AuthGate() {
     return <LoginPage onLogin={login} error={error} />;
   }
 
-  return <OpsApp onLogout={logout} />;
+  return <App onLogout={logout} />;
 }

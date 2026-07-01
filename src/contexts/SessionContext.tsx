@@ -762,20 +762,83 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       const thinkingLevel = opts.thinking && opts.thinking !== 'off' ? opts.thinking : null;
 
-      await rpc('sessions.patch', {
-        key: sessionKey,
-        label: rootName,
-        model: opts.model,
-        thinkingLevel,
-      });
+      // Add ROBIN Gateway v1 tool instructions for local-only operation
+      // This provides the model with information about available tools when OpenClaw isn't available
+      try {
+        const robinInstructions = `## Available Tools
 
-      const idempotencyKey = `spawn-root-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+When using ROBIN Gateway v1 (local operations), you have access to the following tools:
+
+### Command Execution
+- **bash**: Execute shell commands for Linux/macOS. Use for terminal tasks, file operations.
+- **powershell**: Execute PowerShell commands for Windows-specific tasks.
+
+### File System Access
+- **files_list**: List files in a directory with optional pattern filtering.
+- **files_read**: Read text file contents (max 10MB). For binary files like .docx, use PowerShell to extract content.
+- **files_info**: Get file metadata without reading content.
+
+### Additional Features
+- **memories_get**: Retrieve stored memories from workspace.
+- **sessions_spawn**: Spawn a new sub-agent session with a specific task.
+
+## Important Notes
+
+1. When working with binary files (.docx, .xlsx, etc.), first use PowerShell to extract text content before processing.
+2. All file paths should be absolute when using file tools.
+3. Commands execute in the project directory (${process.cwd()})`
+        await rpc('sessions.patch', {
+          key: sessionKey,
+          label: rootName,
+          model: opts.model,
+          thinkingLevel,
+          instructions: robinInstructions,
+        });
+      } catch {
+        // If sessions.patch fails (OpenClaw-specific), continue without instructions
+      }
       await rpc('chat.send', {
         sessionKey,
         message: opts.task,
         deliver: false,
-        idempotencyKey,
+        idempotencyKey: `spawn-root-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       });
+
+      // For ROBIN Gateway v1, send an initial instruction to configure tool call format
+      try {
+        await rpc('chat.send', {
+          sessionKey,
+          message:
+`## Tool Call Format for ROBIN Gateway v1
+
+When responding with tool calls, use these EXACT formats:
+
+### Command Execution
+- **bash**: Use \`tool: bash\` with \`\`\`json\n{"command": "..."}\n\`\`\`
+- **powershell**: Use \`tool: powershell\` with \`\`\`json\n{"command": "..."}\n\`\`\`
+
+### File System Tools
+- **files_read**: Use \`tool: files_read\` with \`\`\`json\n{"path": "/absolute/path/to/file"}\n\`\`\`
+- **files_list**: Use \`tool: files_list\` with optional directory and pattern
+- **files_info**: Use \`tool: files_info\` with path to get file metadata
+
+Example tool call format:
+**tool:** \`files_read\`
+\`\`\`json
+{"path": "C:\\\\Users\\\\name\\\\file.txt"}
+\`\`\`
+
+DO NOT use:
+- ❌ Read, write, edit (these are OpenClaw-style names)
+- ❌ workspace path shortcuts
+
+Only use: files_read, files_list, files_info, bash, powershell, memories_get, sessions_spawn`,
+          deliver: false,
+          idempotencyKey: `spawn-instruction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        });
+      } catch {
+        // If this fails (e.g. OpenClaw doesn't support), continue anyway
+      }
 
       await refreshSessions();
       setCurrentSession(sessionKey);

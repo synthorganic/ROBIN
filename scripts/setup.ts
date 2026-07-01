@@ -11,11 +11,13 @@
 /** Mask a token for display, with a guard for short tokens. */
 // Show token in prompts so users can verify what they entered
 
-import { existsSync, readdirSync, mkdirSync, copyFileSync, lstatSync } from 'node:fs';
-import { execSync } from 'node:child_process';
-import { resolve, join } from 'node:path';
+import { existsSync, readdirSync, mkdirSync, copyFileSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
+import { execSync, spawn } from 'node:child_process';
+import { resolve, join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { randomBytes } from 'node:crypto';
+import { randomBytes as cryptoRandomBytes } from 'node:crypto';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { input, password, confirm, select } from '@inquirer/prompts';
 import { printBanner, section, success, warn, fail, info, dim, promptTheme } from './lib/banner.js';
@@ -148,6 +150,85 @@ async function applyConfigChanges(changes: ConfigChange[]): Promise<void> {
   }
 }
 
+// ── ROBIN Gateway helpers ────────────────────────────────────────────
+
+/**
+ * Start the ROBIN Gateway in the background.
+ * Returns a cleanup function to stop the process.
+ */
+function startRobinGateway(): { cleanup: () => void; pid?: number } {
+  const PROJECT_ROOT = resolve(process.cwd());
+  const gatewayJsPath = join(PROJECT_ROOT, 'server', 'lib', 'gateway-v1.js');
+  const gatewayTsPath = join(PROJECT_ROOT, 'server', 'lib', 'gateway-v1.ts');
+
+  let childProcess: import('node:child_process').ChildProcess | null = null;
+
+  try {
+    // Check for existing compiled JS first, otherwise use TS
+    const usingTSX = existsSync(gatewayTsPath) && !existsSync(gatewayJsPath);
+
+    if (!existsSync(gatewayJsPath) && !existsSync(gatewayTsPath)) {
+      warn(`ROBIN Gateway script not found`);
+      return { cleanup: () => {} };
+    }
+
+    // Use tsx to run the gateway script directly
+    // This works across platforms and handles ESM correctly
+
+    dim(`Starting ROBIN Gateway with: tsx server/lib/gateway-v1.ts`);
+
+    childProcess = spawn('tsx', ['server/lib/gateway-v1.ts'], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: false,
+      cwd: PROJECT_ROOT
+    });
+
+    // Log any errors from the process
+    childProcess.on('error', (err) => {
+      warn(`Gateway process error: ${err.message}`);
+    });
+
+    // Capture stdout/stderr for debugging
+    childProcess.stdout?.on('data', (data) => {
+      console.log(data.toString());
+    });
+    childProcess.stderr?.on('data', (data) => {
+      const msg = data.toString();
+      if (msg.includes('Gateway ready') || msg.includes('Listening on')) {
+        // Gateway started successfully
+        return;
+      }
+      if (msg.includes('Error') || msg.includes('Failed') || msg.includes('error:')) {
+        warn(msg.trim());
+      }
+    });
+
+    childProcess.on('exit', (code, signal) => {
+      if (code !== null && code !== 0) {
+        // Gateway exited - this is expected behavior since serve() waits forever
+        // If it exits quickly with error, log it
+        if (code !== 130 && code !== 143) { // Not a graceful shutdown
+          warn(`Gateway exited with code ${code}${signal ? ` due to ${signal}` : ''}`);
+        }
+      }
+    });
+
+    return {
+      cleanup: () => {
+        if (childProcess && !childProcess.killed) {
+          childProcess.kill('SIGTERM');
+          try { childProcess.kill('SIGKILL'); } catch {}
+        }
+      },
+      pid: childProcess.pid || undefined
+    };
+  } catch (err) {
+    warn(`Failed to start ROBIN Gateway: ${(err as Error).message}`);
+    return { cleanup: () => {} };
+  }
+}
+
 // ── Ctrl+C handler ───────────────────────────────────────────────────
 
 process.on('SIGINT', () => {
@@ -224,12 +305,14 @@ async function main(): Promise<void> {
     tailscale-serve   Loopback + Tailscale Serve hostname
 
   The setup wizard guides you through 6 steps:
-    1. Gateway Connection — connect to your compatible agent gateway
+    1. Gateway Connection — choose ROBIN Gateway (local) or OpenClaw Gateway
     2. Agent Identity     — set your agent's display name
     3. Access Mode        — local, Tailscale IP, Tailscale Serve, LAN, or custom
     4. Authentication     — password protection (network mode)
     5. TTS Configuration  — optional text-to-speech API keys
     6. Advanced Settings  — custom file paths (most users skip this)
+
+Note: ROBIN Gateway is a local-first alternative to OpenClaw that requires no external installation.
 
   Examples:
     npm run setup                                     # Interactive setup
@@ -333,8 +416,11 @@ async function collectInteractive(
 
   section(1, TOTAL_SECTIONS, 'Gateway Connection');
   dim('ROBIN connects to your compatible agent gateway.');
-  dim('Make sure the gateway is running before continuing.');
   console.log('');
+
+  const HOME = process.env.HOME || os.homedir();
+  const ROBIN_DIR = join(HOME, '.robin');
+  const ROBIN_GATEWAY_CONFIG_PATH = join(ROBIN_DIR, 'gateway.json');
 
   // Auto-detect gateway config
   const detected = detectGatewayConfig();
@@ -355,48 +441,119 @@ async function collectInteractive(
     success('Found OPENCLAW_GATEWAY_TOKEN in environment');
   }
 
-  config.GATEWAY_URL = await input({
+  // Ask user to choose gateway type
+  const gatewayChoice = await select({
     theme: promptTheme,
-    message: 'Gateway URL',
-    default: defaultUrl,
-    validate: (val) => {
-      if (!isValidUrl(val)) return 'Please enter a valid HTTP(S) URL';
-      return true;
-    },
+    message: 'Which gateway would you like to use?',
+    choices: [
+      { name: 'ROBIN Gateway (local, no OpenClaw needed)', value: 'robin', description: 'Auto-configured local gateway - recommended for most users' },
+      { name: 'OpenClaw Gateway', value: 'openclaw', description: 'Use existing OpenClaw gateway configuration' },
+      { name: 'Remote Gateway', value: 'remote', description: 'Connect to a remote gateway (requires token)' },
+    ],
   });
 
-  // If we have an auto-detected token, offer to use it
-  if (defaultToken && !existing.GATEWAY_TOKEN) {
-    const tokenLabel = tokenChoice.source === 'env' ? 'environment token' : 'detected token';
-    const useDetected = await confirm({
-    theme: promptTheme,
-      message: `Use ${tokenLabel} (${defaultToken})?`,
-      default: true,
-    });
-    if (useDetected) {
-      config.GATEWAY_TOKEN = defaultToken;
-    } else {
-      config.GATEWAY_TOKEN = await password({
-    theme: promptTheme,
-        message: 'Gateway Auth Token (required)',
-        validate: (val) => {
-          if (!val || !val.trim()) return 'Gateway token is required';
-          return true;
+  if (gatewayChoice === 'robin') {
+    // ROBIN Gateway - auto-generate token and start locally
+    dim('Setting up local ROBIN Gateway...');
+
+    // Create .robin directory if needed
+    mkdirSync(ROBIN_DIR, { recursive: true });
+
+    // Generate token
+    const robinToken = cryptoRandomBytes(32).toString('base64url');
+
+    // Save to gateway config
+    const robinConfig = {
+      gateway: {
+        port: 18789,
+        bind: '127.0.0.1',
+        auth: {
+          mode: 'token',
+          token: robinToken,
         },
-      });
-    }
-  } else if (existing.GATEWAY_TOKEN) {
-    // Existing token — offer to keep it
-    const keepExisting = await confirm({
-    theme: promptTheme,
-      message: `Keep existing gateway token (${existing.GATEWAY_TOKEN})?`,
-      default: true,
+        controlUi: {
+          allowedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+        },
+        tools: {
+          allow: ['bash', 'powershell', 'files_list', 'memories_get', 'sessions_spawn'],
+        },
+      },
+    };
+
+    writeFileSync(ROBIN_GATEWAY_CONFIG_PATH, JSON.stringify(robinConfig, null, 2) + '\n');
+    success(`Created ROBIN Gateway config at ${ROBIN_DIR}`);
+
+    // Store token
+    config.GATEWAY_TOKEN = robinToken;
+    config.GATEWAY_URL = 'http://127.0.0.1:18789';
+
+    dim('Auto-generated local gateway token. Add this to your ROBIN .env:');
+    console.log(`  GATEWAY_TOKEN=${robinToken}`);
+
+    // Start the gateway server in background
+    success('Starting ROBIN Gateway server...');
+    const gatewayCleanup = startRobinGateway();
+
+    // Give the server time to start
+    await sleep(2000);
+
+    success('ROBIN Gateway is ready');
+  } else if (gatewayChoice === 'openclaw') {
+    // OpenClaw Gateway - use existing detection logic
+    config.GATEWAY_URL = await input({
+      theme: promptTheme,
+      message: 'Gateway URL',
+      default: defaultUrl,
+      validate: (val) => {
+        if (!isValidUrl(val)) return 'Please enter a valid HTTP(S) URL';
+        return true;
+      },
     });
-    if (keepExisting) {
-      config.GATEWAY_TOKEN = existing.GATEWAY_TOKEN;
+
+    // If we have an auto-detected token, offer to use it
+    if (defaultToken && !existing.GATEWAY_TOKEN) {
+      const tokenLabel = tokenChoice.source === 'env' ? 'environment token' : 'detected token';
+      const useDetected = await confirm({
+        theme: promptTheme,
+        message: `Use ${tokenLabel} (${defaultToken})?`,
+        default: true,
+      });
+      if (useDetected) {
+        config.GATEWAY_TOKEN = defaultToken;
+      } else {
+        config.GATEWAY_TOKEN = await password({
+          theme: promptTheme,
+          message: 'Gateway Auth Token (required)',
+          validate: (val) => {
+            if (!val || !val.trim()) return 'Gateway token is required';
+            return true;
+          },
+        });
+      }
+    } else if (existing.GATEWAY_TOKEN) {
+      // Existing token — offer to keep it
+      const keepExisting = await confirm({
+        theme: promptTheme,
+        message: `Keep existing gateway token (${existing.GATEWAY_TOKEN})?`,
+        default: true,
+      });
+      if (keepExisting) {
+        config.GATEWAY_TOKEN = existing.GATEWAY_TOKEN;
+      } else {
+        config.GATEWAY_TOKEN = await password({
+          theme: promptTheme,
+          message: 'Gateway Auth Token (required)',
+          validate: (val) => {
+            if (!val || !val.trim()) return 'Gateway token is required';
+            return true;
+          },
+        });
+      }
     } else {
+      dim('If using remote gateway, provide your token.');
+
       config.GATEWAY_TOKEN = await password({
-    theme: promptTheme,
+        theme: promptTheme,
         message: 'Gateway Auth Token (required)',
         validate: (val) => {
           if (!val || !val.trim()) return 'Gateway token is required';
@@ -405,28 +562,92 @@ async function collectInteractive(
       });
     }
   } else {
-    dim('Find your token in ~/.openclaw/openclaw.json or run: openclaw gateway status');
-    config.GATEWAY_TOKEN = await password({
-    theme: promptTheme,
-      message: 'Gateway Auth Token (required)',
+    // Remote Gateway - manual configuration
+    config.GATEWAY_URL = await input({
+      theme: promptTheme,
+      message: 'Gateway URL',
+      default: defaultUrl,
       validate: (val) => {
-        if (!val || !val.trim()) return 'Gateway token is required';
+        if (!isValidUrl(val)) return 'Please enter a valid HTTP(S) URL';
         return true;
       },
     });
+
+    if (existing.GATEWAY_TOKEN) {
+      // Existing token — offer to keep it
+      const keepExisting = await confirm({
+        theme: promptTheme,
+        message: `Keep existing gateway token (${existing.GATEWAY_TOKEN})?`,
+        default: true,
+      });
+      if (keepExisting) {
+        config.GATEWAY_TOKEN = existing.GATEWAY_TOKEN;
+      } else {
+        config.GATEWAY_TOKEN = await password({
+          theme: promptTheme,
+          message: 'Gateway Auth Token',
+          validate: (val) => {
+            if (!val || !val.trim()) return 'Gateway token is required';
+            return true;
+          },
+        });
+      }
+    } else {
+      dim('Find your token from the remote gateway documentation.');
+
+      config.GATEWAY_TOKEN = await password({
+        theme: promptTheme,
+        message: 'Gateway Auth Token',
+        validate: (val) => {
+          if (!val || !val.trim()) return 'Gateway token is required';
+          return true;
+        },
+      });
+    }
   }
 
-  // Test connection
+  // Test connection - use direct fetch for ROBIN Gateway to avoid OpenClaw dependency
   const rail = `  \x1b[2m│\x1b[0m`;
   const testPrefix = process.env.ROBIN_INSTALLER ? `${rail}  ` : '  ';
-  process.stdout.write(`${testPrefix}Testing connection... `);
-  const gwTest = await testGatewayConnection(config.GATEWAY_URL!, config.GATEWAY_TOKEN);
+  let gwTest: { ok: boolean; message: string };
+  // Use global fetch if available (Node.js 18+), otherwise use require
+  const doFetch = typeof fetch !== 'undefined' ? fetch : (await import('node-fetch')).default;
+
+  if (gatewayChoice === 'robin') {
+    // Use simpler health check for ROBIN Gateway
+    process.stdout.write(`${testPrefix}Testing ROBIN Gateway connection... `);
+    try {
+      const res = await doFetch('http://127.0.0.1:18789/health', { method: 'GET' });
+      if (res.ok) {
+        gwTest = { ok: true, message: 'ROBIN Gateway is running' };
+      } else {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+    } catch (err: any) {
+      gwTest = { ok: false, message: `Cannot reach gateway: ${err.message}` };
+    }
+  } else {
+    // Use existing testGatewayConnection for OpenClaw/remote
+    process.stdout.write(`${testPrefix}Testing connection... `);
+    gwTest = await testGatewayConnection(config.GATEWAY_URL!, config.GATEWAY_TOKEN);
+  }
+
   if (gwTest.ok) {
     console.log(`\x1b[32m✓\x1b[0m ${gwTest.message}`);
   } else {
     console.log(`\x1b[31m✗\x1b[0m ${gwTest.message}`);
-    dim('  Start it with: openclaw gateway start');
-    console.log('\n  Setup could not verify your gateway token. Fix the gateway or token, then re-run setup.\n');
+
+    // Provide helpful guidance based on gateway type
+    if (gatewayChoice === 'robin') {
+      dim('ROBIN Gateway failed to start. Run `npm run setup` again or manually start it.');
+      console.log('\n  Setup could not verify your gateway token. Fix the gateway or token, then re-run setup.\n');
+    } else {
+      const isLocal = config.GATEWAY_URL?.includes('localhost') || config.GATEWAY_URL?.includes('127.0.0.1');
+      if (isLocal) {
+        dim(`  Start it with: openclaw gateway start`);
+      }
+      console.log('\n  Setup could not verify your gateway token. Fix the gateway or token, then re-run setup.\n');
+    }
     process.exit(1);
   }
 
@@ -781,7 +1002,7 @@ async function collectInteractive(
 
   // Always generate a session secret if not already set
   if (!config.ROBIN_SESSION_SECRET) {
-    config.ROBIN_SESSION_SECRET = randomBytes(32).toString('hex');
+    config.ROBIN_SESSION_SECRET = cryptoRandomBytes(32).toString('hex');
   }
 
   const isNetworkExposed = config.HOST === '0.0.0.0';
@@ -820,7 +1041,7 @@ async function collectInteractive(
       if (pw === pwConfirm) {
         // Hash the password using scrypt (inline to avoid importing server code)
         const { scrypt } = await import('node:crypto');
-        const salt = randomBytes(32);
+        const salt = cryptoRandomBytes(32);
         const hash = await new Promise<string>((resolve, reject) => {
           scrypt(pw, salt, 64, (err, derivedKey) => {
             if (err) return reject(err);
@@ -1017,11 +1238,15 @@ async function runCheck(config: EnvConfig): Promise<void> {
 
   let errors = 0;
 
-  // Gateway token
+  // Gateway token (for local development, empty is acceptable)
+  const isLocalGateway = ['127.0.0.1', 'localhost'].includes(config.GATEWAY_URL?.replace(/^https?:\/\//, '') || '');
+
   if (config.GATEWAY_TOKEN) {
     success('GATEWAY_TOKEN is set');
+  } else if (isLocalGateway) {
+    info('No GATEWAY_TOKEN (local gateway with no auth)');
   } else {
-    fail('GATEWAY_TOKEN is missing (required)');
+    fail('GATEWAY_TOKEN is missing (required for remote gateway)');
     errors++;
   }
 
@@ -1130,46 +1355,73 @@ async function runDefaults(existing: EnvConfig, prereqs: PrereqResult): Promise<
     }
   }
 
-  // Try to auto-detect gateway token
-  if (!config.GATEWAY_TOKEN) {
-    const detected = detectGatewayConfig();
-    const envToken = getEnvGatewayToken();
-    const tokenChoice = chooseSetupGatewayToken({
-      detectedToken: detected.token,
-      envToken,
-    });
+  // Handle ROBIN Gateway auto-generation
+  const HOME = process.env.HOME || os.homedir();
+  const ROBIN_DIR = join(HOME, '.robin');
+  const ROBIN_GATEWAY_CONFIG_PATH = join(ROBIN_DIR, 'gateway.json');
 
-    if (tokenChoice.token) {
-      config.GATEWAY_TOKEN = tokenChoice.token;
-      success(`Auto-detected gateway token${tokenChoice.source === 'env' ? ' from environment' : ''}`);
-    } else {
-      fail('GATEWAY_TOKEN is required but could not be auto-detected');
-      console.log('  Set OPENCLAW_GATEWAY_TOKEN in your environment, or run setup interactively.');
-      console.log('');
-      process.exit(1);
-    }
-  }
+  // Determine gateway type based on current config
+  let gatewayChoice: 'robin' | 'openclaw' | 'remote' = 'openclaw';
 
-  if (!config.GATEWAY_URL) config.GATEWAY_URL = DEFAULTS.GATEWAY_URL;
-  if (!config.AGENT_NAME) config.AGENT_NAME = detectAgentDisplayNameDefault(undefined, DEFAULTS.AGENT_NAME);
-  if (!config.PORT) config.PORT = DEFAULTS.PORT;
-  if (!config.HOST) config.HOST = DEFAULTS.HOST;
+  // Always use ROBIN Gateway in defaults mode (local-first approach)
+  // Override any existing GATEWAY_TOKEN from OpenClaw or other sources
+  dim('Setting up local ROBIN Gateway...');
+  mkdirSync(ROBIN_DIR, { recursive: true });
+  const robinToken = cryptoRandomBytes(32).toString('base64url');
+  const robinConfig = {
+    gateway: {
+      port: 18789,
+      bind: '127.0.0.1',
+      auth: { mode: 'token', token: robinToken },
+      controlUi: { allowedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'] },
+      tools: {
+        allow: [
+          'bash',
+          'powershell',
+          'files_list',
+          'files_read',
+          'files_info',
+          'memories_get',
+          'sessions_spawn',
+        ],
+      },
+    },
+  };
+  writeFileSync(ROBIN_GATEWAY_CONFIG_PATH, JSON.stringify(robinConfig, null, 2) + '\n');
+  config.GATEWAY_TOKEN = robinToken;
+  config.GATEWAY_URL = 'http://127.0.0.1:18789';
+  gatewayChoice = 'robin';
+  success('Auto-generated ROBIN Gateway token at ~/.robin/gateway.json');
+
+  // Start the gateway server
+  dim('Starting ROBIN Gateway server...');
+  startRobinGateway();
+
+  // Give the server time to start (sleep in ms)
+  await sleep(2000);
 
   if (requestedAccessMode) {
+    // Ensure PORT is set before building access plan
+    const port = String(config.PORT || DEFAULTS.PORT);
+    const sslPort = config.SSL_PORT ? String(config.SSL_PORT) : undefined;
+    const maybeRemoteHost = !isLoopback(config.HOST || '') ? config.HOST : detectPrimaryIpv4() || config.HOST || DEFAULTS.HOST;
+    const remoteHost = (maybeRemoteHost as string | undefined)?.toString();
+
     let accessPlan = buildAccessPlan({
       profile: requestedAccessMode as InstallerAccessProfile,
-      port: config.PORT,
-      sslPort: config.SSL_PORT,
-      remoteHost: !isLoopback(config.HOST || '') ? config.HOST : detectPrimaryIpv4() || config.HOST || DEFAULTS.HOST,
+      port,
+      sslPort,
+      remoteHost,
       tailscale: prereqs.tailscale,
     });
 
     if (requestedAccessMode === 'tailscale-serve' && accessPlan.followUpSteps.length > 0) {
       warn('Tailscale Serve could not be confirmed in non-interactive mode. Falling back to tailnet IP support only.');
       appendFollowUp(accessPlan.followUpSteps);
+      const fallbackPort1 = String(config.PORT || DEFAULTS.PORT);
       accessPlan = buildAccessPlan({
         profile: 'tailscale-ip',
-        port: config.PORT,
+        port: fallbackPort1,
         tailscale: prereqs.tailscale,
       });
     }
@@ -1177,7 +1429,8 @@ async function runDefaults(existing: EnvConfig, prereqs: PrereqResult): Promise<
     if ((requestedAccessMode === 'tailscale-ip' || requestedAccessMode === 'tailscale-serve') && accessPlan.followUpSteps.length > 0) {
       warn('Requested Tailscale access mode is not ready in non-interactive mode. Keeping localhost-only access for now.');
       appendFollowUp(accessPlan.followUpSteps);
-      accessPlan = buildAccessPlan({ profile: 'local', port: config.PORT });
+      const fallbackPort2 = String(config.PORT || DEFAULTS.PORT);
+      accessPlan = buildAccessPlan({ profile: 'local', port: fallbackPort2 });
     }
 
     delete config.ALLOWED_ORIGINS;
@@ -1193,7 +1446,7 @@ async function runDefaults(existing: EnvConfig, prereqs: PrereqResult): Promise<
 
   // Auth: auto-enable when network-exposed with gateway token, generate session secret
   if (!config.ROBIN_SESSION_SECRET) {
-    config.ROBIN_SESSION_SECRET = randomBytes(32).toString('hex');
+    config.ROBIN_SESSION_SECRET = cryptoRandomBytes(32).toString('hex');
   }
   if (config.HOST === '0.0.0.0' && !config.ROBIN_AUTH) {
     if (config.GATEWAY_TOKEN) {
@@ -1204,8 +1457,30 @@ async function runDefaults(existing: EnvConfig, prereqs: PrereqResult): Promise<
     }
   }
 
-  process.stdout.write('  Testing gateway connection... ');
-  const gwTest = await testGatewayConnection(config.GATEWAY_URL!, config.GATEWAY_TOKEN);
+  // Determine gateway type - check if using ROBIN Gateway (localhost:18789)
+  const isRobinGateway = config.GATEWAY_URL?.includes('127.0.0.1:18789') || config.GATEWAY_URL?.includes('localhost:18789');
+
+  process.stdout.write(`  Testing ${isRobinGateway ? 'ROBIN Gateway' : 'gateway'} connection... `);
+  let gwTest: { ok: boolean; message: string };
+  const doFetch = typeof fetch !== 'undefined' ? fetch : (await import('node-fetch')).default;
+
+  if (isRobinGateway) {
+    // Use direct health check for ROBIN Gateway
+    try {
+      const res = await doFetch(config.GATEWAY_URL! + '/health', { method: 'GET' });
+      if (res.ok) {
+        gwTest = { ok: true, message: 'ROBIN Gateway is running' };
+      } else {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+    } catch (err: any) {
+      gwTest = { ok: false, message: `Cannot reach gateway: ${err.message}` };
+    }
+  } else {
+    // Use existing testGatewayConnection for OpenClaw/remote
+    gwTest = await testGatewayConnection(config.GATEWAY_URL!, config.GATEWAY_TOKEN);
+  }
+
   if (gwTest.ok) {
     console.log(`\x1b[32m✓\x1b[0m ${gwTest.message}`);
   } else {

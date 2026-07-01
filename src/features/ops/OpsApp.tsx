@@ -65,7 +65,6 @@ import {
 import './ops.css';
 
 type OpsTab = 'map' | 'status' | 'agent';
-type RailMode = 'overview' | 'chat';
 type SignalFamily = 'logistics' | 'biological' | 'ordnance' | 'nuclear' | 'general';
 type SourceGroupId = 'operator' | 'news' | 'disaster' | 'earthquakes' | 'weather' | 'environmental' | 'wildfire' | 'nuclear' | 'traffic' | 'aviation' | 'transport';
 
@@ -202,6 +201,45 @@ const SOURCE_GROUPS: Array<{
     description: 'Infrastructure, freight, maritime, transit, and map reference layers.',
     icon: 'route',
     sourceIds: ['ntad', 'faf', 'marinecadastre', 'mobilitydb', 'tigerline'],
+  },
+];
+
+// Display source groups - grouped operator-facing categories for simpler UI
+const DISPLAY_SOURCE_GROUPS: Array<{
+  id: string;
+  label: string;
+  icon: (typeof SOURCE_GROUPS)[number]['icon'];
+  sourceIds: string[];
+}> = [
+  {
+    id: 'human-intel',
+    label: 'Human Intel',
+    icon: 'folder',
+    sourceIds: ['manual', 'gdacs'],
+  },
+  {
+    id: 'aviation',
+    label: 'Aviation',
+    icon: 'plane',
+    sourceIds: ['trackedflights', 'trafficcams'],
+  },
+  {
+    id: 'logistics-feeds',
+    label: 'Logistics Feeds',
+    icon: 'route',
+    sourceIds: ['ntad', 'faf', 'marinecadastre', 'mobilitydb', 'tigerline'],
+  },
+  {
+    id: 'geo-sensors',
+    label: 'Geo-Sensors',
+    icon: 'orbit',
+    sourceIds: ['radnet', 'eurdep', 'safecast', 'gmcmap', 'aqi'],
+  },
+  {
+    id: 'open-sources',
+    label: 'Open Sources',
+    icon: 'globe',
+    sourceIds: ['gdelt', 'nrcevents', 'nrcreactorstatus', 'usgs', 'nws', 'firms'],
   },
 ];
 
@@ -358,6 +396,24 @@ function sourceGroupIcon(icon: (typeof SOURCE_GROUPS)[number]['icon']) {
     default:
       return <Folder size={16} />;
   }
+}
+
+// Compact source labels for simplified UI display
+function compactSourceLabel(source: SourceDefinition) {
+  if (source.id === 'manual') return 'Human Intel'
+  if (source.id === 'trackedflights') return 'Aviation'
+  if (['ntad', 'faf'].includes(source.id)) return 'Logistics Feeds'
+  if (['marinecadastre', 'mobilitydb', 'tigerline'].includes(source.id)) return 'Transport Feeds'
+  if (['safecast', 'gmcmap', 'radnet', 'eurdep'].includes(source.id)) return 'Geo-Sensors'
+  if (source.id === 'gdelt') return 'Open Sources'
+  if (['nrcevents', 'nrcreactorstatus'].includes(source.id)) return 'Nuclear Reports'
+  if (source.id === 'usgs') return 'Seismic Data'
+  if (source.id === 'nws') return 'Weather Alerts'
+  if (source.id === 'firms') return 'Wildfire Sensors'
+  if (source.id === 'gdacs') return 'Disaster Alerts'
+  if (source.id === 'trafficcams') return 'Traffic Cams'
+  if (source.id === 'aqi') return 'Air Quality'
+  return source.title
 }
 
 function emptyBridge(): BridgeStatus {
@@ -574,84 +630,10 @@ function sourceDisplayMeta(sourceId: string, statuses: MapSourceStatus[], airQua
   };
 }
 
-function sourceIcon(sourceId: string) {
-  switch (sourceId) {
-    case 'manual':
-      return <MapPin size={16} />;
-    case 'gdelt':
-      return <Globe2 size={16} />;
-    case 'gdacs':
-      return <AlertTriangle size={16} />;
-    case 'usgs':
-      return <RadioTower size={16} />;
-    case 'nws':
-      return <ShieldCheck size={16} />;
-    case 'aqi':
-      return <Orbit size={16} />;
-    case 'firms':
-      return <Flame size={16} />;
-    case 'radnet':
-      return <Orbit size={16} />;
-    case 'nrcevents':
-      return <Orbit size={16} />;
-    case 'nrcreactorstatus':
-      return <Orbit size={16} />;
-    case 'trafficcams':
-      return <Camera size={16} />;
-    case 'trackedflights':
-      return <Plane size={16} />;
-    case 'eurdep':
-      return <Globe2 size={16} />;
-    case 'safecast':
-      return <RadioTower size={16} />;
-    case 'gmcmap':
-      return <RadioTower size={16} />;
-    case 'ntad':
-      return <Route size={16} />;
-    case 'faf':
-      return <Folder size={16} />;
-    case 'marinecadastre':
-      return <Satellite size={16} />;
-    case 'mobilitydb':
-      return <RadioTower size={16} />;
-    case 'tigerline':
-      return <MapPinned size={16} />;
-    default:
-      return <Folder size={16} />;
-  }
-}
-
-function SourceGroupCheckbox({
-  checked,
-  indeterminate,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  const checkboxRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (checkboxRef.current) {
-      checkboxRef.current.indeterminate = indeterminate;
-    }
-  }, [indeterminate]);
-
-  return (
-    <label className="ops-source-group-check">
-      <input
-        ref={checkboxRef}
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span>{label}</span>
-    </label>
-  );
-}
+// Import shared source icon from sourceVisuals module
+import {
+  SourceIcon as SharedSourceIcon,
+} from './sourceVisuals';
 
 function sourceStatusTone(source: MapSourceStatus | undefined) {
   if (!source) return 'idle';
@@ -744,7 +726,7 @@ function toolCallsToTraceItems(toolCalls: AgentToolCall[] = []): AnimatedTraceIt
 
 export default function OpsApp({ onLogout }: OpsAppProps) {
   const [activeTab, setActiveTab] = useState<OpsTab>('map');
-  const [railMode, setRailMode] = useState<RailMode>('overview');
+  // Old railMode state removed - chat now always appears in right-panel
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<AgentSession | null>(null);
   const [bridge, setBridge] = useState<BridgeStatus>(emptyBridge());
@@ -781,7 +763,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [localApiPolling, setLocalApiPolling] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MapAsset | null>(null);
   const [mapQuery, setMapQuery] = useState('');
-  const [aqiOpacity, setAqiOpacity] = useState(0.48);
+  const [aqiOpacity] = useState(0.48);
   const [airQualityState, setAirQualityState] = useState<AirQualityLayerState>({
     phase: 'off',
     name: 'Air Quality / AQI',
@@ -803,6 +785,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     nuclear: true,
     general: true,
   });
+  // visibleFamilies state available for future filtering features
+  void setVisibleFamilies;
   const [visibleSources, setVisibleSources] = useState<Record<string, boolean>>({
     manual: true,
     gdelt: true,
@@ -825,6 +809,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     mobilitydb: true,
     tigerline: true,
   });
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+  // mapRiskFilter available for future implementation (currently unused)
+  const [_mapRiskFilterValue, _setMapRiskFilter] = useState<'all' | 'critical' | 'warning' | 'watch'>('all');
+  void _mapRiskFilterValue;
+  void _setMapRiskFilter;
   const [error, setError] = useState('');
   const [bridgeBusyAction, setBridgeBusyAction] = useState<'handoff' | 'return' | 'cancel' | null>(null);
   const chatScrollerRef = useRef<HTMLDivElement | null>(null);
@@ -1521,8 +1510,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       asset.sourceUrl ? `Open-source link: ${asset.sourceUrl}` : '',
       'Produce a concise situation brief, source comparison, freshness assessment, and next checks.',
     ].filter(Boolean).join('\n'));
-    setRailMode('chat');
-    setMapLeftCollapsed(false);
+    // Chat panel is always visible on the right side
   }, [mapDateWindowRange.label, mapVisibleAssets]);
 
   const selectedNearbyAssets = useMemo(() => {
@@ -1621,16 +1609,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       });
   }, [airQualityState, assets, mapSourceCounts, sourceStatuses]);
 
-  const sourceGroups = useMemo(
-    () => SOURCE_GROUPS
-      .map((group) => ({
-        ...group,
-        sources: sourceDefinitions.filter((source) => group.sourceIds.includes(source.id)),
-      }))
-      .filter((group) => group.sources.length > 0),
-    [sourceDefinitions],
-  );
-
   const visibleSourceToggleCount = useMemo(
     () => sourceDefinitions.filter((source) => visibleSources[source.id] ?? true).length,
     [sourceDefinitions, visibleSources],
@@ -1645,20 +1623,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [mapVisibleAssets],
   );
 
-  const mapReportCount = useMemo(
-    () => mapVisibleAssets.filter((asset) => asset.type === 'document' || asset.type === 'note').length,
-    [mapVisibleAssets],
-  );
-
-  const mapAnalyticsCount = useMemo(
-    () => mapVisibleAssets.filter((asset) => asset.type === 'video' || asset.type === 'link').length + bridge.recentJobs.length,
-    [bridge.recentJobs.length, mapVisibleAssets],
-  );
-
-  const visibleMapLayerCount = useMemo(
-    () => activeLayerCount(layers, mapVisibleAssets),
-    [layers, mapVisibleAssets],
-  );
+  // mapReportCount, mapAnalyticsCount reserved for future use
+  const _mapReportPlaceholder = null as any;
+  void _mapReportPlaceholder;
 
   const runningTerminalCount = useMemo(
     () => Object.values(terminals).filter((terminal) => terminal.running).length,
@@ -1761,41 +1728,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [mapFamilyCounts, mapVisibleAssets],
   );
 
-  const briefingItems = useMemo(
-    () => [
-      {
-        id: 'threats',
-        label: 'Threat Picture',
-        title: mapActiveThreatCount ? `${mapActiveThreatCount} monitored signals` : 'No active threats',
-        detail: mapActiveThreatCount
-          ? `${mapFamilyCounts.ordnance} ordnance, ${mapFamilyCounts.biological} bio, ${mapFamilyCounts.nuclear} nuclear.`
-          : 'Coverage is clear across tagged threat families.',
-      },
-      {
-        id: 'logistics',
-        label: 'Logistics',
-        title: mapFamilyCounts.logistics ? `${mapFamilyCounts.logistics} logistics-linked items` : 'No logistics markers',
-        detail: mapFamilyCounts.logistics
-          ? 'Route, cargo, or shipping activity is represented in the current map assets.'
-          : 'Awaiting logistics-linked documents, links, or feeds.',
-      },
-      {
-        id: 'analytics',
-        label: 'Analytics',
-        title: `${mapAnalyticsCount} analytics signals`,
-        detail: `${visibleMapLayerCount} map layers visible and ${bridge.recentJobs.length} bridge jobs tracked.`,
-      },
-      {
-        id: 'reports',
-        label: 'Reports',
-        title: `${mapReportCount} report assets`,
-        detail: mapReportCount
-          ? 'Documents and notes are ready for review in the document center.'
-          : 'No reports have been linked into the map store yet.',
-      },
-    ],
-    [bridge.recentJobs.length, mapActiveThreatCount, mapAnalyticsCount, mapFamilyCounts, mapReportCount, visibleMapLayerCount],
-  );
+  // briefingItems reserved for future implementation (e.g., briefings panel)
+  const _briefingPlaceholder = null as any;
+  void _briefingPlaceholder;
 
   const statusCards = useMemo(
     () => [
@@ -2009,24 +1944,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
               <section className={`ops-map-overview ${mapLeftCollapsed ? 'left-collapsed' : ''}`}>
                 <aside className={`ops-map-rail ops-map-rail-left ${mapLeftCollapsed ? 'collapsed' : ''}`}>
                   <div className="ops-left-panel-head">
-                    {!mapLeftCollapsed ? (
-                      <div className="ops-rail-switcher">
-                        <button
-                          type="button"
-                          className={`ops-rail-switch ${railMode === 'overview' ? 'active' : ''}`}
-                          onClick={() => setRailMode('overview')}
-                        >
-                          Overview
-                        </button>
-                        <button
-                          type="button"
-                          className={`ops-rail-switch ${railMode === 'chat' ? 'active' : ''}`}
-                          onClick={() => setRailMode('chat')}
-                        >
-                          Chat
-                        </button>
-                      </div>
-                    ) : null}
                     <button
                       type="button"
                       className="ops-icon-button"
@@ -2036,7 +1953,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       <ChevronRight size={16} />
                     </button>
                   </div>
-                  {!mapLeftCollapsed && railMode === 'overview' ? (
+                  {!mapLeftCollapsed ? (
                   <>
                   <div className="ops-rail-card ops-system-card" data-tone={operationalPosture.tone}>
                     <div className="ops-section-kicker">System Status</div>
@@ -2133,19 +2050,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         />
                         <span>Filter to visible map area</span>
                       </label>
-                      <label className="ops-filter-field">
-                        <span>AQI opacity</span>
-                        <input
-                          className="ops-range"
-                          type="range"
-                          min="0.18"
-                          max="0.85"
-                          step="0.01"
-                          value={aqiOpacity}
-                          onChange={(event) => setAqiOpacity(Number(event.target.value))}
-                          disabled={!airQualityEnabled}
-                        />
-                      </label>
                       <div className="ops-filter-footer">
                         <button
                           type="button"
@@ -2163,7 +2067,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     <div className="ops-source-card-head">
                       <div>
                         <div className="ops-section-kicker">Data Sources</div>
-                        <strong>{visibleSourceToggleCount} visible sources · {sourceGroups.length} data-type groups · {catalogSourceCount} reference entries</strong>
+                        <strong>{visibleSourceToggleCount} visible sources · {catalogSourceCount} reference entries</strong>
                       </div>
                       <button
                         type="button"
@@ -2175,12 +2079,17 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         {sourceRefreshing ? <LoaderCircle className="spinning" size={16} /> : <RefreshCw size={16} />}
                       </button>
                     </div>
-                    <div className="ops-source-groups">
-                      {sourceGroups.map((group) => {
-                        const totalCount = group.sources.reduce((sum, source) => sum + source.count, 0);
-                        const enabledCount = group.sources.filter((source) => visibleSources[source.id] ?? true).length;
-                        const allEnabled = enabledCount === group.sources.length;
-                        const partlyEnabled = enabledCount > 0 && enabledCount < group.sources.length;
+                    <div className="ops-source-list">
+                      {DISPLAY_SOURCE_GROUPS.map((group) => {
+                        const sourcesInGroup = group.sourceIds
+                          .map((id) => sourceDefinitions.find((s) => s.id === id))
+                          .filter(Boolean) as SourceDefinition[];
+                        if (sourcesInGroup.length === 0) return null;
+
+                        const totalCount = sourcesInGroup.reduce((sum, s) => sum + s.count, 0);
+                        const enabledCount = sourcesInGroup.filter((s) => visibleSources[s.id] ?? true).length;
+                        const allEnabled = enabledCount === sourcesInGroup.length;
+
                         return (
                           <details key={group.id} className="ops-source-group" open data-empty={totalCount === 0}>
                             <summary className="ops-source-group-head">
@@ -2188,51 +2097,52 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                                 {sourceGroupIcon(group.icon)}
                                 <span>
                                   <strong>{group.label}</strong>
-                                  <small>{group.description}</small>
+                                  <small>{enabledCount}/{sourcesInGroup.length} active</small>
                                 </span>
                               </span>
-                              <span className="ops-mini-badge">{totalCount} visible</span>
+                              <span className="ops-mini-badge">{totalCount} items</span>
                             </summary>
                             <div className="ops-source-group-actions">
-                              <SourceGroupCheckbox
-                                checked={allEnabled}
-                                indeterminate={partlyEnabled}
-                                label={`${enabledCount}/${group.sources.length} enabled`}
-                                onChange={(checked) => setSourceGroupVisibility(group.sourceIds, checked)}
-                              />
-                              <button type="button" className="ops-link-button" onClick={() => setSourceGroupVisibility(group.sourceIds, true)}>Select all</button>
-                              <button type="button" className="ops-link-button" onClick={() => setSourceGroupVisibility(group.sourceIds, false)}>Deselect all</button>
+                              <button
+                                type="button"
+                                className={`ops-link-button ${allEnabled ? 'disabled' : ''}`}
+                                onClick={() => setSourceGroupVisibility(group.sourceIds, true)}
+                                disabled={allEnabled}
+                              >Select all</button>
+                              <button
+                                type="button"
+                                className="ops-link-button"
+                                onClick={() => setSourceGroupVisibility(group.sourceIds, false)}
+                              >Deselect all</button>
                             </div>
                             <div className="ops-source-list">
-                              {group.sources.map((source) => (
-                                <button
-                                  key={source.id}
-                                  type="button"
-                                  className="ops-source-toggle"
-                                  data-active={visibleSources[source.id] ?? true}
-                                  data-tone={source.tone}
-                                  onClick={() => {
-                                    setVisibleSources((current) => ({
-                                      ...current,
-                                      [source.id]: !(current[source.id] ?? true),
-                                    }));
-                                  }}
-                                  title={source.status?.lastError || source.status?.description || source.source}
-                                >
-                                  <span className="ops-layer-label">
-                                    {sourceIcon(source.id)}
-                                    <span className="ops-source-copy">
-                                      <strong>{source.title}</strong>
-                                      <small>Source: {source.source}</small>
-                                    </span>
-                                  </span>
-                                  <span className="ops-source-meta">
-                                    <span>{source.count}</span>
-                                    {source.status?.requiresKey && !source.status?.enabled ? <span>key</span> : null}
-                                    {source.status?.catalogOnly ? <span>ref</span> : null}
-                                    {source.kind === 'overlay' ? <span>map</span> : null}
-                                  </span>
-                                </button>
+                              {sourcesInGroup.map((source) => (
+                                <div key={source.id} className="ops-source-row-wrapper">
+                                  <button
+                                    type="button"
+                                    className={`ops-source-row ${visibleSources[source.id] ?? true ? 'active' : ''}`}
+                                    onClick={() => {
+                                      setVisibleSources((current) => ({
+                                        ...current,
+                                        [source.id]: !(current[source.id] ?? true),
+                                      }));
+                                      setExpandedSourceId(expandedSourceId === source.id ? null : source.id);
+                                    }}
+                                    title={`${compactSourceLabel(source)} - ${source.source} • ${source.count} items`}
+                                  >
+                                    <span className="ops-source-check" data-active={visibleSources[source.id] ?? true} />
+                                    <span className="ops-source-icon"><SharedSourceIcon sourceId={source.id} /></span>
+                                    <span className="ops-source-name">{compactSourceLabel(source)}</span>
+                                    <span className="ops-source-count">{source.count}</span>
+                                    <ChevronRight size={15} data-expanded={expandedSourceId === source.id ? 'true' : 'false'} />
+                                  </button>
+                                  {expandedSourceId === source.id && (
+                                    <div className="ops-source-row-detail">
+                                      <span>{source.source}</span>
+                                      <span>{source.status?.lastError || source.status?.description || source.description}</span>
+                                    </div>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </details>
@@ -2283,73 +2193,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     )}
                   </div>
                   </>
-                  ) : !mapLeftCollapsed && railMode === 'chat' ? (
-                  <>
-                  <div className="ops-rail-card">
-                    <div className="ops-chat-feed" ref={chatScrollerRef}>
-                      {messageFeed.length === 0 ? (
-                        <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
-                      ) : (
-                        messageFeed.map((message) => (
-                          <article
-                            key={message.id}
-                            className={`ops-chat-card ops-chat-card-${message.role}`}
-                          >
-                            <div className="ops-chat-card-head">
-                              <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
-                              <time>{formatClock(message.createdAt)}</time>
-                            </div>
-                            <div className="ops-chat-card-body">
-                              {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
-                            </div>
-                          </article>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="ops-rail-card">
-                    <div className="ops-section-kicker">Suggested Actions</div>
-                    <div className="ops-briefing-list">
-                      {briefingItems.map((item) => (
-                        <article key={item.id} className="ops-briefing-card">
-                          <span className="ops-section-kicker">{item.label}</span>
-                          <strong>{item.title}</strong>
-                          <p>{item.detail}</p>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="ops-rail-card ops-compose-card">
-                    <div className="ops-section-kicker">Command Deck</div>
-                    <textarea
-                      value={prompt}
-                      onChange={(event) => setPrompt(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
-                          event.preventDefault();
-                          void sendPrompt();
-                        }
-                      }}
-                      placeholder="Ask ROBIN anything..."
-                      className="ops-chat-textarea ops-chat-textarea-compact"
-                      disabled={sending || !sessionId}
-                    />
-                    <div className="ops-compose-footer">
-                      <span>{latestUser ? `Last operator prompt ${formatRelative(session?.updatedAt)}` : 'No operator prompt yet'}</span>
-                      <button
-                        onClick={sendPrompt}
-                        disabled={sending || !prompt.trim() || !sessionId}
-                        className="ops-button primary"
-                        type="button"
-                      >
-                        {sending ? <LoaderCircle className="spinning" size={16} /> : <Send size={16} />}
-                        {sending ? 'Sending...' : 'Send'}
-                      </button>
-                    </div>
-                  </div>
-                  </>
                   ) : null}
                 </aside>
 
@@ -2371,30 +2214,53 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
 
                   <div className="ops-map-shell">
                     <div className="ops-map-toolbar">
-                      <input
-                        className="ops-input"
-                        value={mapQuery}
-                        onChange={(event) => setMapQuery(event.target.value)}
-                        placeholder="Filter signals by title, notes, tags, or source..."
-                      />
-                      <button
-                        type="button"
-                        className="ops-button ghost"
-                        aria-pressed={airQualityEnabled}
-                        onClick={() => setAirQualityEnabled(!airQualityEnabled)}
-                        title="Toggle the Air Quality / AQI overlay"
-                      >
-                        <Orbit size={14} /> {airQualityEnabled ? 'AQI On' : 'AQI Off'}
-                      </button>
-                      <span className="ops-mini-badge">
-                        <Layers3 size={14} /> {visibleMapLayerCount} visible map layers
-                      </span>
-                      <span className="ops-mini-badge">
-                        <DatabaseZap size={14} /> {mapVisibleAssets.filter((asset) => asset.live).length} live source points
-                      </span>
-                      <span className="ops-mini-badge">
-                        <Orbit size={14} /> {mapDateWindowRange.label}
-                      </span>
+                      <div className="ops-map-search">
+                        <input
+                          className="ops-input"
+                          value={mapQuery}
+                          onChange={(event) => setMapQuery(event.target.value)}
+                          placeholder="Search signals..."
+                        />
+                      </div>
+                      <div className="ops-map-controls">
+                        <button
+                          type="button"
+                          className="ops-button ghost"
+                          onClick={() => {}}
+                        >
+                          + Add Filter
+                        </button>
+                        <select
+                          className="ops-input ops-select"
+                          value={'all' as const}
+                          onChange={() => {
+                            // TODO: Implement risk filter state
+                          }}
+                        >
+                          <option value="all">High Risk</option>
+                          <option value="critical">Critical only</option>
+                          <option value="warning">Warning+</option>
+                          <option value="watch">Watch+</option>
+                        </select>
+                        <select
+                          className="ops-input ops-select"
+                          value={dateWindowPreset}
+                          onChange={(event) => {
+                            const nextPreset = event.target.value as typeof dateWindowPreset;
+                            setDateWindowPreset(nextPreset);
+                            if (nextPreset === 'custom') {
+                              setDateWindowStart(formatDateTimeLocalInput(Date.now() - 24 * 60 * 60 * 1000));
+                              setDateWindowEnd(formatDateTimeLocalInput(Date.now()));
+                            }
+                          }}
+                        >
+                          <option value="last1h">Last 1 hour</option>
+                          <option value="last6h">Last 6 hours</option>
+                          <option value="last24h" selected>Last 24 hours</option>
+                          <option value="last7d">Last 7 days</option>
+                          <option value="last30d">Last 30 days</option>
+                        </select>
+                      </div>
                     </div>
 
                     <LeafletMap
@@ -2411,34 +2277,6 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       onAirQualityStateChange={handleAirQualityStateChange}
                     />
 
-                    <div className="ops-floating-card ops-floating-layers">
-                      <div className="ops-floating-head">
-                        <Layers3 size={14} /> Signal Families
-                      </div>
-                      <div className="ops-floating-body">
-                        {SIGNAL_FAMILIES.map((family) => (
-                          <button
-                            key={family.id}
-                            type="button"
-                            className="ops-layer-toggle"
-                            data-active={visibleFamilies[family.id]}
-                            onClick={() => {
-                              setVisibleFamilies((current) => ({
-                                ...current,
-                                [family.id]: !current[family.id],
-                              }));
-                            }}
-                          >
-                            <span className="ops-layer-label">
-                              {familyIcon(family.id)}
-                              {family.label}
-                            </span>
-                            <span className="ops-layer-count">{mapFamilyCounts[family.id]}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
                     <div className="ops-map-center-mark" aria-hidden="true">
                       <div className="ops-map-center-logo">
                         <img src="/branding/ROBIN_brand.png" alt="" />
@@ -2449,24 +2287,14 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                       </div>
                     </div>
 
-                    <div className="ops-map-summary-strip">
+                    <div className="ops-map-summary-strip ops-family-counters">
                       {familySummaryCards.map((card) => (
-                        <article key={card.key} className="ops-summary-card">
-                          <span>{card.label}</span>
+                        <article key={card.key} className="ops-summary-card" data-tone={card.key === 'ordnance' ? 'critical' : card.key === 'biological' ? 'warning' : card.key === 'general' ? 'info' : 'standard'}>
+                          <span>{familyIcon(card.key as SignalFamily)}</span>
                           <strong>{card.count}</strong>
-                          <small>{card.note}</small>
+                          <small>{card.label}</small>
                         </article>
                       ))}
-                      <div className="ops-summary-progress">
-                        <div className="ops-summary-progress-head">
-                          <span>Operational Posture</span>
-                          <strong>{readinessScore}%</strong>
-                        </div>
-                        <div className="ops-summary-bar">
-                          <div className="ops-summary-bar-fill" style={{ width: `${readinessScore}%` }} />
-                        </div>
-                        <small>{bridge.activeJob ? 'Bridge in motion' : 'Stable posture'}</small>
-                      </div>
                     </div>
 
                     <details className="ops-map-legend">
@@ -2486,10 +2314,15 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                             ))}
                           </div>
                         ) : null}
-                        <span><Plane size={14} /> Live aircraft and paths</span>
-                        <span><MapPin size={14} /> Saved points</span>
-                        <span><AlertTriangle size={14} /> Alerts and events</span>
-                        <span><Orbit size={14} /> Radiation / environmental signals</span>
+                        <div className="ops-source-legend">
+                          <span><SharedSourceIcon sourceId="manual" size={14} /> Human Intel</span>
+                          <span><SharedSourceIcon sourceId="trackedflights" size={14} /> Aviation</span>
+                          <span><SharedSourceIcon sourceId="faf" size={14} /> Logistics</span>
+                          <span><SharedSourceIcon sourceId="marinecadastre" size={14} /> Transport</span>
+                          <span><SharedSourceIcon sourceId="radnet" size={14} /> Geo-Sensors</span>
+                          <span><SharedSourceIcon sourceId="gdelt" size={14} /> Open Sources</span>
+                          <span><SharedSourceIcon sourceId="manual" size={14} /> Saved Points</span>
+                        </div>
                       </div>
                     </details>
 
@@ -2543,7 +2376,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                                   className="ops-poi-card"
                                   onClick={() => setSelectedAsset(entry.asset)}
                                 >
-                                  <span className="ops-poi-card-icon">{sourceIcon(sourceKey(entry.asset))}</span>
+                                  <span className="ops-poi-card-icon"><SharedSourceIcon sourceId={sourceKey(entry.asset)} /></span>
                                   <span className="ops-poi-card-copy">
                                     <strong>{entry.asset.title}</strong>
                                     <small>{entry.distance.toFixed(0)} km · {entry.asset.sourceName || entry.asset.sourceId || 'source unknown'}</small>
@@ -3094,6 +2927,71 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
           </main>
         )}
       </div>
+
+      {/* Robin Chat Panel - Right Side */}
+      <aside className="ops-robin-chat-panel">
+        <div className="ops-chat-feed" ref={chatScrollerRef}>
+          {messageFeed.length === 0 ? (
+            <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
+          ) : (
+            messageFeed.map((message) => (
+              <article
+                key={message.id}
+                className={`ops-chat-card ops-chat-card-${message.role}`}
+              >
+                <div className="ops-chat-card-head">
+                  <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
+                  <time>{formatClock(message.createdAt)}</time>
+                </div>
+                <div className="ops-chat-card-body">
+                  {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="ops-compose-section">
+          <div className="ops-compose-input">
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void sendPrompt();
+                }
+              }}
+              placeholder="Ask ROBIN anything..."
+              className="ops-chat-textarea"
+              disabled={sending || !sessionId}
+            />
+          </div>
+          <div className="ops-compose-actions">
+            <button
+              type="button"
+              className="ops-icon-button"
+              title="Attach document (placeholder)"
+              disabled={sending || !sessionId}
+            >
+              <Paperclip size={16} />
+            </button>
+            <button
+              onClick={sendPrompt}
+              disabled={agentSendDisabled}
+              className="ops-button primary"
+              type="button"
+            >
+              {sending ? <LoaderCircle className="spinning" size={16} /> : <Send size={16} />}
+              {sending ? 'Sending...' : 'Send'}
+            </button>
+          </div>
+        </div>
+
+        <div className="ops-chat-footer">
+          <span>{latestUser ? `Last operator prompt ${formatRelative(session?.updatedAt)}` : 'No operator prompt yet'}</span>
+        </div>
+      </aside>
     </div>
   );
 }

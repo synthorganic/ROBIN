@@ -101,12 +101,26 @@ export function extractText(msg: { role: string; content: string | ContentBlock[
 
 // ─── Path sanitization helpers ───
 function sanitizePath(path: string): string {
-  // Replace /root/ with ~/, /home/user/ with ~/, or just use basename
   const str = String(path);
+
+  // Handle Unix-style paths first
   if (str.startsWith('/root/')) return str.replace('/root/', '~/');
   if (str.match(/^\/home\/[^/]+\//)) return str.replace(/^\/home\/[^/]+\//, '~/');
-  // For absolute paths that don't start with home/root, just use basename
+
+  // Handle Windows paths (C:\ or \\)
+  if (/^[a-zA-Z]:[\\/]/.test(str)) {
+    return str.split(/[\\/]/).pop() || str;
+  }
+
+  // Handle UNC Windows paths
+  if (str.startsWith('\\\\')) {
+    const parts = str.split(/[\\/]/);
+    return parts.pop() || str;
+  }
+
+  // For absolute Unix paths that don't start with home/root, just use basename
   if (str.startsWith('/')) return str.split('/').pop() || str;
+
   return str;
 }
 

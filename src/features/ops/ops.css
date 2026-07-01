@@ -213,7 +213,7 @@
 
 .ops-map-overview {
   display: grid;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
   min-height: calc(100vh - 150px);
@@ -498,6 +498,51 @@
   font-size: 0.78rem;
 }
 
+/* Robin Chat Panel (Right Side) */
+.ops-robin-chat-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.ops-robin-chat-panel .ops-chat-feed {
+  margin-top: 0;
+  max-height: 420px;
+  padding-right: 4px;
+}
+
+.ops-compose-section {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-compose-input {
+  background: rgba(12, 14, 11, 0.9);
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.ops-compose-input textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.ops-compose-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ops-chat-footer {
+  padding-top: 8px;
+  color: rgba(204, 197, 176, 0.58);
+  font-size: 0.76rem;
+}
+
 .ops-map-stage {
   display: grid;
   gap: 8px;
@@ -546,9 +591,25 @@
   inset: 12px 12px auto 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   z-index: 720;
   pointer-events: auto;
+}
+
+.ops-map-search,
+.ops-map-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ops-map-controls {
+  flex-wrap: wrap;
+}
+
+.ops-map-controls .ops-button,
+.ops-map-controls .ops-select {
+  min-width: auto;
 }
 
 .ops-map-toolbar .ops-input {
@@ -891,6 +952,104 @@
   text-align: center;
 }
 
+/* Compact Source Row (new format) */
+.ops-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+
+.ops-source-check {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(166, 152, 101, 0.3);
+}
+
+.ops-source-check[data-active='true'] {
+  background: #7bffa4;
+  box-shadow: 0 0 4px rgba(123, 255, 164, 0.6);
+}
+
+.ops-source-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgba(20, 23, 18, 0.9);
+}
+
+.ops-source-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f3eedb;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.ops-source-count {
+  min-width: 36px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(20, 23, 18, 0.9);
+  color: rgba(232, 225, 203, 0.72);
+  text-align: center;
+  font-size: 0.68rem;
+}
+
+.ops-source-row.active .ops-source-name {
+  color: #f3eedb;
+}
+
+/* Source row expanded detail */
+.ops-source-row-detail {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px 12px;
+  margin-left: 24px;
+  background: rgba(15, 17, 13, 0.7);
+  border-radius: 0 0 10px 10px;
+}
+
+.ops-source-row-detail span {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: rgba(225, 218, 194, 0.7);
+}
+
+.ops-source-row-detail span:first-of-type {
+  color: rgba(225, 218, 194, 0.9);
+  font-family: 'JetBrains Mono', var(--font-mono);
+}
+
+.ops-source-group-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  padding-left: 20px;
+}
+
+.ops-source-group-actions .ops-link-button {
+  font-size: 0.68rem;
+  color: rgba(232, 225, 203, 0.7);
+}
+
+.ops-source-group-actions .ops-link-button:hover:not(.disabled) {
+  color: #f3eedb;
+}
+
 .ops-map-center-mark {
   position: absolute;
   right: 18px;
@@ -985,6 +1144,64 @@
   display: none;
   color: rgba(216, 208, 186, 0.7);
   font-size: 0.78rem;
+}
+
+/* Stronger family counter cards */
+.ops-map-summary-strip.ops-family-counters {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent);
+  border-radius: 24px;
+}
+
+.ops-family-counters .ops-summary-card {
+  padding: 12px 16px;
+  min-width: auto;
+  background: linear-gradient(135deg, rgba(20, 24, 18, 0.9), rgba(12, 14, 11, 0.96));
+  border: 1px solid rgba(198, 181, 122, 0.15);
+}
+
+.ops-family-counters .ops-summary-card.critical {
+  border-color: rgba(255, 109, 114, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 109, 114, 0.3), 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.ops-family-counters .ops-summary-card.warning {
+  border-color: rgba(255, 198, 92, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(255, 198, 92, 0.3), 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.ops-family-counters .ops-summary-card.standard {
+  border-color: rgba(123, 255, 164, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(123, 255, 164, 0.2), 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.ops-family-counters .ops-summary-card.info {
+  border-color: rgba(116, 215, 255, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(116, 215, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+/* Family icon styles */
+.ops-family-counters .ops-summary-card span:first-of-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.ops-family-counters .ops-summary-card strong {
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.ops-family-counters .ops-summary-card small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(232, 225, 203, 0.7);
+  font-size: 0.76rem;
 }
 
 .ops-summary-progress {
@@ -1300,6 +1517,12 @@
   line-height: 1.45;
 }
 
+/* Map div icon wrapper - transparent container for custom icons */
+.ops-map-div-icon {
+  background: transparent;
+  border: 0;
+}
+
 .ops-map-icon {
   display: grid;
   place-items: center;
@@ -1348,6 +1571,49 @@
 .ops-map-icon-poi svg {
   width: 18px;
   height: 18px;
+}
+
+/* Source Marker Icons (new unified symbol markers) */
+.ops-map-source-marker {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--ops-marker-color);
+  filter:
+    drop-shadow(0 0 4px color-mix(in srgb, var(--ops-marker-color), transparent 30%))
+    drop-shadow(0 0 10px color-mix(in srgb, var(--ops-marker-color), transparent 55%));
+}
+
+.ops-map-source-marker svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  position: relative;
+  z-index: 1;
+}
+
+/* Selected source marker styling */
+.ops-map-source-marker.selected {
+  transform: scale(1.25);
+  filter:
+    drop-shadow(0 0 6px var(--ops-marker-color))
+    drop-shadow(0 0 16px var(--ops-marker-color));
+}
+
+/* Halo ring for source markers */
+.ops-map-source-marker::before {
+  content: '';
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--ops-marker-color), transparent 35%);
+  background: rgba(8, 11, 8, 0.42);
 }
 
 .ops-poi-list {
@@ -2461,7 +2727,11 @@
 
 @media (max-width: 1180px) {
   .ops-map-overview {
-    grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  }
+
+  .ops-right-chat-panel {
+    grid-column: 1 / -1;
   }
 
   .ops-map-rail-right {
@@ -2595,4 +2865,10 @@
     width: 120px;
     height: 120px;
   }
+}
+
+/* Robin Chat Panel after ops-main (Map Overview layout) */
+main + .ops-robin-chat-panel {
+  margin-top: 16px;
+  max-width: 340px;
 }

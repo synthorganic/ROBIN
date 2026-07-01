@@ -46,6 +46,15 @@ export interface ChatCompletionChoiceMessage {
   tool_calls?: ToolCall[];
 }
 
+export interface ToolDefinition {
+  type: string;
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
 export interface ChatCompletionResponse {
   id: string;
   object: string;
@@ -228,6 +237,7 @@ class LMStudioService {
     stream?: boolean;
     baseUrl?: string;
     apiKey?: string;
+    tools?: ToolDefinition[];
   }): Promise<ChatCompletionResponse> {
     const {
       messages,
@@ -237,6 +247,7 @@ class LMStudioService {
       stream = false,
       baseUrl,
       apiKey,
+      tools,
     } = request;
     const resolved = this.resolveConfig({ baseUrl, apiKey, defaultModelId: modelId });
     const selectedModel = modelId || resolved.defaultModelId;
@@ -245,16 +256,22 @@ class LMStudioService {
     }
 
     try {
+      const body: Record<string, unknown> = {
+        messages,
+        model: selectedModel,
+        temperature,
+        max_tokens: maxTokens,
+        stream,
+      };
+      if (tools && tools.length > 0) {
+        body.tools = tools;
+        body.tool_choice = 'auto';
+      }
+
       const res = await fetch(`${resolved.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: this.headers(resolved),
-        body: JSON.stringify({
-          messages,
-          model: selectedModel,
-          temperature,
-          max_tokens: maxTokens,
-          stream,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json().catch(() => ({}));

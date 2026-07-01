@@ -30,10 +30,10 @@ export function renderPromptTemplate(
   offsetInstruction: string,
 ): string {
   return `Reads a file from the local filesystem. You can access any file directly by using this tool.
-Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+Assume this tool is able to read all files on the machine. If the User provides a file_path parameter with a valid file path, it will be used. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- The file_path parameter must be an absolute path, not a relative path
+- The file_path parameter must be an absolute path or a relative path (e.g., "src/features/ops/ops.css")
 - By default, it reads up to ${MAX_LINES_TO_READ} lines starting from the beginning of the file${maxSizeInstruction}
 ${offsetInstruction}
 ${lineFormat}

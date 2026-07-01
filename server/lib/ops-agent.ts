@@ -5,6 +5,9 @@ import { opsTerminalManager } from './ops-terminals.js';
 import { opsDocumentStore } from './ops-documents.js';
 import { buildOpsAgentToolContext } from './ops-agent-tool-catalog.js';
 import { lmStudioService, type ChatMessage } from './lmstudio-service.js';
+import { config } from './config.js';
+import os from 'node:os';
+import path from 'node:path';
 
 export interface OpsAgentMessage {
   id: string;
@@ -48,13 +51,19 @@ export interface OpsAgentSendOptions {
 const SESSION_LIMIT = 200;
 const WATCH_POLL_MS = 900;
 const WATCH_TIMEOUT_MS = 45_000;
+const MAX_TOOL_ITERATIONS = 15;
 const TOP_LEVEL_SESSION_RE = /^agent:[^:]+:main$/;
 const LOCAL_SESSION_KEY = 'local:ops:main';
 const LOCAL_SYSTEM_PROMPT = [
   'You are ROBIN, an operational analysis agent inside the Inertiai Ops interface.',
   'Use the supplied ROBIN document and tool catalog context when it is relevant.',
   'If a mapped tool is needed, name the exact tool and arguments you would use. Local API mode cannot execute external tools by itself.',
-].join(' ');
+  '',
+  'For immediate PowerShell or bash command execution without creating recurring cron jobs:',
+  '- Use POST /api/execute/powershell for PowerShell commands',
+  '- Use POST /api/execute/bash for shell/bash commands',
+  '- These routes accept: command (required), timeoutMs, description parameters',
+].join('\n');
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -256,40 +265,250 @@ class OpsAgentService {
       text,
       createdAt: new Date().toISOString(),
     };
-    const withUser = [...currentHistory, userMessage];
-    this.localHistory.set(resolvedKey, withUser);
-    broadcast('ops.agent.history', { sessionKey: resolvedKey, history: withUser, ts: Date.now() });
+    let conversationHistory = [...currentHistory, userMessage];
+    this.localHistory.set(resolvedKey, conversationHistory);
+    broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
     broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'thinking', ts: Date.now() });
 
     const augmentedMessage = await this.augmentMessage(text, options);
-    const messages = this.localMessagesForCompletion(withUser, augmentedMessage);
-    const completion = await lmStudioService.createChatCompletion({
-      messages,
-      modelId: options?.localModelId,
-      baseUrl: options?.localApiBaseUrl,
-      apiKey: options?.localApiKey,
-      temperature: 0.2,
-    });
-    const choice = completion.choices[0]?.message;
-    const toolCalls = choice?.tool_calls?.map((call) => ({
-      type: call.type || 'tool_call',
-      name: call.function.name,
-      arguments: call.function.arguments,
-    }));
-    const assistantMessage: OpsAgentMessage = {
-      id: `local-assistant-${randomUUID().slice(0, 10)}`,
-      role: 'assistant',
-      text: choice?.content?.trim() || (toolCalls?.length ? 'Tool call requested.' : ''),
-      createdAt: new Date().toISOString(),
-      ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
-      ...(toolCalls?.length ? { toolCalls } : {}),
-    };
-    const nextHistory = [...withUser, assistantMessage];
-    this.localHistory.set(resolvedKey, nextHistory);
-    opsTerminalManager.appendLog(`[agent:local] ${resolvedKey} <- ${text.slice(0, 160)}`);
-    broadcast('ops.agent.history', { sessionKey: resolvedKey, history: nextHistory, ts: Date.now() });
+    let messages = this.localMessagesForCompletion(conversationHistory, augmentedMessage);
+
+    // Build structured tool definitions for the LLM API
+    const tools = this.buildLocalTools();
+
+    // Tool execution loop: keep calling the model until it stops requesting tools
+    let iteration = 0;
+    while (iteration < MAX_TOOL_ITERATIONS) {
+      iteration++;
+
+      const completion = await lmStudioService.createChatCompletion({
+        messages,
+        modelId: options?.localModelId,
+        baseUrl: options?.localApiBaseUrl,
+        apiKey: options?.localApiKey,
+        temperature: 0.2,
+        tools: iteration === 1 ? tools : undefined, // Only send tools on first call
+      });
+
+      const choice = completion.choices[0]?.message;
+      const rawToolCalls = choice?.tool_calls;
+
+      if (!rawToolCalls || rawToolCalls.length === 0) {
+        // No more tool calls — this is the final answer
+        const assistantMessage: OpsAgentMessage = {
+          id: `local-assistant-${randomUUID().slice(0, 10)}`,
+          role: 'assistant',
+          text: choice?.content?.trim() || '',
+          createdAt: new Date().toISOString(),
+          ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
+        };
+        conversationHistory = [...conversationHistory, assistantMessage];
+        this.localHistory.set(resolvedKey, conversationHistory);
+        opsTerminalManager.appendLog(`[agent:local] ${resolvedKey} <- ${text.slice(0, 160)}`);
+        broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
+        broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'idle', ts: Date.now() });
+        return this.snapshotFromLocal(resolvedKey);
+      }
+
+      // Model wants to call tools — parse them and execute
+      const toolCalls = rawToolCalls.map((call) => ({
+        type: call.type || 'tool_call',
+        name: call.function.name,
+        arguments: call.function.arguments,
+      }));
+
+      // Add assistant message with tool calls to conversation
+      const assistantMessage: OpsAgentMessage = {
+        id: `local-assistant-${randomUUID().slice(0, 10)}`,
+        role: 'assistant',
+        text: choice?.content?.trim() || (toolCalls.length ? 'Tool call requested.' : ''),
+        createdAt: new Date().toISOString(),
+        ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
+        toolCalls,
+      };
+      conversationHistory = [...conversationHistory, assistantMessage];
+
+      // Broadcast intermediate status showing which tools are being used
+      const toolNames = toolCalls.map(tc => tc.name).join(', ');
+      broadcast('ops.agent.status', { sessionKey: resolvedKey, status: `executing: ${toolNames}`, ts: Date.now() });
+
+      // Execute each tool call and collect results
+      const toolResults = await Promise.all(
+        toolCalls.map(async (tc) => {
+          try {
+            const result = await this.executeToolCall(tc.name, tc.arguments);
+            return { name: tc.name, output: result };
+          } catch (err) {
+            return { name: tc.name, output: `Error executing ${tc.name}: ${(err as Error).message}` };
+          }
+        }),
+      );
+
+      // Add tool results back to the conversation for the next iteration
+      const toolResultMessages = toolResults.map((result) => ({
+        role: 'tool' as const,
+        content: result.output,
+        name: result.name,
+      }));
+
+      messages = [...messages, { role: 'assistant', content: assistantMessage.text || '', name: 'assistant' }, ...toolResultMessages];
+    }
+
+    // If we hit max iterations, return what we have
+    opsTerminalManager.appendLog(`[agent:local] ${resolvedKey} <- ${text.slice(0, 160)} (hit max tool iterations)`);
     broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'idle', ts: Date.now() });
     return this.snapshotFromLocal(resolvedKey);
+  }
+
+  /** Build structured tool definitions for the LLM API (OpenAI-compatible format). */
+  private buildLocalTools(): Array<{ type: string; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'bash',
+          description: 'Execute a bash/shell command. Use for Linux/macOS terminal commands, file operations, and system tasks.',
+          parameters: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', description: 'The bash command to execute' },
+              timeoutMs: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
+            },
+            required: ['command'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'powershell',
+          description: 'Execute a PowerShell command. Use for Windows-specific tasks, registry operations, and .NET framework interactions.',
+          parameters: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', description: 'The PowerShell command to execute' },
+              timeoutMs: { type: 'number', description: 'Timeout in milliseconds (default: 60000)' },
+            },
+            required: ['command'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'files_list',
+          description: 'List files and directories in a specified path.',
+          parameters: {
+            type: 'object',
+            properties: {
+              directory: { type: 'string', description: 'The directory path to list (default: current working directory)' },
+              pattern: { type: 'string', description: 'Optional regex pattern to filter files by name' },
+            },
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'files_read',
+          description: 'Read the contents of a text file. For .docx files, use files_read_docx instead.',
+          parameters: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The absolute path to the file' },
+            },
+            required: ['path'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'files_read_docx',
+          description: 'Extract text content from a .docx Word document.',
+          parameters: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The absolute path to the .docx file' },
+            },
+            required: ['path'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'files_info',
+          description: 'Get file metadata (size, modification time, etc.) without reading content.',
+          parameters: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The absolute path to the file' },
+            },
+            required: ['path'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'memories_get',
+          description: 'Retrieve stored memories from the workspace.',
+          parameters: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'Path to the memory file' },
+            },
+          },
+        },
+      },
+    ];
+  }
+
+  /** Execute a single tool call via the gateway-v1 /tools/invoke endpoint. */
+  private async executeToolCall(name: string, argsJson?: string): Promise<string> {
+    const args = argsJson ? (() => { try { return JSON.parse(argsJson); } catch { return {}; } })() : {};
+
+    // Use gateway-v1 /tools/invoke endpoint for local tool execution
+    const gatewayUrl = config.gatewayUrl || 'http://127.0.0.1:18789';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.gatewayToken) headers['Authorization'] = `Bearer ${config.gatewayToken}`;
+
+    // Pass document directory to gateway for file access
+    const documentDir = path.join(config.home, '.robin', 'inertiai-ops', 'documents');
+    const toolArgs = { ...args, documentDir };
+
+    opsTerminalManager.appendLog(`[agent:local] executing tool: ${name} with args: ${JSON.stringify(toolArgs).slice(0, 200)}`);
+
+    const response = await fetch(`${gatewayUrl}/tools/invoke`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ tool: name, args: toolArgs }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Tool ${name} failed: HTTP ${response.status} ${errorText}`);
+    }
+
+    const result = (await response.json()) as { ok?: boolean; result?: unknown; error?: string };
+    if (!result.ok) {
+      throw new Error(result.error || `Tool ${name} returned ok=false`);
+    }
+
+    // Extract output from the result
+    const toolResult = result.result as Record<string, unknown> | undefined;
+    if (toolResult && typeof toolResult === 'object') {
+      if ('output' in toolResult && typeof toolResult.output === 'string') return toolResult.output;
+      if ('content' in toolResult) return String(toolResult.content || '');
+      if ('files' in toolResult && Array.isArray(toolResult.files)) return JSON.stringify(toolResult.files, null, 2);
+    }
+
+    // Fallback: stringify the entire result
+    return typeof result.result === 'string'
+      ? result.result as string
+      : JSON.stringify(result.result, null, 2);
   }
 
   private localMessagesForCompletion(history: OpsAgentMessage[], augmentedLatestMessage: string): ChatMessage[] {

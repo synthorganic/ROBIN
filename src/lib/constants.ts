@@ -11,8 +11,10 @@ export const MAX_ATTACHMENTS = 4;
 export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
 // ─── Connection defaults ──────────────────────────────────────────────────────
-// Used as placeholder/fallback only — actual URL comes from /api/connect-defaults
+// Used as placeholder/fallback only — actual URL and token come from /api/connect-defaults
 export const DEFAULT_GATEWAY_WS = 'ws://127.0.0.1:18789';
+/** Default token for local development (no auth). For production, use /api/connect-defaults or set ROBIN_GATEWAY_TOKEN in server .env */
+export const DEFAULT_GATEWAY_TOKEN = '';
 
 /** Escape special regex characters for safe use in RegExp constructors */
 export function escapeRegex(input: string): string {

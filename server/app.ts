@@ -55,6 +55,9 @@ import opsMapRoutes from './routes/ops-map.js';
 import opsWorkspaceRoutes from './routes/ops-workspace.js';
 import opsDocumentsRoutes from './routes/ops-documents.js';
 import opsLocalApiRoutes from './routes/ops-local-api.js';
+import gatewayInitRoutes from './routes/gateway-init.js';
+import executeRoutes from './routes/execute.js';
+import agentTerminalRoutes from './routes/agent-terminal.js';
 // activity routes removed — tab dropped from workspace panel
 
 const app = new Hono();
@@ -100,7 +103,7 @@ const routes = [
   gatewayRoutes, connectDefaultsRoutes,
   workspaceRoutes, cronsRoutes, sessionsRoutes, skillsRoutes, filesRoutes, apiKeysRoutes,
   voicePhrasesRoutes, fileBrowserRoutes, channelsRoutes, kanbanRoutes, agentToolsRoutes,
-  opsAgentRoutes, opsTerminalRoutes, opsBridgeRoutes, opsMapRoutes, opsWorkspaceRoutes, opsDocumentsRoutes, opsLocalApiRoutes, sharedChatRoutes,
+  opsAgentRoutes, opsTerminalRoutes, opsBridgeRoutes, opsMapRoutes, opsWorkspaceRoutes, opsDocumentsRoutes, opsLocalApiRoutes, gatewayInitRoutes, executeRoutes, sharedChatRoutes, agentTerminalRoutes,
 ];
 for (const route of routes) app.route('/', route);
 

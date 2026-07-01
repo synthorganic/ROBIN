@@ -2,7 +2,7 @@
  * ROBIN server entry point.
  *
  * Starts HTTP and optional HTTPS servers (for secure-context features like
- * microphone access), sets up WebSocket proxying to the OpenClaw gateway,
+ * microphone access), sets up WebSocket proxying to the gateway,
  * starts file watchers, and registers graceful shutdown handlers.
  * @module
  */
@@ -18,6 +18,33 @@ import { config, validateConfig, printStartupBanner, probeGateway } from './lib/
 import { setupWebSocketProxy, closeAllWebSockets } from './lib/ws-proxy.js';
 import { startFileWatcher, stopFileWatcher } from './lib/file-watcher.js';
 
+// ── Auto-start local gateway if not reachable ────────────────────────
+
+async function autoStartGateway(): Promise<void> {
+  const exec = await import('node:child_process');
+  const gatewayUrl = config.gatewayUrl || '';
+  const isLocalGateway = ['127.0.0.1', 'localhost'].includes(
+    gatewayUrl.replace(/^https?:\/\//, '').split(':')[0]
+  );
+
+  if (!isLocalGateway) return;
+
+  try {
+    console.log('  \x1b[36mℹ\x1b[0m Auto-starting local gateway...');
+    const shell = process.platform === 'win32';
+    
+    const proc = exec.spawn('openclaw', ['gateway', 'start'], {
+      stdio: 'ignore',
+      detached: true,
+      shell,
+    });
+    proc.unref();
+    console.log('  \x1b[36mℹ\x1b[0m Gateway startup initiated');
+  } catch (e) {
+    console.log('  \x1b[36mℹ\x1b[0m Gateway auto-start failed:', e instanceof Error ? e.message : 'unknown');
+  }
+}
+
 // ── Startup banner + validation ──────────────────────────────────────
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,6 +53,9 @@ const pkgVersion: string = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version
 
 printStartupBanner(pkgVersion);
 validateConfig();
+
+// Start gateway auto-start in background (don't block startup)
+void autoStartGateway();
 
 // ── Start file watchers ──────────────────────────────────────────────
 
@@ -72,12 +102,10 @@ if (fs.existsSync(config.certPath) && fs.existsSync(config.keyPath)) {
   const MAX_BODY_BYTES = config.limits.maxBodyBytes;
 
   sslServer = https.createServer(sslOptions, async (req, res) => {
-    // Convert Node req/res to fetch Request and forward to Hono
     const protocol = 'https';
     const host = req.headers.host || `localhost:${config.sslPort}`;
     const url = new URL(req.url || '/', `${protocol}://${host}`);
 
-    // Read body with size limit
     const chunks: Buffer[] = [];
     let totalBytes = 0;
     for await (const chunk of req) {
@@ -110,14 +138,10 @@ if (fs.existsSync(config.certPath) && fs.existsSync(config.keyPath)) {
     });
 
     try {
-      // Pass the Node.js IncomingMessage as env.incoming so @hono/node-server's
-      // getConnInfo() can read the real socket remote address (fixes rate limiting on HTTPS).
       const response = await app.fetch(request, { incoming: req });
-
       const responseHeaders = Object.fromEntries(response.headers.entries());
       const contentType = response.headers.get('content-type') || '';
 
-      // Stream SSE responses instead of buffering (Fix #6: SSE over HTTPS)
       if (contentType.includes('text/event-stream') && response.body) {
         res.writeHead(response.status, responseHeaders);
         const reader = response.body.getReader();
@@ -134,7 +158,6 @@ if (fs.existsSync(config.certPath) && fs.existsSync(config.keyPath)) {
         return;
       }
 
-      // Buffer non-streaming responses normally
       res.writeHead(response.status, responseHeaders);
       const arrayBuf = await response.arrayBuffer();
       res.end(Buffer.from(arrayBuf));
@@ -173,7 +196,6 @@ function shutdown(signal: string) {
     });
   }
 
-  // Give connections 5s to drain, then force exit
   setTimeout(() => {
     console.log('[robin] Force exit');
     process.exit(0);

@@ -160,10 +160,79 @@ function rejectConnect(reason: string): void {
   connectReject = null;
 }
 
+/** Check whether the gateway supports WebSocket connections (full OpenClaw vs local v1). */
+let isHttpOnlyGateway: boolean | null = null;
+async function probeGatewayType(): Promise<boolean> {
+  if (isHttpOnlyGateway !== null) return isHttpOnlyGateway;
+  try {
+    const httpUrl = config.gatewayUrl.replace(/^ws/, 'http');
+    const res = await fetch(`${httpUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      // Health endpoint exists — now check if /ws works
+      // If it's a local gateway-v1, WS will fail quickly. We probe by trying WS.
+      const testWs = new WebSocket(getGatewayWsUrl(), { headers: { Origin: getGatewayRequestOrigin() } });
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          testWs.close();
+          resolve();
+        }, 2000);
+        testWs.on('open', () => {
+          clearTimeout(timeout);
+          // Got WS open — wait briefly for connect.challenge
+          const challengeTimeout = setTimeout(() => {
+            testWs.close();
+            resolve();
+          }, 1500);
+          testWs.once('message', (data) => {
+            try {
+              const msg = JSON.parse(data.toString());
+              if (msg.event === 'connect.challenge') {
+                // Full OpenClaw gateway with WS support
+                isHttpOnlyGateway = false;
+                clearTimeout(challengeTimeout);
+                testWs.close();
+                resolve();
+              }
+            } catch { /* ignore */ }
+          });
+          testWs.on('close', () => {
+            // Closed without challenge — HTTP-only gateway
+            isHttpOnlyGateway = true;
+            clearTimeout(challengeTimeout);
+            resolve();
+          });
+        });
+        testWs.on('error', () => {
+          clearTimeout(timeout);
+          isHttpOnlyGateway = true;
+          resolve();
+        });
+      });
+    } else {
+      // No health endpoint — assume full gateway (might be behind proxy)
+      isHttpOnlyGateway = false;
+    }
+  } catch {
+    // Can't probe — assume full gateway and let WS attempt proceed
+    isHttpOnlyGateway = false;
+  }
+  return isHttpOnlyGateway!;
+}
+
 /** Establish the persistent gateway connection. */
-function ensureConnection(): void {
+async function ensureConnection(): Promise<void> {
   if (ws || connecting) return;
   if (!config.gatewayToken) return; // No token = can't connect
+
+  // Check if this is an HTTP-only gateway (local v1)
+  const httpOnly = await probeGatewayType();
+  if (httpOnly) {
+    console.log('[gateway-rpc] Local gateway-v1 detected — WebSocket RPC unavailable, using HTTP fallback');
+    // Resolve connect promise so callers don't hang, but mark as not connected
+    connecting = false;
+    connected = false;
+    return;
+  }
 
   connecting = true;
   connectPromise = new Promise<void>((resolve, reject) => {
@@ -269,19 +338,100 @@ function ensureConnection(): void {
 // ── Core RPC call ────────────────────────────────────────────────────
 
 /**
- * Execute a gateway RPC call via the persistent WebSocket connection.
+ * Execute a gateway RPC call via HTTP fallback (for local gateway-v1).
+ *
+ * Gateway-v1 only exposes /tools/invoke for file/exec tools. Session and chat
+ * management methods are handled locally here so the server boots cleanly even
+ * without a full OpenClaw WebSocket gateway.
+ */
+async function httpRpcCall(
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  const httpUrl = config.gatewayUrl.replace(/^ws/, 'http');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.gatewayToken) headers['Authorization'] = `Bearer ${config.gatewayToken}`;
+
+  // ── Methods that have no gateway-v1 equivalent — return safe defaults ──
+
+  // Session listing: return a single local session so the UI doesn't error
+  if (method === 'sessions.list') {
+    return { sessions: [{ sessionKey: 'local:ops:main', key: 'local:ops:main', label: 'Local Agent', state: 'idle' }] };
+  }
+
+  // Session create / send / delete — no-op stubs for local mode (kanban subagent fallback)
+  if (method === 'sessions.create') {
+    return { sessionKey: `local-sub-${randomUUID().slice(0, 8)}`, ok: true };
+  }
+  if (method === 'sessions.send' || method === 'sessions.delete') {
+    return { ok: true };
+  }
+
+  // Chat history: empty for local mode (history lives in ops-agent.ts memory)
+  if (method === 'chat.history') {
+    return { messages: [] };
+  }
+
+  // Chat send / abort — no-op for local mode (handled by ops-agent directly)
+  if (method === 'chat.send' || method === 'chat.abort') {
+    return { ok: true, runId: `local-${randomUUID().slice(0, 8)}` };
+  }
+
+  // Agent file operations — no-op stubs for local mode
+  if (method.startsWith('agents.files.')) {
+    const sub = method.split('.')[2];
+    if (sub === 'list') return { files: [] };
+    if (sub === 'get') return { file: { missing: true, name: String(params.name || ''), content: '' } };
+    if (sub === 'set') return { ok: true };
+  }
+
+  // ── Everything else — try /tools/invoke on gateway-v1 ──
+
+  const response = await fetch(`${httpUrl}/tools/invoke`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tool: method, args: params }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`HTTP RPC failed: ${response.status} ${text}`);
+  }
+
+  const result = (await response.json()) as { ok?: boolean; result?: unknown; error?: string };
+  if (!result.ok) {
+    throw new Error(result.error || 'HTTP RPC returned ok=false');
+  }
+  return result.result;
+}
+
+/**
+ * Execute a gateway RPC call via the persistent WebSocket connection,
+ * falling back to HTTP when WS is unavailable (local gateway-v1).
  */
 export async function gatewayRpcCall(
   method: string,
   params: Record<string, unknown>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<unknown> {
-  // Ensure connection exists
-  ensureConnection();
+  // Ensure connection exists (now async due to HTTP-only probe)
+  await ensureConnection();
+
+  // If WS is not connected and no connect promise pending, use HTTP fallback
+  if (!connected && !connectPromise) {
+    return httpRpcCall(method, params, timeoutMs);
+  }
 
   // Wait for connection if not yet connected
   if (!connected && connectPromise) {
     await connectPromise;
+  }
+
+  // If still not connected after waiting, fall back to HTTP
+  if (!connected) {
+    return httpRpcCall(method, params, timeoutMs);
   }
 
   return new Promise((resolve, reject) => {
@@ -298,7 +448,8 @@ export async function gatewayRpcCall(
     if (!sent) {
       pending.delete(reqId);
       clearTimeout(timer);
-      reject(new Error('Gateway connection not ready'));
+      // Fall back to HTTP on send failure
+      resolve(httpRpcCall(method, params, timeoutMs));
     }
   });
 }
