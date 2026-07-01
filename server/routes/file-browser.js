@@ -3,7 +3,7 @@
  *
  * Provides directory tree listing and file reading for the workspace
  * file browser UI. All paths are relative to the workspace root
- * (~/.openclaw/workspace/) and validated against traversal + exclusion rules.
+ * (~/.robin/workspace/) and validated against traversal + exclusion rules.
  *
  * When the workspace is not locally accessible, falls back to gateway RPC
  * for top-level persona files. Mutation endpoints (rename, move, trash,

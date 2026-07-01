@@ -1,5 +1,5 @@
 /**
- * useLimits — Hook for polling Codex and Claude Code rate limits.
+ * useLimits — Hook for polling Codex and Robin-Ops rate limits.
  *
  * Fetches limits every 60s with graceful handling of unavailable services.
  */
@@ -24,22 +24,22 @@ export interface CodexLimits {
   weekly_limit?: CodexLimitEntry;
 }
 
-export interface ClaudeLimitEntry extends LimitEntry {
+export interface RobinOpsLimitEntry extends LimitEntry {
   resets_at_epoch: number | null; // epoch ms (normalised server-side)
   resets_at_raw: string;          // original string as fallback
 }
 
-export interface ClaudeCodeLimits {
+export interface RobinOpsLimits {
   available: boolean;
-  session_limit?: ClaudeLimitEntry;
-  weekly_limit?: ClaudeLimitEntry;
+  session_limit?: RobinOpsLimitEntry;
+  weekly_limit?: RobinOpsLimitEntry;
 }
 
 export interface UseLimitsReturn {
   codexLimits: CodexLimits | null;
-  claudeLimits: ClaudeCodeLimits | null;
+  robinOpsLimits: RobinOpsLimits | null;
   codexLastChecked: number | null;
-  claudeLastChecked: number | null;
+  robinOpsLastChecked: number | null;
 }
 
 const POLL_INTERVAL_MS = 60_000;
@@ -48,9 +48,9 @@ const GRACE_MS = 60_000; // keep loading state for 60s before showing "unavailab
 /** Hook to fetch and expose rate-limit / usage data from the gateway. */
 export function useLimits(): UseLimitsReturn {
   const [codexLimits, setCodexLimits] = useState<CodexLimits | null>(null);
-  const [claudeLimits, setClaudeLimits] = useState<ClaudeCodeLimits | null>(null);
+  const [robinOpsLimits, setRobinOpsLimits] = useState<RobinOpsLimits | null>(null);
   const [codexLastChecked, setCodexLastChecked] = useState<number | null>(null);
-  const [claudeLastChecked, setClaudeLastChecked] = useState<number | null>(null);
+  const [robinOpsLastChecked, setRobinOpsLastChecked] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,16 +71,16 @@ export function useLimits(): UseLimitsReturn {
       }
     }
 
-    async function fetchClaude() {
+    async function fetchRobinOps() {
       try {
-        const res = await fetch('/api/claude-code-limits');
-        const json = (await res.json()) as ClaudeCodeLimits;
+        const res = await fetch('/api/robin-ops-limits');
+        const json = (await res.json()) as RobinOpsLimits;
         if (!cancelled) {
           if (json.available) {
-            setClaudeLimits(json);
-            setClaudeLastChecked(Date.now());
+            setRobinOpsLimits(json);
+            setRobinOpsLastChecked(Date.now());
           } else {
-            setClaudeLimits((prev) => {
+            setRobinOpsLimits((prev) => {
               if (prev?.available) return prev; // preserve good data
               if (Date.now() - startedAt < GRACE_MS) return prev; // stay in loading state
               return { available: false };
@@ -88,16 +88,16 @@ export function useLimits(): UseLimitsReturn {
           }
         }
       } catch {
-        if (!cancelled) setClaudeLimits((prev) => prev ?? (Date.now() - startedAt < GRACE_MS ? null : { available: false }));
+        if (!cancelled) setRobinOpsLimits((prev) => prev ?? (Date.now() - startedAt < GRACE_MS ? null : { available: false }));
       }
     }
 
     fetchCodex();
-    fetchClaude();
+    fetchRobinOps();
 
     const id = setInterval(() => {
       fetchCodex();
-      fetchClaude();
+      fetchRobinOps();
     }, POLL_INTERVAL_MS);
 
     return () => {
@@ -106,5 +106,5 @@ export function useLimits(): UseLimitsReturn {
     };
   }, []);
 
-  return { codexLimits, claudeLimits, codexLastChecked, claudeLastChecked };
+  return { codexLimits, robinOpsLimits, codexLastChecked, robinOpsLastChecked };
 }

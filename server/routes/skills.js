@@ -1,170 +1,156 @@
 /**
  * Skills API Routes
  *
- * GET /api/skills — List all skills via `openclaw skills list --json`
+ * GET /api/skills — List ROBIN skills from the repo, agent workspace, and
+ * bundled Robin-Ops skill sources without invoking external CLIs.
  */
 import { Hono } from 'hono';
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rateLimitGeneral } from '../middleware/rate-limit.js';
-import { resolveOpenclawBin } from '../lib/openclaw-bin.js';
 import { InvalidAgentIdError, resolveAgentWorkspace } from '../lib/agent-workspace.js';
-import { config } from '../lib/config.js';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const REPO_SKILLS_DIR = path.join(PROJECT_ROOT, 'skills');
+const BUNDLED_SKILLS_DIR = path.join(PROJECT_ROOT, 'vendor', 'cli-agent', 'src', 'skills', 'bundled');
 const app = new Hono();
-const SKILLS_TIMEOUT_MS = 15_000;
-const OPENCLAW_CONFIG_FILENAME = 'openclaw.json';
-/** Ensure PATH includes the directory of the current Node binary (for #!/usr/bin/env node shims under systemd) */
-const nodeDir = dirname(process.execPath);
-const enrichedEnv = { ...process.env, PATH: `${nodeDir}:${process.env.PATH || ''}` };
-class SkillsRouteError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = 'SkillsRouteError';
+function parseFrontmatter(markdown) {
+    const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (!match)
+        return { fields: {}, body: markdown };
+    const fields = {};
+    for (const line of match[1].split(/\r?\n/)) {
+        const delimiterIndex = line.indexOf(':');
+        if (delimiterIndex <= 0)
+            continue;
+        const key = line.slice(0, delimiterIndex).trim();
+        const value = line.slice(delimiterIndex + 1).trim();
+        if (key && value)
+            fields[key] = value.replace(/^['"]|['"]$/g, '');
     }
+    return { fields, body: markdown.slice(match[0].length) };
 }
-function extractJsonPayload(stdout) {
-    const trimmed = stdout.trim();
-    if (!trimmed) {
-        throw new SkillsRouteError('openclaw skills list returned empty output');
-    }
-    // Normal case: pure JSON output.
+function firstDescriptionLine(markdownBody) {
+    const lines = markdownBody
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => !line.startsWith('#'));
+    return lines[0] || 'Skill available in ROBIN.';
+}
+async function findSkillMarkdownFiles(rootDir) {
     try {
-        return JSON.parse(trimmed);
-    }
-    catch {
-        // Fall through to prelude-tolerant parsing.
-    }
-    // OpenClaw can print warnings before JSON.
-    // Try parsing from each possible JSON structure start ({ or [).
-    const startIndices = [];
-    for (let i = 0; i < trimmed.length; i++) {
-        const ch = trimmed[i];
-        if (ch === '{' || ch === '[') {
-            startIndices.push(i);
-        }
-    }
-    for (const start of startIndices) {
-        const candidate = trimmed.slice(start).trim();
-        try {
-            return JSON.parse(candidate);
-        }
-        catch {
-            // Keep scanning for the next JSON structure start.
-        }
-    }
-    throw new SkillsRouteError('Failed to parse openclaw skills output as JSON');
-}
-function parseSkillsOutput(stdout) {
-    const parsed = extractJsonPayload(stdout);
-    if (Array.isArray(parsed)) {
-        return parsed;
-    }
-    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.skills)) {
-        return parsed.skills;
-    }
-    throw new SkillsRouteError('Invalid openclaw skills payload: missing skills array');
-}
-function formatExecError(err, stderr, commandLabel) {
-    if (err.code === 'ENOENT') {
-        return 'openclaw CLI not found in PATH';
-    }
-    if (err.killed && err.signal === 'SIGTERM') {
-        return `${commandLabel} timed out after ${SKILLS_TIMEOUT_MS}ms`;
-    }
-    const stderrLine = stderr.trim().split('\n').find(Boolean);
-    if (stderrLine) {
-        return `${commandLabel} failed: ${stderrLine}`;
-    }
-    return `${commandLabel} failed: ${err.message}`;
-}
-function execOpenclawCommand(args, opts = {}) {
-    return new Promise((resolve, reject) => {
-        const openclawBin = resolveOpenclawBin();
-        execFile(openclawBin, args, {
-            timeout: SKILLS_TIMEOUT_MS,
-            maxBuffer: 2 * 1024 * 1024,
-            env: opts.env ?? enrichedEnv,
-            cwd: opts.cwd,
-        }, (err, stdout, stderr) => {
-            if (err) {
-                const label = `openclaw ${args.join(' ')}`;
-                return reject(new SkillsRouteError(formatExecError(err, stderr, label)));
+        const entries = await fs.readdir(rootDir, { withFileTypes: true });
+        const discovered = [];
+        for (const entry of entries) {
+            const fullPath = path.join(rootDir, entry.name);
+            if (entry.isDirectory()) {
+                discovered.push(...await findSkillMarkdownFiles(fullPath));
+                continue;
             }
-            return resolve({ stdout, stderr });
-        });
-    });
-}
-function getActiveOpenclawConfigPath() {
-    const envPath = process.env.OPENCLAW_CONFIG_PATH?.trim();
-    if (envPath) {
-        return envPath;
-    }
-    return join(config.home, '.openclaw', OPENCLAW_CONFIG_FILENAME);
-}
-async function createScopedOpenclawEnv(workspaceRoot) {
-    const tempDir = await fs.mkdtemp(join(os.tmpdir(), 'robin-skills-'));
-    const tempConfigPath = join(tempDir, OPENCLAW_CONFIG_FILENAME);
-    try {
-        await fs.copyFile(getActiveOpenclawConfigPath(), tempConfigPath);
-    }
-    catch (err) {
-        if (err.code === 'ENOENT') {
-            await fs.writeFile(tempConfigPath, '{}\n', 'utf-8');
+            if (entry.isFile() && entry.name === 'SKILL.md') {
+                discovered.push(fullPath);
+            }
         }
-        else {
-            await fs.rm(tempDir, { recursive: true, force: true });
-            throw err;
-        }
-    }
-    const scopedEnv = {
-        ...enrichedEnv,
-        OPENCLAW_CONFIG_PATH: tempConfigPath,
-    };
-    try {
-        await execOpenclawCommand(['config', 'set', 'agents.defaults.workspace', workspaceRoot], {
-            env: scopedEnv,
-        });
-    }
-    catch (err) {
-        await fs.rm(tempDir, { recursive: true, force: true });
-        throw err;
-    }
-    return {
-        env: scopedEnv,
-        cleanup: async () => {
-            await fs.rm(tempDir, { recursive: true, force: true });
-        },
-    };
-}
-async function resolveWorkspaceCwd(workspaceRoot) {
-    try {
-        await fs.access(workspaceRoot);
-        return workspaceRoot;
+        return discovered;
     }
     catch {
-        return undefined;
+        return [];
     }
 }
-async function execOpenclawSkills(agentId) {
-    const workspace = resolveAgentWorkspace(agentId);
-    const scoped = await createScopedOpenclawEnv(workspace.workspaceRoot);
+async function readMarkdownSkill(filePath, source) {
     try {
-        const { stdout, stderr } = await execOpenclawCommand(['skills', 'list', '--json'], {
-            env: scoped.env,
-            cwd: await resolveWorkspaceCwd(workspace.workspaceRoot),
-        });
-        const payload = stdout.trim() ? stdout : stderr;
-        return parseSkillsOutput(payload);
+        const raw = await fs.readFile(filePath, 'utf8');
+        const { fields, body } = parseFrontmatter(raw);
+        const name = fields.name?.trim() || path.basename(path.dirname(filePath));
+        if (!name)
+            return null;
+        return {
+            name,
+            description: fields.description?.trim() || firstDescriptionLine(body),
+            emoji: fields.emoji?.trim() || '',
+            eligible: true,
+            disabled: false,
+            blockedByAllowlist: false,
+            source,
+            bundled: source === 'bundled',
+            ...(fields.homepage?.trim() ? { homepage: fields.homepage.trim() } : {}),
+        };
     }
-    finally {
-        await scoped.cleanup();
+    catch {
+        return null;
     }
+}
+function parseBundledSkillSource(raw, filePath) {
+    if (!raw.includes('registerBundledSkill({'))
+        return null;
+    if (/\buserInvocable:\s*false\b/.test(raw))
+        return null;
+    const name = raw.match(/\bname:\s*['"`]([^'"`]+)['"`]/)?.[1]?.trim();
+    if (!name)
+        return null;
+    const directDescription = raw.match(/\bdescription:\s*['"`]([\s\S]*?)['"`]\s*,/)?.[1]?.replace(/\s+/g, ' ').trim();
+    const constDescription = raw.match(/const\s+DESCRIPTION[\s\S]*?:\s*['"`]([\s\S]*?)['"`]\s*;/)?.[1]?.replace(/\s+/g, ' ').trim();
+    const description = directDescription || constDescription || `Bundled Robin-Ops skill from ${path.basename(filePath)}.`;
+    return {
+        name,
+        description,
+        emoji: '',
+        eligible: true,
+        disabled: false,
+        blockedByAllowlist: false,
+        source: 'bundled',
+        bundled: true,
+    };
+}
+async function listBundledSourceSkills() {
+    try {
+        const entries = await fs.readdir(BUNDLED_SKILLS_DIR, { withFileTypes: true });
+        const skills = [];
+        for (const entry of entries) {
+            if (!entry.isFile() || !entry.name.endsWith('.ts'))
+                continue;
+            if (entry.name === 'index.ts' || entry.name.endsWith('Content.ts'))
+                continue;
+            const filePath = path.join(BUNDLED_SKILLS_DIR, entry.name);
+            const raw = await fs.readFile(filePath, 'utf8');
+            const skill = parseBundledSkillSource(raw, filePath);
+            if (skill)
+                skills.push(skill);
+        }
+        return skills;
+    }
+    catch {
+        return [];
+    }
+}
+async function listWorkspaceSkills(agentId) {
+    const workspace = resolveAgentWorkspace(agentId);
+    const workspaceSkillsDir = path.join(workspace.workspaceRoot, 'skills');
+    const roots = Array.from(new Set([REPO_SKILLS_DIR, workspaceSkillsDir]));
+    const discovered = await Promise.all(roots.map(async (rootDir) => {
+        const files = await findSkillMarkdownFiles(rootDir);
+        const skills = await Promise.all(files.map((filePath) => readMarkdownSkill(filePath, 'workspace')));
+        return skills.filter(Boolean);
+    }));
+    return discovered.flat();
+}
+async function listRobinSkills(agentId) {
+    const [workspaceSkills, bundledSourceSkills] = await Promise.all([
+        listWorkspaceSkills(agentId),
+        listBundledSourceSkills(),
+    ]);
+    const deduped = new Map();
+    for (const skill of [...workspaceSkills, ...bundledSourceSkills]) {
+        if (!deduped.has(skill.name))
+            deduped.set(skill.name, skill);
+    }
+    return Array.from(deduped.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 app.get('/api/skills', rateLimitGeneral, async (c) => {
     try {
-        const skills = await execOpenclawSkills(c.req.query('agentId'));
+        const skills = await listRobinSkills(c.req.query('agentId'));
         return c.json({ ok: true, skills });
     }
     catch (err) {

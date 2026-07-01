@@ -42,8 +42,8 @@ vi.mock('./device-identity.js', () => ({
   })),
 }));
 
-vi.mock('./openclaw-bin.js', () => ({
-  resolveOpenclawBin: vi.fn(() => '/usr/bin/echo'),
+vi.mock('./robin-config-store.js', () => ({
+  // Mock for test compatibility
 }));
 
 import { setupWebSocketProxy, closeAllWebSockets, _internals } from './ws-proxy.js';
@@ -207,7 +207,7 @@ describe('ws-proxy', () => {
         type: 'req',
         method: 'connect',
         id: 'c-control-1',
-        params: { auth: { token: 'test-token' }, client: { id: 'openclaw-control-ui', mode: 'webchat' } },
+        params: { auth: { token: 'test-token' }, client: { id: 'robin-gateway-client', mode: 'webchat' } },
       }));
 
       await new Promise<void>((resolve, reject) => {

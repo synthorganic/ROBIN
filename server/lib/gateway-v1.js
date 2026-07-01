@@ -2,7 +2,7 @@
 /**
  * ROBIN Gateway v1 - Local-first gateway server.
  *
- * A lightweight HTTP server providing tool execution endpoints without OpenClaw.
+ * A lightweight HTTP server providing local Robin-Ops tool execution endpoints.
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -55,6 +55,7 @@ var gateway_files_js_1 = require("./gateway-files.js");
 var HOME = process.env.HOME || node_os_1.default.homedir();
 var ROBIN_DIR = node_path_1.default.join(HOME, '.robin');
 var GATEWAY_CONFIG_PATH = node_path_1.default.join(ROBIN_DIR, 'gateway.json');
+var gatewayStarted = false;
 function loadGatewayConfig() {
     if (!(0, node_fs_1.existsSync)(GATEWAY_CONFIG_PATH)) {
         return { gateway: { port: 18789, bind: '127.0.0.1' } };
@@ -317,21 +318,15 @@ function createGatewayApp() {
     }); });
     return app;
 }
-if (typeof require === 'undefined' || typeof require.main === 'undefined' || require.main === module) {
-    // Run as standalone script: `tsx gateway-v1.ts` or `node gateway-v1.js`
-    var port = parseInt(process.env.PORT || '18789', 10);
-    var host = process.env.HOST || '127.0.0.1';
-    startGatewayServer(port, host).catch(function (err) {
-        console.error('Failed to start gateway:', err);
-        process.exit(1);
-    });
-}
 function startGatewayServer() {
     return __awaiter(this, arguments, void 0, function (port, host) {
         var app, server, cleanup;
         if (port === void 0) { port = 18789; }
         if (host === void 0) { host = '127.0.0.1'; }
         return __generator(this, function (_a) {
+            if (gatewayStarted)
+                return [2 /*return*/];
+            gatewayStarted = true;
             app = createGatewayApp();
             console.log("\n\u001B[36mROBIN Gateway v1\u001B[0m");
             console.log("  Listening on: http://".concat(host, ":").concat(port));
@@ -351,8 +346,30 @@ function startGatewayServer() {
             process.on('SIGTERM', cleanup);
             process.on('SIGINT', cleanup);
             return [2 /*return*/, new Promise(function (resolve, reject) {
-                    server.on('error', function (err) { return reject(err); });
+                    server.on('error', function (err) {
+                        gatewayStarted = false;
+                        return reject(err);
+                    });
                 })];
         });
+    });
+}
+var isDirectRun = (function () {
+    var entryArg = process.argv[1];
+    if (!entryArg)
+        return false;
+    try {
+        return node_path_1.default.resolve(entryArg) === __filename;
+    }
+    catch (_a) {
+        return false;
+    }
+})();
+if (isDirectRun) {
+    var port = parseInt(process.env.PORT || '18789', 10);
+    var host = process.env.HOST || '127.0.0.1';
+    startGatewayServer(port, host).catch(function (err) {
+        console.error('Failed to start gateway:', err);
+        process.exit(1);
     });
 }

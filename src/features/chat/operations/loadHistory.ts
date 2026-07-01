@@ -119,7 +119,7 @@ const SYSTEM_EVENT_LINE = /^System: \[\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [
 const TTS_SYSTEM_HINT_RE = /\s*\[system: User sent a voice message\.[\s\S]*$/;
 
 /**
- * Strip the "Conversation info (untrusted metadata)" envelope that the OpenClaw
+ * Strip the "Conversation info (untrusted metadata)" envelope that the legacy gateway
  * gateway (≥2026.2.17) prepends to webchat user messages. The decoration includes
  * emoji, a JSON block with message_id/sender, and a timestamp prefix.
  * Pattern:  Conversation info (untrusted metadata):\n...\njson{...}\n[timestamp] <actual message>

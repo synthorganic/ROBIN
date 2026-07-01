@@ -82,3 +82,27 @@
 .robin-terminal-canvas .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: #dcd5c2;
 }
+
+/* Status tips line */
+.robin-terminal-status-tips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #0f110d;
+  font-size: 11px;
+  color: #8a9583;
+}
+
+.tip-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #dcd5c2;
+}
+
+.tip-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  opacity: 0.9;
+}

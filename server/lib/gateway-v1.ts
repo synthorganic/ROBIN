@@ -1,7 +1,7 @@
 /**
  * ROBIN Gateway v1 - Local-first gateway server.
  *
- * A lightweight HTTP server providing tool execution endpoints without OpenClaw.
+ * A lightweight HTTP server providing local Robin-Ops tool execution endpoints.
  */
 
 import { Hono } from 'hono';
@@ -11,6 +11,9 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { WebSocket, WebSocketServer } from 'ws';
+import { config as serverConfig } from './config.js';
 import type { ExecuteResult } from './gateway-execution.js';
 import { executeBash, executePowerShell, extractDocxText } from './gateway-execution.js';
 import type { ExecuteCommandOptions } from './gateway-execution.js';
@@ -19,6 +22,7 @@ import { listFiles, readFile, fileInfo } from './gateway-files.js';
 const HOME = process.env.HOME || os.homedir();
 const ROBIN_DIR = path.join(HOME, '.robin');
 const GATEWAY_CONFIG_PATH = path.join(ROBIN_DIR, 'gateway.json');
+let gatewayStarted = false;
 
 interface GatewayConfig {
   gateway?: {
@@ -215,7 +219,7 @@ export function createGatewayApp(): Hono {
           break;
         }
         case 'sessions_spawn': {
-          return c.json({ ok: false, error: 'session_spawn requires WebSocket connection - use OpenClaw gateway for this' }, 501);
+          return c.json({ ok: false, error: 'sessions_spawn requires the higher-level Robin-Ops session bridge' }, 501);
         }
         default: {
           // Provide helpful error with list of valid tools for ROBIN Gateway v1
@@ -417,17 +421,170 @@ export function createGatewayApp(): Hono {
   return app;
 }
 
-if (typeof require === 'undefined' || typeof require.main === 'undefined' || require.main === module) {
-  // Run as standalone script: `tsx gateway-v1.ts` or `node gateway-v1.js`
-  const port = parseInt(process.env.PORT || '18789', 10);
-  const host = process.env.HOST || '127.0.0.1';
-  startGatewayServer(port, host).catch((err) => {
-    console.error('Failed to start gateway:', err);
-    process.exit(1);
+/**
+ * WebSocket server for gateway-v1.
+ *
+ * Provides WebSocket endpoint at /ws that:
+ * - Emits connect.challenge with nonce for handshake
+ * - Handles connect requests
+ * - Routes RPC methods to HTTP endpoints
+ */
+let gatewayWss: WebSocketServer | null = null;
+
+/** Generate a challenge nonce for WebSocket connect */
+function generateChallengeNonce(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+/** Active challenge nonces with expiration */
+const challengeNonces = new Map<string, number>();
+
+/** Purge expired nonces */
+function purgeExpiredNonces() {
+  const now = Date.now();
+  for (const [nonce, expires] of challengeNonces.entries()) {
+    if (now > expires) challengeNonces.delete(nonce);
+  }
+}
+
+/** Interval to purge expired nonces every 60s */
+setInterval(purgeExpiredNonces, 60_000);
+
+/** Start WebSocket server on the same HTTP server */
+function setupWebSocketServer(server: Awaited<ReturnType<typeof serve>>): void {
+  const wss = new WebSocketServer({ noServer: true });
+  gatewayWss = wss;
+
+  // Type assertion for node:http.Server which has .on('upgrade')
+  const httpServer = server as import('node:http').Server;
+
+  // Get port safely
+  const address = httpServer.address();
+  const port = typeof address === 'object' && address ? address.port : 18789;
+
+  httpServer.on('upgrade', (req: import('node:http').IncomingMessage, socket: import('node:net').Socket, head: Buffer) => {
+    if (req.url?.startsWith('/ws')) {
+      // Basic auth check - allow loopback connections without token for local mode
+      // The client is loopback if their remote address is 127.0.0.1, ::1, or ::ffff:127.0.0.1
+      const remoteAddr = socket.remoteAddress || '';
+      const isLoopback = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+
+      if (!isLoopback) {
+        const gatewayCfg = loadGatewayConfig();
+        if (gatewayCfg.gateway?.auth?.mode === 'token') {
+          const authHeader = req.headers.authorization;
+          const token = gatewayCfg.gateway?.auth?.token;
+          if (!authHeader || !token || authHeader !== `Bearer ${token}`) {
+            socket.write('HTTP/1.1 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nAuthentication required');
+            socket.destroy();
+            return;
+          }
+        }
+      }
+
+      gatewayWss!.handleUpgrade(req, socket, head, (ws) => {
+        gatewayWss!.emit('connection', ws, req);
+      });
+    }
   });
+
+  gatewayWss.on('connection', (ws, req) => {
+    const connId = crypto.randomBytes(4).toString('hex');
+    const tag = `[ws-gw:${connId}]`;
+
+    console.log(`${tag} WebSocket connection established`);
+
+    // Generate and send challenge nonce
+    const nonce = generateChallengeNonce();
+    const expires = Date.now() + 30_000; // 30s expiration
+    challengeNonces.set(nonce, expires);
+
+    ws.send(JSON.stringify({
+      type: 'event',
+      event: 'connect.challenge',
+      payload: { nonce },
+    }));
+
+    console.log(`${tag} Sent connect.challenge with nonce`);
+
+    ws.on('message', (data) => {
+      let msg: { type: string; method?: string; params?: any; id?: string };
+      try {
+        msg = JSON.parse(data.toString());
+      } catch {
+        console.log(`${tag} Received non-JSON message`);
+        return;
+      }
+
+      // Handle connect request
+      if (msg.type === 'req' && msg.method === 'connect') {
+        console.log(`${tag} Received connect request`);
+        ws.send(JSON.stringify({
+          type: 'res',
+          id: msg.id,
+          ok: true,
+          payload: { message: 'Connected to ROBIN Gateway v1' },
+        }));
+        return;
+      }
+
+      // Handle other RPC methods - route to HTTP endpoints
+      if (msg.type === 'req') {
+        handleRpcMethod(msg, ws, tag);
+      }
+    });
+
+    ws.on('close', (code, reason) => {
+      console.log(`${tag} Connection closed: code=${code}, reason=${reason?.toString()}`);
+    });
+
+    ws.on('error', (err) => {
+      console.error(`${tag} WebSocket error:`, err.message);
+    });
+  });
+
+  console.log(`  WebSocket: ws://127.0.0.1:${port}/ws`);
+}
+
+/** Handle RPC methods by routing to HTTP endpoints */
+function handleRpcMethod(msg: { type: string; method?: string; params?: any; id?: string }, ws: WebSocket, tag: string): void {
+  const method = msg.method || '';
+  const id = msg.id || 'unknown';
+
+  // Route common methods to HTTP tools
+  const httpUrl = serverConfig.gatewayUrl.replace(/^http/, 'http'); // Already http
+
+  if (method === 'tools.list' || method === 'tool.list') {
+    // Return tools list directly (same as /tools GET)
+    const tools = [
+      { name: 'bash', description: 'Execute bash shell command', args_schema: {} },
+      { name: 'powershell', description: 'Execute PowerShell command', args_schema: {} },
+      { name: 'files_list', description: 'List files in directory', args_schema: {} },
+      { name: 'files_read', description: 'Read text file content', args_schema: {} },
+    ];
+    ws.send(JSON.stringify({ type: 'res', id, ok: true, payload: { tools } }));
+  } else if (method.startsWith('files.') || method.startsWith('tool.')) {
+    // Forward to /tools/invoke
+    const toolName = method.replace(/^files\./, '').replace(/^tool\./, '');
+    fetch(`${httpUrl}/tools/invoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: toolName, args: msg.params || {} }),
+    }).then(async (res) => {
+      const result = (await res.json()) as { ok?: boolean; result?: unknown; error?: string };
+      ws.send(JSON.stringify({ type: 'res', id, ok: result.ok ?? false, payload: result.result, error: result.error ? { message: result.error } : undefined }));
+    }).catch((err) => {
+      ws.send(JSON.stringify({ type: 'res', id, ok: false, error: { message: err.message } }));
+    });
+  } else {
+    // Unknown method - return error
+    ws.send(JSON.stringify({ type: 'res', id, ok: false, error: { message: `Unknown method: ${method}` } }));
+  }
 }
 
 export async function startGatewayServer(port = 18789, host = '127.0.0.1'): Promise<void> {
+  if (gatewayStarted) return;
+  gatewayStarted = true;
   const app = createGatewayApp();
 
   console.log(`\n\x1b[36mROBIN Gateway v1\x1b[0m`);
@@ -443,11 +600,17 @@ export async function startGatewayServer(port = 18789, host = '127.0.0.1'): Prom
     (info) => {
       console.log(`\x1b[32m✓ Gateway ready\x1b[0m`);
       console.log(`  HTTP: http://${host}:${info.port}\n`);
+      // Start WebSocket server on the same HTTP server
+      setupWebSocketServer(server);
     }
   );
 
   const cleanup = () => {
     console.log('\n[Gateway] Shutting down...');
+    if (gatewayWss) {
+      gatewayWss.close();
+      gatewayWss = null;
+    }
     server.close(() => process.exit(0));
   };
 
@@ -455,6 +618,28 @@ export async function startGatewayServer(port = 18789, host = '127.0.0.1'): Prom
   process.on('SIGINT', cleanup);
 
   return new Promise((resolve, reject) => {
-    server.on('error', (err: Error) => reject(err));
+    server.on('error', (err: Error) => {
+      gatewayStarted = false;
+      reject(err);
+    });
+  });
+}
+
+const isDirectRun = (() => {
+  const entryArg = process.argv[1];
+  if (!entryArg) return false;
+  try {
+    return path.resolve(entryArg) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
+
+if (isDirectRun) {
+  const port = parseInt(process.env.PORT || '18789', 10);
+  const host = process.env.HOST || '127.0.0.1';
+  startGatewayServer(port, host).catch((err) => {
+    console.error('Failed to start gateway:', err);
+    process.exit(1);
   });
 }

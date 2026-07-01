@@ -32,7 +32,7 @@ function listWorkspaceCandidates(currentWorkspace) {
         { name: 'Active', path: currentWorkspace, includeWhenMissing: true },
         { name: 'Project', path: currentDir },
         { name: 'Home', path: homeDir },
-        { name: 'OpenClaw', path: homeDir ? path.join(homeDir, '.openclaw', 'workspace') : '' },
+        { name: 'ROBIN Workspace', path: homeDir ? path.join(homeDir, '.robin', 'workspace') : '' },
         { name: 'Projects', path: homeDir ? path.join(homeDir, 'projects') : '' },
         { name: 'Work', path: homeDir ? path.join(homeDir, 'work') : '' },
         { name: 'Repos', path: homeDir ? path.join(homeDir, 'repos') : '' },

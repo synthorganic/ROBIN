@@ -1,7 +1,7 @@
 /**
  * Generic TTL cache with in-flight request deduplication.
  *
- * Used by rate-limit endpoints (`/api/codex-limits`, `/api/claude-code-limits`)
+ * Used by rate-limit endpoints (`/api/codex-limits`, `/api/robin-ops-limits`)
  * to avoid redundant expensive fetches when multiple clients hit the same
  * endpoint concurrently. Failed fetches use a shorter TTL (30 s) so retries
  * happen sooner.

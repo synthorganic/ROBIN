@@ -141,7 +141,7 @@ describe('useFileTree', () => {
     it('sets workspaceInfo with default workspace when not using custom workspace', async () => {
       const mockWorkspaceInfo = {
         isCustomWorkspace: false,
-        rootPath: '/home/user/.openclaw/workspace',
+        rootPath: '/home/user/.robin/workspace',
       };
 
       const mockFetch = vi.mocked(fetch);

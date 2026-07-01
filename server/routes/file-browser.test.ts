@@ -13,8 +13,8 @@ describe('file-browser routes', () => {
   beforeEach(async () => {
     vi.resetModules();
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fbrowser-test-'));
-    tmpDir = path.join(homeDir, '.openclaw', 'workspace');
-    researchWorkspace = path.join(homeDir, '.openclaw', 'workspace-research');
+    tmpDir = path.join(homeDir, '.robin', 'workspace');
+    researchWorkspace = path.join(homeDir, '.robin', 'workspace-research');
     await fs.mkdir(tmpDir, { recursive: true });
     // Create a MEMORY.md in the tmpDir so getWorkspaceRoot returns tmpDir
     await fs.writeFile(path.join(tmpDir, 'MEMORY.md'), '# Memories\n');

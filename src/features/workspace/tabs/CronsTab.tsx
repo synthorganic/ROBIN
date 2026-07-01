@@ -460,27 +460,27 @@ export function CronsTab() {
                 <div className="space-y-1.5">
                   <div className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-foreground/80">Recommended fix</div>
                   <p className="text-[0.733rem] leading-4.5 text-muted-foreground">
-                    Ask your agent to update your OpenClaw config (<code>openclaw.json</code>) so <code>gateway.tools.allow</code> includes:
+                    Restart ROBIN so the embedded Robin-Ops scheduler and gateway come back online.
                   </p>
                   <ul className="ml-5 list-disc space-y-1 text-[0.733rem] leading-4.5 text-muted-foreground">
                     {CRON_GATEWAY_TOOL_ALLOWLIST.map((tool) => (
                       <li key={`recommended-${tool}`}><code>{tool}</code></li>
                     ))}
                   </ul>
-                  <p className="text-[0.733rem] leading-4.5 text-muted-foreground">Then restart the gateway.</p>
+                  <p className="text-[0.733rem] leading-4.5 text-muted-foreground">These are the core local scheduler capabilities ROBIN expects.</p>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="text-[0.7rem] font-medium uppercase tracking-[0.18em] text-foreground/80">Manual fix</div>
                   <p className="text-[0.733rem] leading-4.5 text-muted-foreground">
-                    Edit <code>openclaw.json</code> and add these entries to <code>gateway.tools.allow</code>:
+                    If the problem persists, rerun <code>npm run setup</code> so ROBIN can rebuild its local gateway configuration.
                   </p>
                   <ul className="ml-5 list-disc space-y-1 text-[0.733rem] leading-4.5 text-muted-foreground">
                     {CRON_GATEWAY_TOOL_ALLOWLIST.map((tool) => (
                       <li key={`manual-${tool}`}><code>{tool}</code></li>
                     ))}
                   </ul>
-                  <p className="text-[0.733rem] leading-4.5 text-muted-foreground">Then restart the gateway.</p>
+                  <p className="text-[0.733rem] leading-4.5 text-muted-foreground">Then restart ROBIN.</p>
                 </div>
 
                 <div className="space-y-1">

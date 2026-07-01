@@ -2,7 +2,7 @@
  * Local command execution engine for ROBIN Gateway.
  *
  * Executes bash and PowerShell commands directly on the host system
- * without requiring OpenClaw or external gateway dependencies.
+ * without requiring external gateway dependencies.
  */
 
 import { spawn } from 'node:child_process';

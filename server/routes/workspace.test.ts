@@ -14,8 +14,8 @@ describe('workspace routes', () => {
   beforeEach(async () => {
     vi.resetModules();
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-routes-test-'));
-    mainWorkspace = path.join(homeDir, '.openclaw', 'workspace');
-    researchWorkspace = path.join(homeDir, '.openclaw', 'workspace-research');
+    mainWorkspace = path.join(homeDir, '.robin', 'workspace');
+    researchWorkspace = path.join(homeDir, '.robin', 'workspace-research');
     memoryPath = path.join(mainWorkspace, 'MEMORY.md');
     memoryDir = path.join(mainWorkspace, 'memory');
 
@@ -118,7 +118,7 @@ describe('workspace routes', () => {
 
     beforeEach(async () => {
       remoteHomeDir = path.join(homeDir, 'remote-nonexistent');
-      remoteWorkspace = path.join(remoteHomeDir, '.openclaw', 'workspace');
+      remoteWorkspace = path.join(remoteHomeDir, '.robin', 'workspace');
       // Do NOT create remoteWorkspace — it simulates a remote (sandbox) path
 
       gatewayFilesGetMock = vi.fn();

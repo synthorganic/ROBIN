@@ -3,7 +3,7 @@
  * ROBIN Gateway Token Generator
  * 
  * Creates a gateway configuration with an auto-generated token.
- * Intended to replace the OpenClaw gateway setup for local-only operation.
+ * For local-only operation.
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';

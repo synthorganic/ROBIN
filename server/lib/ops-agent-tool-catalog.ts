@@ -19,9 +19,10 @@ export interface OpsAgentToolCatalog {
   generatedAt: string;
 }
 
-const SOURCE_TOOL_PATH = 'C:\\Users\\benmc\\synthorganic\\Inertiai Ops\\Inspirations and source apps\\CLI-Code-main\\claude-code-main\\src\\tools';
 const CATALOG_TTL_MS = 30_000;
 const PROMPT_EXCERPT_LIMIT = 1400;
+const REPO_ROOT = path.resolve(process.cwd());
+const SOURCE_TOOL_PATH = path.join(REPO_ROOT, 'vendor', 'cli-agent', 'src', 'tools');
 
 let cachedCatalog: OpsAgentToolCatalog | null = null;
 let cachedAt = 0;
@@ -30,8 +31,17 @@ function candidateSourcePaths() {
   return [
     process.env.OPS_AGENT_TOOLS_SOURCE,
     SOURCE_TOOL_PATH,
-    path.join(process.cwd(), 'vendor', 'cli-agent', 'src', 'tools'),
   ].filter((value): value is string => Boolean(value));
+}
+
+function normalizePath(value: string) {
+  return process.platform === 'win32' ? value.toLowerCase() : value;
+}
+
+function isRepoScopedPath(value: string) {
+  const resolved = normalizePath(path.resolve(value));
+  const root = normalizePath(REPO_ROOT);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
 }
 
 async function pathExists(value: string) {
@@ -44,6 +54,7 @@ async function pathExists(value: string) {
 
 async function resolveSourcePath() {
   for (const candidate of candidateSourcePaths()) {
+    if (!isRepoScopedPath(candidate)) continue;
     if (await pathExists(candidate)) return candidate;
   }
   return SOURCE_TOOL_PATH;
@@ -88,7 +99,7 @@ function categoryForTool(name: string) {
 }
 
 function fallbackDescription(name: string) {
-  return `${name.replace(/Tool$/, '')} tool mapped from the Claude Code tools source.`;
+  return `${name.replace(/Tool$/, '')} tool mapped from the Robin-Ops tool source.`;
 }
 
 async function readIfExists(filePath: string) {
@@ -164,7 +175,7 @@ export async function getOpsAgentToolCatalog(force = false): Promise<OpsAgentToo
 export async function buildOpsAgentToolContext(selectedToolIds?: string[]) {
   const catalog = await getOpsAgentToolCatalog();
   if (catalog.tools.length === 0) {
-    return 'No Claude Code tool catalog entries are currently available.';
+    return 'No Robin-Ops tool catalog entries are currently available.';
   }
 
   const selected = new Set(selectedToolIds ?? []);
@@ -196,7 +207,7 @@ export async function buildOpsAgentToolContext(selectedToolIds?: string[]) {
     .map((tool) => `\n${tool.displayName} detailed prompt excerpt:\n${tool.promptExcerpt}`);
 
   return [
-    `Claude Code tool catalog mapped from ${catalog.sourcePath}.`,
+    `Robin-Ops tool catalog mapped from ${catalog.sourcePath}.`,
     'When a task calls for a tool, name the tool and provide concrete arguments. Prefer project documents and file paths exactly as provided.',
     ...compactLines,
     ...detailed,

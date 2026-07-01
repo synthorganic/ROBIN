@@ -24,7 +24,6 @@ import { getSessionKey } from '@/types';
 import { useConnectionManager } from '@/hooks/useConnectionManager';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useGatewayRestart } from '@/hooks/useGatewayRestart';
-import { ConnectDialog } from '@/features/connect/ConnectDialog';
 import { TopBar } from '@/components/TopBar';
 import { StatusBar } from '@/components/StatusBar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -56,10 +55,6 @@ const WorkspacePanel = lazy(() => import('@/features/workspace/WorkspacePanel').
 // Lazy-loaded view modes
 const KanbanPanel = lazy(() => import('@/features/kanban/KanbanPanel').then(m => ({ default: m.KanbanPanel })));
 
-interface AppProps {
-  onLogout?: () => void;
-}
-
 interface PendingWorkspaceSwitch {
   targetLabel: string;
   execute: () => Promise<void>;
@@ -78,10 +73,10 @@ function buildWorkspaceSwitchErrorMessage(result: {
   return `Could not save ${fileLabel}. Resolve it before switching agents.`;
 }
 
-export default function App({ onLogout }: AppProps) {
+export default function App() {
   // Gateway state
   const {
-    connectionState, connectError, reconnectAttempt, model, sparkline,
+    connectionState, reconnectAttempt, model, sparkline,
   } = useGateway();
 
   // Session state
@@ -121,12 +116,9 @@ export default function App({ onLogout }: AppProps) {
 
   // Connection management (extracted hook)
   const {
-    dialogOpen,
     editableUrl, setEditableUrl,
-    officialUrl,
     editableToken, setEditableToken,
-    handleConnect, handleReconnect,
-    serverSideAuth,
+    handleReconnect,
   } = useConnectionManager();
 
   // Track file change events for tree refresh. Sequence keeps repeated same-path updates visible.
@@ -747,21 +739,12 @@ export default function App({ onLogout }: AppProps) {
   return (
     <div className="scan-lines relative h-screen flex flex-col overflow-hidden" data-booted={booted}>
       {/* Skip to main content link for keyboard navigation */}
-      <a 
-        href="#main-chat" 
+      <a
+        href="#main-chat"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:font-bold focus:text-sm"
       >
         Skip to chat
       </a>
-      <ConnectDialog
-        open={dialogOpen && connectionState !== 'connected' && connectionState !== 'reconnecting'}
-        onConnect={handleConnect}
-        error={connectError}
-        defaultUrl={editableUrl}
-        defaultToken={editableToken}
-        officialUrl={officialUrl}
-        serverSideAuth={serverSideAuth}
-      />
 
       {/*
        * Gateway state banners.
@@ -852,7 +835,7 @@ export default function App({ onLogout }: AppProps) {
             liveTranscriptionPreview={liveTranscriptionPreview}
             onToggleLiveTranscriptionPreview={toggleLiveTranscriptionPreview}
             agentName={agentName}
-            onLogout={onLogout}
+            onLogout={undefined}
             onGatewayRestart={handleGatewayRestart}
             gatewayRestarting={gatewayRestarting}
           />

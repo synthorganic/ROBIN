@@ -5,8 +5,8 @@ import { resolve } from 'node:path';
 function defaultIdentityPaths(): string[] {
   const home = homedir();
   return [
-    resolve(home, '.openclaw', 'workspace', 'IDENTITY.md'),
-    resolve(home, '.openclaw', 'workspace', 'projects', 'openclaw-agent', 'IDENTITY.md'),
+    resolve(home, '.robin', 'workspace', 'IDENTITY.md'),
+    resolve(home, '.robin', 'workspace', 'projects', 'robin-ops', 'IDENTITY.md'),
   ];
 }
 

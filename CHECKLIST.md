@@ -84,8 +84,20 @@
 ## App.tsx Integration ✅ COMPLETE
 - [x] `AuthGate.tsx` now renders `<App>` instead of `<OpsApp>`
 - [x] Main entry point (`main.tsx`) routes through `AuthGate` → `App`
+- [x] Added `GatewayProvider` wrapper in `AuthGate.tsx` to support used contexts
 - [x] `TerminalAgent` serves as the canonical agent surface
 - [x] Build successful: `npm run build` compiles without errors
+
+---
+
+## Spinnerverb Mechanic ✅ COMPLETE
+- [x] ROBIN Ops branded spinner verbs (e.g., "Synergizing...", "Operationalizing...", "De-risking...", "Mapping...", etc.)
+- [x] Timer rotates verbs every 3.5 seconds during processing
+- [x] Timing display shows elapsed time (e.g., "1m 11s")
+- [x] Token count display shows tokens processed (e.g., "↓ 1.1kt")
+- [x] SIGINT-oriented tip: "Press Ctrl+C to interrupt processing"
+- [x] Idle state tip: "Press Ctrl+P to open command palette"
+- [x] Status bar displays verb with stats while processing: "Synergizing... (1m 11s ↓ 1.1kt)"
 
 ---
 
@@ -173,7 +185,23 @@ All ROBIN-specific tests pass successfully.
 
 ---
 
-## Outdated Tests Removed/Fixed
+## Spinnerverb Mechanic ✅ COMPLETE
+- [x] ROBIN Ops branded spinner verbs (e.g., "Synergizing...", "Operationalizing...", "De-risking...", "Mapping...", etc.)
+- [x] Timer rotates verbs every 3.5 seconds during processing
+- [x] Timing display shows elapsed time (e.g., "1m 11s")
+- [x] Token count display shows tokens processed (e.g., "↓ 1.1kt")
+- [x] SIGINT-oriented tip: "Press Ctrl+C to interrupt processing"
+- [x] Idle state tip: "Press Ctrl+P to open command palette"
+- [x] Tech-specific verbs: "Fingerprinting raccoons", "Polishing the panopticon", "Waterboarding the JSON", "Teaching Excel fear", "Proselytizing the data", "Baptizing the pipeline", "Invoking the dashboard"
+
+---
+
+## Gateway Provider Fix ✅ COMPLETE
+- [x] Added `GatewayProvider` in `AuthGate.tsx` to wrap `App.tsx`
+- [x] Fixes "useGateway must be used within GatewayProvider" error
+- [x] Status bar displays verb with stats while processing: "Synergizing... (1m 11s ↓ 1.1kt)"
+
+##Outdated Tests Removed/Fixed
 1. **health.test.ts** - Removed gateway health probe tests (endpoint no longer has gateway probing functionality)
 2. **useWebSocket.test.ts** - Updated client ID from `openclaw-control-ui` to `robin-control-ui`
 3. **gateway.test.ts** - Fixed vi.doMock for node modules to use vi.importActual

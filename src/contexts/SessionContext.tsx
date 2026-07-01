@@ -385,7 +385,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    // Handle lifecycle events from CLI agents (Codex, Claude Code CLI)
+    // Handle lifecycle events from CLI agents (Codex and other terminal agents)
     if (evt === 'agent') {
       const ap = p as AgentEventPayload;
       if (ap.stream === 'lifecycle') {
@@ -566,7 +566,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           ? (msg.payload || {}) as AgentEventPayload
           : (msg.payload || {}) as ChatEventPayload;
 
-        // Handle lifecycle events from CLI agents (Codex, Claude Code CLI)
+        // Handle lifecycle events from CLI agents (Codex and other terminal agents)
         if (evt === 'agent') {
           const ap = typedPayload as AgentEventPayload;
 
@@ -755,7 +755,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const agentId = getRootAgentId(sessionKey);
       const registrationName = getAgentRegistrationName(rootName, sessionKey);
       try {
-        await rpc('agents.create', { name: registrationName, workspace: `~/.openclaw/workspace-${agentId}` });
+        await rpc('agents.create', { name: registrationName, workspace: `~/.robin/workspace-${agentId}` });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (!msg.includes('already exists')) throw err;
@@ -763,7 +763,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const thinkingLevel = opts.thinking && opts.thinking !== 'off' ? opts.thinking : null;
 
       // Add ROBIN Gateway v1 tool instructions for local-only operation
-      // This provides the model with information about available tools when OpenClaw isn't available
+      // This provides the model with information about available tools when the embedded Robin-Ops gateway is active
       try {
         const robinInstructions = `## Available Tools
 
@@ -795,7 +795,7 @@ When using ROBIN Gateway v1 (local operations), you have access to the following
           instructions: robinInstructions,
         });
       } catch {
-        // If sessions.patch fails (OpenClaw-specific), continue without instructions
+        // If sessions.patch fails on an older gateway, continue without instructions
       }
       await rpc('chat.send', {
         sessionKey,
@@ -829,7 +829,7 @@ Example tool call format:
 \`\`\`
 
 DO NOT use:
-- ❌ Read, write, edit (these are OpenClaw-style names)
+- ❌ Read, write, edit (these are legacy gateway-style names)
 - ❌ workspace path shortcuts
 
 Only use: files_read, files_list, files_info, bash, powershell, memories_get, sessions_spawn`,
@@ -837,7 +837,7 @@ Only use: files_read, files_list, files_info, bash, powershell, memories_get, se
           idempotencyKey: `spawn-instruction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         });
       } catch {
-        // If this fails (e.g. OpenClaw doesn't support), continue anyway
+        // If this fails on a limited gateway build, continue anyway
       }
 
       await refreshSessions();

@@ -1,5 +1,5 @@
 /**
- * WebSocket proxy — bridges browser clients to the OpenClaw gateway.
+ * WebSocket proxy — bridges browser clients to the ROBIN gateway.
  *
  * Clients connect to `ws(s)://host:port/ws?target=<gateway-ws-url>` and this
  * module opens a corresponding connection to the gateway, relaying messages
@@ -7,7 +7,6 @@
  * device identity so the gateway grants operator.read/write scopes.
  *
  * On the first ever connection the gateway creates a pending pairing request.
- * The user must approve it once via `openclaw devices approve <requestId>`.
  * If the device is rejected for any reason, the proxy retries without device
  * identity — the browser still connects but with reduced (token-only) scopes.
  * @module
@@ -31,7 +30,7 @@ export const _internals = { challengeTimeoutMs: 5_000 };
 
 /**
  * Methods the gateway restricts for webchat clients.
- * We intercept these and proxy via `openclaw gateway call` (full CLI scopes).
+ * We intercept these for full CLI scope execution.
  */
 const RESTRICTED_METHODS = new Set([
   'sessions.patch',
@@ -39,7 +38,7 @@ const RESTRICTED_METHODS = new Set([
   'sessions.reset',
   'sessions.compact',
 ]);
-const CONTROL_UI_CLIENT_ID = 'openclaw-control-ui';
+const CONTROL_UI_CLIENT_ID = 'robin-gateway-client';
 
 /**
  * Execute a gateway RPC call, bypassing webchat restrictions.
@@ -63,7 +62,7 @@ export function closeAllWebSockets(): void {
 
 /**
  * Set up the WS/WSS proxy on an HTTP or HTTPS server.
- * Proxies ws(s)://host:port/ws?target=ws://gateway/ws to the OpenClaw gateway.
+ * Proxies ws(s)://host:port/ws?target=ws://gateway/ws to the ROBIN gateway.
  */
 export function setupWebSocketProxy(server: HttpServer | HttpsServer): void {
   const wss = new WebSocketServer({ noServer: true });
@@ -203,7 +202,7 @@ function createGatewayRelay(
   let savedConnectMsg: Record<string, unknown> | null = null;
   /** Whether the saved connect message has been dispatched to the gateway */
   let connectSent = false;
-  /** Whether this connection is using the privileged OpenClaw control UI client id */
+  /** Whether this connection is using the privileged ROBIN control UI client id */
   let isControlUiClient = false;
   /** Timeout handle for challenge nonce deadline */
   let challengeTimer: ReturnType<typeof setTimeout> | null = null;

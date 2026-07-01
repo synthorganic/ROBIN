@@ -230,3 +230,32 @@ In `src/entrypoints/cli.tsx` or a new `src/robin-embedded.ts`:
 - **PLAN_2.md provides implementation details** for the execution phases (1-4).
 - Where they overlap (e.g., terminal route path `/api/agent-terminal/ws`), both documents are consistent.
 - OpenClaw removal is covered in PLAN.md; PLAN_2.md does not address it (not a conflict).
+
+---
+
+## Current Status (2026-07-01)
+
+### Completed
+- ✅ ROBIN Ops Agent terminal as canonical agent surface
+- ✅ SettingsProvider properly wrapped around all providers
+- ✅ Settings dialog removed - auto-connection enabled
+- ✅ Health scraper tool for testing
+
+### Known Issues
+
+#### Gateway WebSocket Connection
+The ROBIN WebSocket proxy at `/ws` (port 3080) attempts to forward connections to the OpenClaw gateway at `ws://127.0.0.1:18789/ws`, but the gateway doesn't expose this WebSocket endpoint. This causes the "connecting to gateway" connection to hang.
+
+**Solution needed:** The gateway needs to be started with WebSocket support enabled. Check OpenClaw gateway documentation for WebSocket configuration options, or add WebSocket routing to the gateway's HTTP server.
+
+**Workaround:** For now, the auto-connect logic retries every 5 seconds and logs connection attempts to the console.
+
+#### Configuration
+- The ROBIN gateway is configured at `http://127.0.0.1:18789`
+- WebSocket proxy runs on `/ws` at port 3080
+- Proxy expects gateway to have `/ws` WebSocket endpoint
+- Gateway needs to be started with WebSocket support: `openclaw gateway start --ws-port=18789` or similar
+
+### Testing Tools
+- `npm run test:homepage` - Scrape localhost:3080 for HTML errors
+- `server/routes/health.test.ts` - Health endpoint tests

@@ -1,5 +1,5 @@
 /**
- * Claude Code usage limits — spawns Claude CLI via node-pty, sends `/usage`,
+ * Robin-Ops usage limits — spawns the embedded CLI via node-pty, sends `/usage`,
  * and parses the output.
  *
  * The flow:
@@ -8,8 +8,8 @@
  *  3. Send `/usage` + Enter
  *  4. Parse the ANSI-stripped output for session and weekly usage percentages
  *
- * Exported {@link getClaudeUsage} returns raw usage data consumed by the
- * `/api/claude-code-limits` route, which normalises reset timestamps.
+ * Exported {@link getRobinOpsUsage} returns raw usage data consumed by the
+ * `/api/robin-ops-limits` route, with `/api/claude-code-limits` kept as a legacy alias.
  * @module
  */
 import * as nodePty from 'node-pty';
@@ -32,8 +32,8 @@ function stripAnsi(s) {
         // Carriage returns
         .replace(/\r/g, '');
 }
-function resolveClaudeBin() {
-    // Check common Claude CLI install locations in priority order.
+function resolveCliBin() {
+    // Check common embedded CLI install locations in priority order.
     // The server process (especially under systemd/launchd) often has a
     // minimal PATH that doesn't include these directories.
     const candidates = [
@@ -64,9 +64,9 @@ async function pollFor(getBuffer, test, timeoutMs, intervalMs = 500) {
     }
     return false;
 }
-/** Check if the buffer contains Claude's ready prompt (❯ or >) */
+/** Check if the buffer contains the embedded CLI ready prompt (❯ or >) */
 function hasReadyPrompt(clean) {
-    // Claude shows ❯ (U+276F) or > when ready for input
+    // The embedded CLI shows ❯ (U+276F) or > when ready for input
     return clean.includes('❯') || /^>\s*$/m.test(clean);
 }
 /** Check if the buffer contains a workspace trust prompt */
@@ -77,20 +77,20 @@ function hasTrustPrompt(clean) {
         lower.includes('accessing workspace'));
 }
 // ── Main ─────────────────────────────────────────────────────────────
-export async function getClaudeUsage() {
-    const claudeBin = resolveClaudeBin();
+export async function getRobinOpsUsage() {
+    const cliBin = resolveCliBin();
     let pty = null;
     let buffer = '';
     try {
         // Ensure ~/.local/bin is in PATH — under systemd the default PATH is
-        // minimal and Claude CLI prints a "not in PATH" warning instead of
+        // minimal and the embedded CLI prints a "not in PATH" warning instead of
         // starting the interactive REPL.
         const spawnEnv = { ...process.env };
         const localBin = join(homedir(), '.local', 'bin');
         if (spawnEnv.PATH && !spawnEnv.PATH.split(':').includes(localBin)) {
             spawnEnv.PATH = `${localBin}:${spawnEnv.PATH}`;
         }
-        pty = nodePty.spawn(claudeBin, [], {
+        pty = nodePty.spawn(cliBin, [], {
             name: 'xterm-256color',
             cols: 200,
             rows: 50,
@@ -104,14 +104,14 @@ export async function getClaudeUsage() {
         // Step 1: Wait for either a trust prompt or the ready prompt (max 15s)
         const gotInitial = await pollFor(getBuffer, (clean) => hasTrustPrompt(clean) || hasReadyPrompt(clean), 15_000);
         if (!gotInitial) {
-            return { available: false, error: 'Timeout waiting for Claude to start' };
+            return { available: false, error: 'Timeout waiting for Robin-Ops CLI to start' };
         }
         // Step 2: If trust prompt, accept it and wait for ready prompt
         if (hasTrustPrompt(stripAnsi(buffer))) {
             pty.write('\r');
             const gotReady = await pollFor(getBuffer, hasReadyPrompt, 15_000);
             if (!gotReady) {
-                return { available: false, error: 'Timeout waiting for Claude after trust prompt' };
+                return { available: false, error: 'Timeout waiting for Robin-Ops CLI after trust prompt' };
             }
         }
         // Step 3: Send /usage command
@@ -121,8 +121,8 @@ export async function getClaudeUsage() {
         // Step 4: Poll for usage data to appear (max 10s)
         const gotUsage = await pollFor(getBuffer, (clean) => /\d+%\s*used/i.test(clean) || /hit\s*your\s*limit/i.test(clean), 10_000);
         if (!gotUsage) {
-            console.error('Claude usage: no usage data found in output. Buffer (stripped):', stripAnsi(buffer).slice(-2000));
-            return { available: false, error: 'No usage data found in Claude output' };
+            console.error('Robin-Ops usage: no usage data found in output. Buffer (stripped):', stripAnsi(buffer).slice(-2000));
+            return { available: false, error: 'No usage data found in Robin-Ops CLI output' };
         }
         // Parse the collected output
         const output = stripAnsi(buffer);
@@ -177,7 +177,7 @@ export async function getClaudeUsage() {
         };
     }
     catch (error) {
-        console.error('Error fetching Claude usage via PTY:', error);
+        console.error('Error fetching Robin-Ops usage via PTY:', error);
         return {
             available: false,
             error: error instanceof Error ? error.message : 'Unknown error',

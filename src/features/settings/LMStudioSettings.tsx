@@ -17,7 +17,7 @@ interface LMStudioSettingsProps {
 
 const DEFAULT_MODELS: Array<{ id: string; name: string }> = [
   { id: 'huihui-ai_qwen3-coder-next-abliterated@iq4_nl', name: 'Qwen3 Coder Next' },
-  { id: 'atlas coder 26b-a4b@?', name: 'Atlas Coder 26B' },
+  { id: 'atlas coder 26b-a4b@?', name: 'Robin-Ops Coder 26B' },
   { id: 'qwen3.5-13b-deckard-heretic-uncensored-thinking', name: 'Qwen3.5 13B Deckard' },
 ];
 

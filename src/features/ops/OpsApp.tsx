@@ -2550,7 +2550,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                         <div className="ops-section-kicker">Agent Workspace</div>
                         <h2>Chat lane with document and tool context</h2>
                         <p className="ops-terminal-topbar-copy">
-                          Messages can run through the gateway session or a local OpenAI-compatible API with uploaded documents and mapped Claude Code tool instructions attached as context.
+                          Messages can run through the gateway session or a local OpenAI-compatible API with uploaded documents and mapped Robin-Ops tool instructions attached as context.
                         </p>
                       </div>
                       <div className="ops-agent-kpis">

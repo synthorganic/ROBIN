@@ -3,7 +3,7 @@
  * Local command execution engine for ROBIN Gateway.
  *
  * Executes bash and PowerShell commands directly on the host system
- * without requiring OpenClaw or external gateway dependencies.
+ * without requiring external gateway dependencies.
  */
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {

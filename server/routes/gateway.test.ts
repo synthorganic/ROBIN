@@ -31,8 +31,8 @@ vi.mock('../middleware/rate-limit.js', () => ({
   rateLimitRestart: vi.fn((_c: unknown, next: () => Promise<void>) => next()),
 }));
 
-vi.mock('../lib/openclaw-bin.js', () => ({
-  resolveOpenclawBin: () => '/usr/bin/openclaw',
+vi.mock('../lib/robin-config-store.js', () => ({
+  // Mock for test compatibility
 }));
 
 vi.mock('../lib/gateway-client.js', () => ({
@@ -67,7 +67,7 @@ vi.mock('node:net', () => {
   return { Socket: MockSocket, default: { Socket: MockSocket } };
 });
 
-const OPENCLAW_CONFIG = {
+const ROBIN_CONFIG = {
   agents: {
     defaults: {
       model: {
@@ -99,23 +99,23 @@ function buildApp() {
 describe('gateway routes', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.OPENCLAW_CONFIG_PATH;
+    delete process.env.ROBIN_CONFIG_PATH;
   });
 
   function setDefaults() {
     execFileImpl = (_bin: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
       (cb as (err: null, stdout: string) => void)(null, '');
     };
-    readFileImpl = async () => JSON.stringify(OPENCLAW_CONFIG);
+    readFileImpl = async () => JSON.stringify(ROBIN_CONFIG);
     invokeGatewayImpl = () => ({});
   }
 
   describe('GET /api/gateway/models', () => {
     it('returns the configured primary model', async () => {
       setDefaults();
-      process.env.OPENCLAW_CONFIG_PATH = '/tmp/openclaw.json';
+      process.env.ROBIN_CONFIG_PATH = '/tmp/robin.json';
       readFileImpl = async (path: unknown) => {
-        expect(path).toBe('/tmp/openclaw.json');
+        expect(path).toBe('/tmp/robin.json');
         return JSON.stringify({
           agents: {
             defaults: {

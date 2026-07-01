@@ -1,7 +1,7 @@
 /**
  * Shared gateway RPC client.
  *
- * Makes direct WebSocket RPC calls to the OpenClaw gateway for workspace
+ * Makes direct WebSocket RPC calls to the ROBIN gateway for workspace
  * file access. Uses a single persistent connection that multiplexes all
  * RPC calls, avoiding the overhead and session conflicts of per-request
  * connections.
@@ -102,7 +102,7 @@ function getGatewayRequestOrigin(): string {
 }
 
 function buildConnectParams(nonce: string) {
-  const clientId = 'openclaw-control-ui';
+  const clientId = 'robin-gateway-client';
   const clientMode = 'webchat';
   const role = 'operator';
   const scopes = ['operator.admin', 'operator.read', 'operator.write'];
@@ -160,7 +160,7 @@ function rejectConnect(reason: string): void {
   connectReject = null;
 }
 
-/** Check whether the gateway supports WebSocket connections (full OpenClaw vs local v1). */
+/** Check whether the gateway supports WebSocket connections (full gateway vs local v1). */
 let isHttpOnlyGateway: boolean | null = null;
 async function probeGatewayType(): Promise<boolean> {
   if (isHttpOnlyGateway !== null) return isHttpOnlyGateway;
@@ -187,7 +187,7 @@ async function probeGatewayType(): Promise<boolean> {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.event === 'connect.challenge') {
-                // Full OpenClaw gateway with WS support
+                // Full gateway with WS support
                 isHttpOnlyGateway = false;
                 clearTimeout(challengeTimeout);
                 testWs.close();
@@ -342,7 +342,7 @@ async function ensureConnection(): Promise<void> {
  *
  * Gateway-v1 only exposes /tools/invoke for file/exec tools. Session and chat
  * management methods are handled locally here so the server boots cleanly even
- * without a full OpenClaw WebSocket gateway.
+ * without a full WebSocket gateway.
  */
 async function httpRpcCall(
   method: string,

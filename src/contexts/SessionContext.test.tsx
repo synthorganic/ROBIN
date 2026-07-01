@@ -164,7 +164,7 @@ describe('SessionContext', () => {
     await waitFor(() => {
       expect(rpcMock).toHaveBeenCalledWith('agents.create', expect.objectContaining({
         name: 'Test 2',
-        workspace: '~/.openclaw/workspace-test-2',
+        workspace: '~/.robin/workspace-test-2',
       }));
       expect(rpcMock).toHaveBeenCalledWith('sessions.patch', expect.objectContaining({
         key: 'agent:test-2:main',

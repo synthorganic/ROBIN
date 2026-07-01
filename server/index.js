@@ -2,7 +2,7 @@
  * ROBIN server entry point.
  *
  * Starts HTTP and optional HTTPS servers (for secure-context features like
- * microphone access), sets up WebSocket proxying to the OpenClaw gateway,
+ * microphone access), sets up WebSocket proxying to the configured gateway,
  * starts file watchers, and registers graceful shutdown handlers.
  * @module
  */

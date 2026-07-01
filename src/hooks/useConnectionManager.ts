@@ -11,10 +11,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useGateway, loadConfig, saveConfig } from '@/contexts/GatewayContext';
 import { DEFAULT_GATEWAY_WS, DEFAULT_GATEWAY_TOKEN } from '@/lib/constants';
-import { areGatewayUrlsEquivalent } from '@/lib/gatewayUrls';
 
 export interface ConnectionManagerState {
-  dialogOpen: boolean;
+  dialogOpen: false;
   setDialogOpen: (open: boolean) => void;
   editableUrl: string;
   setEditableUrl: (url: string) => void;
@@ -49,47 +48,39 @@ async function fetchConnectDefaults(): Promise<{ wsUrl: string; token: string | 
 export function useConnectionManager(): ConnectionManagerState {
   const { connectionState, connect, disconnect } = useGateway();
 
-  const [dialogOpen, setDialogOpen] = useState(true);
+  // Always return false for dialogOpen - we use automatic connection now
+  const dialogOpen = false;
+  const [serverSideAuth, setServerSideAuth] = useState(false);
+  const [officialUrl, setOfficialUrl] = useState<string | null>(null);
 
   // Editable connection settings (local state for settings drawer)
   // Lazy initializers avoid re-parsing sessionStorage on every render
   const [editableUrl, setEditableUrl] = useState(() => loadConfig().url || DEFAULT_GATEWAY_WS);
   const [editableToken, setEditableToken] = useState(() => loadConfig().token || DEFAULT_GATEWAY_TOKEN);
-  const [serverSideAuth, setServerSideAuth] = useState(false);
-  const [officialUrl, setOfficialUrl] = useState<string | null>(null);
 
-  // Track if we've attempted auto-connect to avoid re-running
-  const autoConnectAttempted = useRef(false);
+  // Track connection attempts for retry logic
+  const connectedRef = useRef(false);
 
-  /** Connect to the gateway, save config, and close the dialog. */
+  /** Connect to the gateway, save config. */
   const handleConnect = useCallback(async (url: string, token: string) => {
     saveConfig(url, token);
     await connect(url, token);
-    setDialogOpen(false);
   }, [connect]);
 
-  // Fetch server defaults (async, can't run in initializer)
+  // Fetch server defaults and auto-connect on mount
   useEffect(() => {
-    if (autoConnectAttempted.current) return;
-    autoConnectAttempted.current = true;
-
     const saved = loadConfig();
 
-    // Always fetch defaults once on mount to establish serverSideAuth and officialUrl
+    // Always fetch defaults to establish serverSideAuth and officialUrl
     fetchConnectDefaults().then((defaults) => {
       const isServerSideAuth = defaults?.serverSideAuth ?? false;
       setServerSideAuth(isServerSideAuth);
 
-      const savedUrl = saved.url?.trim();
       const officialWsUrl = defaults?.wsUrl?.trim();
-      const savedMatchesOfficial = areGatewayUrlsEquivalent(savedUrl, officialWsUrl);
 
       if (officialWsUrl) {
         setOfficialUrl(officialWsUrl);
-        // Treat the server-provided gateway as the authoritative default UI target.
-        // This lets fresh installs and env-driven reconfiguration win over stale
-        // browser storage, while still avoiding an automatic reconnect to a truly
-        // different gateway unless the user explicitly confirms by connecting.
+        // Use the server-provided gateway URL as authoritative
         setEditableUrl(officialWsUrl);
       }
 
@@ -101,20 +92,49 @@ export function useConnectionManager(): ConnectionManagerState {
       if (isServerSideAuth && officialWsUrl) {
         setEditableToken('');
       }
+    });
+  }, []);
 
-      // Auto-connect if server-side auth is supported and the saved gateway is
-      // either empty or the same official gateway under a loopback alias.
-      if (
-        isServerSideAuth &&
-        officialWsUrl &&
-        (!savedUrl || savedMatchesOfficial)
-      ) {
-        handleConnect(officialWsUrl, '').catch(() => {
-          // Auto-connect failed - user can manually connect via dialog
+  // Auto-reconnect logic - retry connection every 5 seconds if not connected
+  useEffect(() => {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const retryConnection = () => {
+      if (connectionState === 'connected') {
+        if (!connectedRef.current) {
+          console.log('[useConnectionManager] Connected to gateway successfully');
+          connectedRef.current = true;
+        }
+        return;
+      }
+
+      if (connectionState === 'connecting' || connectionState === 'reconnecting') {
+        // Already trying to connect, wait for it
+        retryTimer = setTimeout(retryConnection, 1000);
+        return;
+      }
+
+      // Not connected and not connecting - try to auto-connect
+      const targetUrl = editableUrl || DEFAULT_GATEWAY_WS;
+      const token = editableToken || '';
+
+      if (targetUrl) {
+        console.log('[useConnectionManager] Attempting auto-connect to:', targetUrl);
+        handleConnect(targetUrl, token).catch((err) => {
+          console.error('[useConnectionManager] Auto-connect failed:', err.message);
         });
       }
-    });
-  }, [handleConnect]);
+
+      // Retry every 5 seconds
+      retryTimer = setTimeout(retryConnection, 5000);
+    };
+
+    retryConnection();
+
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [connectionState, editableUrl, editableToken, handleConnect]);
 
   const handleReconnect = useCallback(async () => {
     // Don't reconnect if already connecting
@@ -122,37 +142,24 @@ export function useConnectionManager(): ConnectionManagerState {
       return;
     }
 
-    const isOfficialUrl = areGatewayUrlsEquivalent(editableUrl, officialUrl);
-    if (editableUrl && (editableToken || (serverSideAuth && isOfficialUrl))) {
-      // Force empty token if server side auth is active for this URL
-      const token = serverSideAuth && isOfficialUrl ? '' : editableToken;
-      if (token !== editableToken) {
-        setEditableToken('');
-      }
-      const targetUrl = isOfficialUrl && officialUrl ? officialUrl.trim() : editableUrl.trim();
-      if (targetUrl !== editableUrl) {
-        setEditableUrl(targetUrl);
-      }
+    const targetUrl = editableUrl || DEFAULT_GATEWAY_WS;
+    const token = editableToken || '';
 
-      // Save the new config first
-      saveConfig(targetUrl, token);
-      // Disconnect cleanly, then reconnect
+    if (targetUrl) {
+      console.log('[useConnectionManager] Manual reconnect to:', targetUrl);
       disconnect();
-      // Small delay to ensure clean disconnect
       await new Promise(r => setTimeout(r, 100));
       try {
         await connect(targetUrl, token);
-      } catch {
-        // Connection failed - don't loop, just stay disconnected
+      } catch (err) {
+        console.error('[useConnectionManager] Reconnect failed:', err);
       }
-    } else {
-      setDialogOpen(true);
     }
-  }, [connect, disconnect, editableUrl, editableToken, connectionState, serverSideAuth, officialUrl]);
+  }, [connect, disconnect, connectionState, editableUrl, editableToken]);
 
   return {
     dialogOpen,
-    setDialogOpen,
+    setDialogOpen: () => {}, // No-op - dialog is disabled
     editableUrl,
     setEditableUrl,
     officialUrl,

@@ -103,9 +103,7 @@ describe('config module', () => {
 
     it('warns when GATEWAY_TOKEN is not set', async () => {
       const originalToken = process.env.GATEWAY_TOKEN;
-      const originalOCToken = process.env.OPENCLAW_GATEWAY_TOKEN;
       delete process.env.GATEWAY_TOKEN;
-      delete process.env.OPENCLAW_GATEWAY_TOKEN;
 
       const { validateConfig, config: cfg } = await import('./config.js');
       if (!cfg.gatewayToken) {
@@ -119,7 +117,6 @@ describe('config module', () => {
       }
 
       if (originalToken) process.env.GATEWAY_TOKEN = originalToken;
-      if (originalOCToken) process.env.OPENCLAW_GATEWAY_TOKEN = originalOCToken;
     });
   });
 

@@ -4,7 +4,7 @@
  * React wrapper for xterm.js PTY terminal
  */
 
-import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
@@ -18,6 +18,22 @@ interface ServerMessage {
   signal?: number
 }
 
+// ROBIN Ops Spinner Verbs - for active processing states
+const ROBIN_SPINNER_VERBS = [
+  'Synergizing', 'Operationalizing', 'De-risking', 'Mapping', 'Tightening',
+  'Consulting', 'Aligning', 'Triangulating', 'Sleuthing', 'Correlating',
+  'Observing', 'Indexing', 'Surfacing', 'Scheming', 'Redacting',
+  'Hardening', 'Modeling', 'Deconflicting', 'Operationalizing',
+  'Summoning', 'Appeasing', 'Rotating', 'Fingerprinting raccoons', 'Auditing',
+  'Polishing the panopticon', 'Waterboarding the JSON', 'Teaching Excel fear',
+  'Encrypting', 'Disambiguating', 'Backtracing', 'Staring into procurement',
+  'Proselytizing the data', 'Reading the runes', 'Consulting the owl',
+  'Whispering to the ontology', 'Performing graph liturgy', 'Blessing the data lake',
+  'Baptizing the pipeline', 'Invoking the dashboard', 'Monitoring',
+  'Watching', 'Locking', 'Checking', 'Closing', 'Sanitizing', 'Containing',
+  'Redacting', 'Escalating', 'Deconflicting', 'Hardening',
+]
+
 interface TerminalAgentProps {
   sessionId?: string
   wsEndpoint?: string
@@ -30,9 +46,15 @@ export interface TerminalAgentHandle {
   focus: () => void
   write: (data: string) => void
   clear: () => void
+  startSpinner: () => void
+  stopSpinner: () => void
+  updateTokenCount: (count: number) => void
 }
 // TerminalRef is kept for backward compatibility with earlier versions
 export interface TerminalRef extends TerminalAgentHandle {}
+
+// Spinner verb rotation interval
+const SPINNER_VERB_INTERVAL_MS = 3500
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
@@ -46,11 +68,14 @@ export const TerminalAgent = forwardRef<TerminalRef, TerminalAgentProps>(functio
 
   // @ts-ignore
   const [isConnected, setIsConnected] = useState(false)
-  const [status, setStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting')
-  
+  const [status, setStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'processing'>('connecting')
+  const [spinnerVerbIndex, setSpinnerVerbIndex] = useState(0)
+  const isProcessing = status === 'processing'
+
   const reconnectDelayRef = useRef(RECONNECT_BASE_MS)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { wsEndpoint = '/api/agent-terminal/ws', cols = 80, rows = 24, onSessionStateChange } = props
 
@@ -192,6 +217,59 @@ export const TerminalAgent = forwardRef<TerminalRef, TerminalAgentProps>(functio
     pingTimerRef.current = null
   }, [])
 
+  const startSpinner = useCallback(() => {
+    setStatus('processing')
+    setSpinnerStartTime(Date.now())
+    setTokenCount(null)
+    return () => {
+      if (spinnerTimerRef.current) clearTimeout(spinnerTimerRef.current)
+      spinnerTimerRef.current = null
+    }
+  }, [])
+
+  const stopSpinner = useCallback(() => {
+    if (spinnerTimerRef.current) clearInterval(spinnerTimerRef.current)
+    spinnerTimerRef.current = null
+    setStatus('connected')
+    setSpinnerVerbIndex(0)
+  }, [])
+
+  const rotateSpinnerVerb = useCallback(() => {
+    if (!isProcessing) return
+    setSpinnerVerbIndex((prev) => (prev + 1) % ROBIN_SPINNER_VERBS.length)
+  }, [isProcessing])
+
+  // Timing and stats for spinner verb
+  const [spinnerStartTime, setSpinnerStartTime] = useState<number | null>(null)
+  const [tokenCount, setTokenCount] = useState<number | null>(null)
+
+  // Update spinner verb display with timing and token stats
+  const spinnerVerbWithStats = useMemo(() => {
+    if (!isProcessing || spinnerStartTime === null) return ROBIN_SPINNER_VERBS[spinnerVerbIndex]
+
+    const elapsedMs = Date.now() - spinnerStartTime
+    const elapsedSeconds = Math.floor(elapsedMs / 1000)
+    const minutes = Math.floor(elapsedSeconds / 60)
+    const seconds = elapsedSeconds % 60
+    const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+
+    const tokenStr = tokenCount !== null ? `↓ ${tokenCount}t` : ''
+
+    return `${ROBIN_SPINNER_VERBS[spinnerVerbIndex]}... (${timeStr} ${tokenStr})`
+  }, [isProcessing, spinnerStartTime, spinnerVerbIndex, tokenCount])
+
+  useEffect(() => {
+    if (isProcessing) {
+      setSpinnerVerbIndex(0)
+      rotateSpinnerVerb()
+      spinnerTimerRef.current = setInterval(rotateSpinnerVerb, SPINNER_VERB_INTERVAL_MS)
+    }
+    return () => {
+      if (spinnerTimerRef.current) clearInterval(spinnerTimerRef.current)
+      spinnerTimerRef.current = null
+    }
+  }, [isProcessing, rotateSpinnerVerb])
+
   useEffect(() => {
     initTerminal()
     connect()
@@ -207,13 +285,28 @@ export const TerminalAgent = forwardRef<TerminalRef, TerminalAgentProps>(functio
     focus: () => termRef.current?.focus(),
     write: (data) => termRef.current?.write(data),
     clear: () => termRef.current?.clear(),
-  }), [])
+    startSpinner,
+    stopSpinner,
+    updateTokenCount: (count) => setTokenCount(count),
+  }), [startSpinner, stopSpinner, setTokenCount])
 
   return (
     <div className="robin-terminal-container">
       <div className="robin-terminal-status-bar">
         <span className={'status-dot ' + status} />
-        <span className="status-text">{status}</span>
+        <span className="status-text">
+          {isProcessing
+            ? spinnerVerbWithStats
+            : status}
+        </span>
+      </div>
+      <div className="robin-terminal-status-tips">
+        <span className="tip-label">Tip:</span>
+        <span className="tip-text">
+          {isProcessing
+            ? 'Press Ctrl+C to interrupt processing'
+            : 'Press Ctrl+P to open command palette'}
+        </span>
       </div>
       <div className="robin-terminal-viewport">
         <div ref={containerRef} className="robin-terminal-canvas" />

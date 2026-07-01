@@ -1,7 +1,7 @@
 /**
- * Device identity for OpenClaw gateway WebSocket authentication.
+ * Device identity for ROBIN gateway WebSocket authentication.
  *
- * OpenClaw 2026.2.19+ requires device identity (Ed25519 keypair + signed challenge)
+ * ROBIN gateway requires device identity (Ed25519 keypair + signed challenge)
  * for WS connections to receive `operator.read` / `operator.write` scopes.
  *
  * The keypair is generated once and persisted to `~/.robin/device-identity.json`.

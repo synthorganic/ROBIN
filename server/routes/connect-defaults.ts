@@ -19,17 +19,13 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 const app = new Hono();
 
 app.get('/api/connect-defaults', rateLimitGeneral, (c) => {
-  // Derive WebSocket URL from the HTTP gateway URL
-  const gwUrl = config.gatewayUrl;
-  let wsUrl = '';
-  try {
-    const parsed = new URL(gwUrl);
-    const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsUrl = `${wsProtocol}//${parsed.host}/ws`;
-  } catch {
-    wsUrl = gwUrl.replace(/^http/, 'ws');
-  }
+  // The gateway URL without /ws endpoint - the frontend's useWebSocket
+  // will prepend /ws and add ?target= to connect through the proxy.
+  // This works because: frontend(ws://localhost:3080/ws?target=http://127.0.0.1:18789)
+  // -> proxy parses target and connects to ws://127.0.0.1:18789
+  const wsUrl = config.gatewayUrl.replace(/^http/, 'ws');
 
+  // Get client IP for trust detection
   let remoteAddress: string | undefined;
   try {
     const info = getConnInfo(c);
@@ -40,7 +36,7 @@ app.get('/api/connect-defaults', rateLimitGeneral, (c) => {
 
   return c.json({
     wsUrl,
-    token: null, // Token injection moved server-side (ws-proxy.ts)
+    token: null, // Token injection handled server-side by ws-proxy.ts
     agentName: config.agentName,
     authEnabled: config.auth,
     serverSideAuth: canInjectGatewayToken({

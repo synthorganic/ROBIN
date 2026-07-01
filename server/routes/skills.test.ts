@@ -63,8 +63,8 @@ describe('GET /api/skills', () => {
   beforeEach(async () => {
     vi.resetModules();
     homeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'skills-routes-test-'));
-    mainWorkspace = path.join(homeDir, '.openclaw', 'workspace');
-    researchWorkspace = path.join(homeDir, '.openclaw', 'workspace-research');
+    mainWorkspace = path.join(homeDir, '.robin', 'workspace');
+    researchWorkspace = path.join(homeDir, '.robin', 'workspace-research');
     memoryPath = path.join(mainWorkspace, 'MEMORY.md');
     memoryDir = path.join(mainWorkspace, 'memory');
 

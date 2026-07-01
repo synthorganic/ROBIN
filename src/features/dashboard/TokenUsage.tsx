@@ -3,7 +3,7 @@ import type { TokenData, TokenEntry } from '@/types';
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
 import { fmtTokens } from '@/lib/formatting';
 import { useLimits } from './useLimits';
-import type { CodexLimits, ClaudeCodeLimits } from './useLimits';
+import type { CodexLimits, RobinOpsLimits } from './useLimits';
 
 // ── Reset time formatting helpers ───────────────────────────────────
 
@@ -128,7 +128,7 @@ function LimitsBlockShell({ icon, iconColor, title, lastChecked, loading, unavai
 // ── Small limit blocks (presentational) ──────────────────────────────
 
 const CODEX_BAR = 'bg-green shadow-[0_0_4px_rgba(76,175,80,0.4)]';
-const CLAUDE_BAR = 'bg-purple shadow-[0_0_4px_rgba(155,89,182,0.4)]';
+const ROBIN_OPS_BAR = 'bg-purple shadow-[0_0_4px_rgba(155,89,182,0.4)]';
 
 function CodexLimitsBlock({ limits, lastChecked }: { limits: CodexLimits | null; lastChecked: number | null }) {
   const five = limits?.five_hour_limit;
@@ -157,7 +157,7 @@ function CodexLimitsBlock({ limits, lastChecked }: { limits: CodexLimits | null;
   );
 }
 
-function ClaudeLimitsBlock({ limits, lastChecked }: { limits: ClaudeCodeLimits | null; lastChecked: number | null }) {
+function RobinOpsLimitsBlock({ limits, lastChecked }: { limits: RobinOpsLimits | null; lastChecked: number | null }) {
   const session = limits?.session_limit;
   const week = limits?.weekly_limit;
 
@@ -170,20 +170,20 @@ function ClaudeLimitsBlock({ limits, lastChecked }: { limits: ClaudeCodeLimits |
 
   return (
     <LimitsBlockShell
-      icon="🟣" iconColor="text-purple" title="Claude Code limits"
+      icon="🟣" iconColor="text-purple" title="Robin-Ops limits"
       lastChecked={lastChecked}
       loading={limits === null}
       unavailable={!limits?.available || !session}
     >
       {session && (
         <LimitProgressBar
-          label="Session limit" usedPercent={session.used_percent} barClass={CLAUDE_BAR}
+          label="Session limit" usedPercent={session.used_percent} barClass={ROBIN_OPS_BAR}
           resetText={sessionResetText || undefined}
         />
       )}
       {week && (
         <LimitProgressBar
-          label="Weekly limit" usedPercent={week.used_percent} barClass={CLAUDE_BAR}
+          label="Weekly limit" usedPercent={week.used_percent} barClass={ROBIN_OPS_BAR}
           resetText={weekResetText || undefined}
         />
       )}
@@ -197,16 +197,16 @@ function ProviderRow({
   entry,
   maxCost,
   codexLimits,
-  claudeLimits,
+  robinOpsLimits,
   codexLastChecked,
-  claudeLastChecked,
+  robinOpsLastChecked,
 }: {
   entry: TokenEntry;
   maxCost: number;
   codexLimits: CodexLimits | null;
-  claudeLimits: ClaudeCodeLimits | null;
+  robinOpsLimits: RobinOpsLimits | null;
   codexLastChecked: number | null;
-  claudeLastChecked: number | null;
+  robinOpsLastChecked: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const pct = Math.max(2, (entry.cost / maxCost) * 100);
@@ -284,7 +284,7 @@ function ProviderRow({
 
           {/* Provider-specific limit blocks */}
           {entry.source === 'openai-codex' && <CodexLimitsBlock limits={codexLimits} lastChecked={codexLastChecked} />}
-          {entry.source === 'anthropic' && <ClaudeLimitsBlock limits={claudeLimits} lastChecked={claudeLastChecked} />}
+          {entry.source === 'anthropic' && <RobinOpsLimitsBlock limits={robinOpsLimits} lastChecked={robinOpsLastChecked} />}
         </div>
       )}
     </div>
@@ -308,7 +308,7 @@ export function TokenUsage({ data }: TokenUsageProps) {
   );
   const maxCost = useMemo(() => Math.max(1, ...entries.map((e) => e.cost)), [entries]);
 
-  const { codexLimits, claudeLimits, codexLastChecked, claudeLastChecked } = useLimits();
+  const { codexLimits, robinOpsLimits, codexLastChecked, robinOpsLastChecked } = useLimits();
 
   if (!data) {
     return (
@@ -355,9 +355,9 @@ export function TokenUsage({ data }: TokenUsageProps) {
                 entry={e}
                 maxCost={maxCost}
                 codexLimits={codexLimits}
-                claudeLimits={claudeLimits}
+                robinOpsLimits={robinOpsLimits}
                 codexLastChecked={codexLastChecked}
-                claudeLastChecked={claudeLastChecked}
+                robinOpsLastChecked={robinOpsLastChecked}
               />
             ))
           ) : (

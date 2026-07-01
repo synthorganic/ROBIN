@@ -1,23 +1,23 @@
 /**
- * GET /api/claude-code-limits — Claude Code rate limit information.
+ * GET /api/robin-ops-limits — Robin-Ops rate limit information.
  *
- * Spawns the Claude CLI via PTY (see {@link getClaudeUsage}), captures the
+ * Spawns the embedded CLI via PTY (see {@link getRobinOpsUsage}), captures the
  * `/usage` output, and normalises reset timestamps to epoch-ms so the
- * frontend doesn't need to parse Claude's human-readable time strings.
+ * frontend doesn't need to parse the CLI's human-readable time strings.
  * Results are cached via {@link createCachedFetch} (5 min TTL, 30 s on failure).
  * @module
  */
 import { Hono } from 'hono';
 import { createCachedFetch } from '../lib/cached-fetch.js';
-import { getClaudeUsage } from '../services/claude-usage.js';
+import { getRobinOpsUsage } from '../services/claude-usage.js';
 const app = new Hono();
 // ── Reset-time parser ────────────────────────────────────────────────
-// Claude CLI outputs times like "7:59pm", "1am", "Feb 13, 6:59pm" — all UTC.
+// The embedded CLI outputs times like "7:59pm", "1am", "Feb 13, 6:59pm" — all UTC.
 const MONTHS = {
     Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
     Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
 };
-function parseClaudeResetToEpochMs(raw) {
+function parseRobinOpsResetToEpochMs(raw) {
     if (!raw)
         return null;
     const s = raw.replace(/\s*\([^)]*\)\s*/g, '').trim();
@@ -73,14 +73,14 @@ function normaliseWindow(w) {
     return {
         used_percent: w.used_percent,
         left_percent: w.left_percent,
-        resets_at_epoch: parseClaudeResetToEpochMs(w.resets_at),
+        resets_at_epoch: parseRobinOpsResetToEpochMs(w.resets_at),
         resets_at_raw: w.resets_at,
     };
 }
 // ── Fetch + cache ────────────────────────────────────────────────────
-async function getClaudeCodeLimits() {
+async function getRobinOpsLimits() {
     try {
-        const raw = await getClaudeUsage();
+        const raw = await getRobinOpsUsage();
         return {
             available: raw.available,
             session_limit: raw.session_limit ? normaliseWindow(raw.session_limit) : undefined,
@@ -89,24 +89,26 @@ async function getClaudeCodeLimits() {
         };
     }
     catch (error) {
-        console.error('Error fetching Claude Code limits:', error);
+        console.error('Error fetching Robin-Ops limits:', error);
         return {
             available: false,
             error: error instanceof Error ? error.message : 'Unknown error',
         };
     }
 }
-const getClaudeCodeLimitsCached = createCachedFetch(getClaudeCodeLimits, undefined, {
+const getRobinOpsLimitsCached = createCachedFetch(getRobinOpsLimits, undefined, {
     isValid: (r) => r.available,
 });
 // ── Route ────────────────────────────────────────────────────────────
-app.get('/api/claude-code-limits', async (c) => {
-    try {
-        return c.json(await getClaudeCodeLimitsCached());
-    }
-    catch (error) {
-        console.error('Error in claude-code-limits endpoint:', error);
-        return c.json({ available: false, error: 'Failed to fetch Claude Code limits' }, 500);
-    }
-});
+for (const routePath of ['/api/robin-ops-limits', '/api/claude-code-limits']) {
+    app.get(routePath, async (c) => {
+        try {
+            return c.json(await getRobinOpsLimitsCached());
+        }
+        catch (error) {
+            console.error(`Error in ${routePath} endpoint:`, error);
+            return c.json({ available: false, error: 'Failed to fetch Robin-Ops limits' }, 500);
+        }
+    });
+}
 export default app;

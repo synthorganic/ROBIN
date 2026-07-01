@@ -26,7 +26,7 @@ function allowedPrefixes() {
     const home = os.homedir();
     return [
         '/tmp',
-        path.join(home, '.openclaw'),
+        path.join(home, '.robin'),
         config.memoryDir,
     ].filter(Boolean);
 }

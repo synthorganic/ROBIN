@@ -17,11 +17,11 @@ import { releaseWhisperContext } from './services/whisper-local.js';
 import { config, validateConfig, printStartupBanner, probeGateway } from './lib/config.js';
 import { setupWebSocketProxy, closeAllWebSockets } from './lib/ws-proxy.js';
 import { startFileWatcher, stopFileWatcher } from './lib/file-watcher.js';
+import { startGatewayServer } from './lib/gateway-v1.js';
 
 // ── Auto-start local gateway if not reachable ────────────────────────
 
 async function autoStartGateway(): Promise<void> {
-  const exec = await import('node:child_process');
   const gatewayUrl = config.gatewayUrl || '';
   const isLocalGateway = ['127.0.0.1', 'localhost'].includes(
     gatewayUrl.replace(/^https?:\/\//, '').split(':')[0]
@@ -30,16 +30,14 @@ async function autoStartGateway(): Promise<void> {
   if (!isLocalGateway) return;
 
   try {
-    console.log('  \x1b[36mℹ\x1b[0m Auto-starting local gateway...');
-    const shell = process.platform === 'win32';
-    
-    const proc = exec.spawn('openclaw', ['gateway', 'start'], {
-      stdio: 'ignore',
-      detached: true,
-      shell,
+    const url = new URL(gatewayUrl || 'http://127.0.0.1:18789');
+    const port = Number.parseInt(url.port, 10) || 18789;
+    console.log('  \x1b[36mℹ\x1b[0m Auto-starting embedded Robin-Ops gateway...');
+    void startGatewayServer(port, url.hostname).catch((err) => {
+      if ((err as NodeJS.ErrnoException).code !== 'EADDRINUSE') {
+        console.log('  \x1b[36mℹ\x1b[0m Embedded gateway start failed:', err instanceof Error ? err.message : 'unknown');
+      }
     });
-    proc.unref();
-    console.log('  \x1b[36mℹ\x1b[0m Gateway startup initiated');
   } catch (e) {
     console.log('  \x1b[36mℹ\x1b[0m Gateway auto-start failed:', e instanceof Error ? e.message : 'unknown');
   }

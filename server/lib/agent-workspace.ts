@@ -40,7 +40,7 @@ export function resolveAgentWorkspace(agentId?: string): AgentWorkspace {
     };
   }
 
-  const workspaceRoot = path.join(config.home, '.openclaw', `workspace-${normalizedAgentId}`);
+  const workspaceRoot = path.join(config.home, '.robin', `workspace-${normalizedAgentId}`);
   return {
     agentId: normalizedAgentId,
     workspaceRoot,

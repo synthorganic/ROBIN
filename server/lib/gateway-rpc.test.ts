@@ -124,7 +124,7 @@ describe('gateway-rpc (persistent WebSocket)', () => {
       await gatewayRpcCall('test.method', { foo: 'bar' });
 
       expect(createDeviceBlockMock).toHaveBeenCalledWith({
-        clientId: 'openclaw-control-ui',
+        clientId: 'robin-gateway-client',
         clientMode: 'webchat',
         role: 'operator',
         scopes: ['operator.admin', 'operator.read', 'operator.write'],
@@ -133,7 +133,7 @@ describe('gateway-rpc (persistent WebSocket)', () => {
       });
       expect(lastConnectParams).toMatchObject({
         client: {
-          id: 'openclaw-control-ui',
+          id: 'robin-gateway-client',
           mode: 'webchat',
         },
         auth: { token: 'test-token' },
@@ -253,7 +253,7 @@ describe('gateway-rpc (persistent WebSocket)', () => {
     it('extracts content from nested file field', async () => {
       rpcHandler = () => ({
         agentId: 'main',
-        workspace: '/sandbox/.openclaw/workspace',
+        workspace: '/sandbox/.robin/workspace',
         file: { name: 'SOUL.md', missing: false, size: 7, updatedAtMs: 1000, content: '# Soul' },
       });
 

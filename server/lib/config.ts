@@ -68,7 +68,7 @@ export const config = {
 
   // Gateway connection
   gatewayUrl: process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL,
-  gatewayToken: process.env.GATEWAY_TOKEN || process.env.OPENCLAW_GATEWAY_TOKEN || '',
+  gatewayToken: process.env.GATEWAY_TOKEN || '',
   publicOrigin: process.env.ROBIN_PUBLIC_ORIGIN || '',
 
   // Local OpenAI-compatible chat API (LM Studio, llama.cpp server, vLLM, etc.)
@@ -81,14 +81,14 @@ export const config = {
 
   home: HOME,
 
-  // Paths (configurable via env, with OpenClaw defaults)
+  // Paths (configurable via env, with ROBIN defaults)
   dist: path.join(PROJECT_ROOT, 'dist'),
   agentLogPath: path.join(PROJECT_ROOT, 'agent-log.json'),
   fileBrowserRoot: process.env.FILE_BROWSER_ROOT || '',
-  memoryPath: process.env.MEMORY_PATH || path.join(HOME, '.openclaw', 'workspace', 'MEMORY.md'),
-  memoryDir: process.env.MEMORY_DIR || path.join(HOME, '.openclaw', 'workspace', 'memory'),
-  sessionsDir: process.env.SESSIONS_DIR || path.join(HOME, '.openclaw', 'agents', 'main', 'sessions'),
-  usageFile: process.env.USAGE_FILE || path.join(HOME, '.openclaw', 'token-usage.json'),
+  memoryPath: process.env.MEMORY_PATH || path.join(HOME, '.robin', 'workspace', 'MEMORY.md'),
+  memoryDir: process.env.MEMORY_DIR || path.join(HOME, '.robin', 'workspace', 'memory'),
+  sessionsDir: process.env.SESSIONS_DIR || path.join(HOME, '.robin', 'agents', 'main', 'sessions'),
+  usageFile: process.env.USAGE_FILE || path.join(HOME, '.robin', 'token-usage.json'),
   workspaceWatchRecursive: process.env.ROBIN_WATCH_WORKSPACE_RECURSIVE === 'true',
   workspaceRemote: process.env.ROBIN_WORKSPACE_REMOTE === 'true',
   certPath: path.join(PROJECT_ROOT, 'certs', 'cert.pem'),

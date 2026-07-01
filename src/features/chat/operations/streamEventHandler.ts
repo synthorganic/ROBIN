@@ -85,7 +85,7 @@ export function classifyStreamEvent(event: GatewayEvent): ClassifiedEvent | null
       agentPayload: ap,
     };
 
-    // Lifecycle events from CLI agents (Codex, Claude Code CLI)
+    // Lifecycle events from CLI agents (Codex and other terminal agents)
     if (ap.stream === 'lifecycle') {
       const phase = (ap.data as Record<string, unknown> | undefined)?.phase;
       if (phase === 'start') return { ...base, type: 'lifecycle_start' };

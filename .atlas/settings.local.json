@@ -131,7 +131,23 @@
       "Bash(echo \"Exit code: $?\")",
       "Bash(\"C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN\\\\CHECKLIST.md\":*)",
       "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN' -type f -name *.md)",
-      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN\\\\dist' -name *App*)"
+      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN\\\\dist' -name *App*)",
+      "Bash(echo \"Command exited with code $?\")",
+      "Bash(taskkill.exe //F //PID 3428)",
+      "Bash(zcat dist/assets/index-dkEFSRmY.js)",
+      "Bash(taskkill.exe //F //PID 13860)",
+      "Bash(taskkill.exe //F //PID 18160)",
+      "Bash(export GATEWAY_URL=\"http://127.0.0.1:18789\")",
+      "Bash(taskkill.exe //F //PID 1364)",
+      "Bash(taskkill.exe //F //PID 9192)",
+      "Bash(taskkill.exe //F //PID 2076)",
+      "Bash(awk 'NR>=1005 && NR<=1035' scripts/setup.ts)",
+      "Bash(awk 'NR==1026' scripts/setup.ts)",
+      "Bash(awk 'NR==1025' scripts/setup.ts)",
+      "Bash(timeout 15 bash -c 'grep -ri \"\"openclaw\"\" --include=\"\"*.ts\"\" \"\"C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN\"\" 2>/dev/null')",
+      "Bash(xargs sed:*)",
+      "Bash(kill -9 1896 2002 1209)",
+      "Bash(cmd //c 'taskkill /F /IM node.exe')"
     ]
   }
 }

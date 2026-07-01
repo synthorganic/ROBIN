@@ -27,6 +27,7 @@
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "npm run build:cli-agent && node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build && npm run build:server",
+    "test:homepage": "tsx scripts/homepage-error-scraper.ts",
     "build:cli-agent": "node scripts/embedded-cli.mjs build",
     "build:server": "node ./node_modules/typescript/bin/tsc -p config/tsconfig.server.json --outDir server-dist --noEmit false --declaration false && node ./node_modules/typescript/bin/tsc -p config/tsconfig.bin.json",
     "update": "node bin-dist/bin/robin-update.js",

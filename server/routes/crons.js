@@ -1,20 +1,9 @@
 /**
- * Cron API Routes — proxy to OpenClaw gateway
- *
- * GET    /api/crons            — List all cron jobs
- * POST   /api/crons            — Create a new cron job
- * PATCH  /api/crons/:id        — Update a cron job
- * DELETE /api/crons/:id        — Delete a cron job
- * POST   /api/crons/:id/toggle — Toggle enabled/disabled
- * POST   /api/crons/:id/run    — Run a cron job immediately
- * GET    /api/crons/:id/runs   — Get run history
+ * Cron API Routes — Robin-Ops local scheduler
  */
 import { Hono } from 'hono';
-import fs from 'node:fs/promises';
-import { join } from 'node:path';
 import { z } from 'zod';
-import { config } from '../lib/config.js';
-import { invokeGatewayTool } from '../lib/gateway-client.js';
+import { robinCronManager } from '../lib/robin-crons.js';
 import { rateLimitGeneral } from '../middleware/rate-limit.js';
 const scheduleSchema = z.union([
     z.object({ kind: z.literal('at'), at: z.string() }),
@@ -43,7 +32,6 @@ const cronJobSchema = z.object({
         agentId: sessionAgentIdSchema,
         enabled: z.boolean().optional(),
         notify: z.boolean().optional(),
-        // Legacy compat — ROBIN may send these flat fields
         prompt: z.string().max(10000).optional(),
         model: z.string().max(200).optional(),
         thinkingLevel: z.string().max(50).optional(),
@@ -68,136 +56,6 @@ const cronPatchSchema = z.object({
     }),
 });
 const app = new Hono();
-const GATEWAY_RUN_TIMEOUT_MS = 60_000;
-const MANUAL_CRON_RUNS_DIR = join(config.home, '.openclaw', 'cron', 'robin-manual-runs');
-function getCronJobsFromResult(result) {
-    const r = result;
-    if (Array.isArray(r?.jobs))
-        return r.jobs;
-    if (Array.isArray(r?.details?.jobs))
-        return r.details.jobs;
-    return Array.isArray(result) ? result : [];
-}
-function getCronRunEntriesFromResult(result) {
-    const r = result;
-    if (Array.isArray(r?.runs))
-        return r.runs;
-    if (Array.isArray(r?.details?.entries))
-        return r.details.entries;
-    if (Array.isArray(r?.details?.runs))
-        return r.details.runs;
-    return Array.isArray(result) ? result : [];
-}
-function getManualCronRunsFilePath(jobId) {
-    return join(MANUAL_CRON_RUNS_DIR, `${jobId}.jsonl`);
-}
-async function appendManualCronRunEntry(jobId, entry) {
-    await fs.mkdir(MANUAL_CRON_RUNS_DIR, { recursive: true });
-    await fs.appendFile(getManualCronRunsFilePath(jobId), `${JSON.stringify(entry)}\n`, 'utf8');
-}
-async function readManualCronRunEntries(jobId) {
-    try {
-        const raw = await fs.readFile(getManualCronRunsFilePath(jobId), 'utf8');
-        return raw
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line) => JSON.parse(line));
-    }
-    catch {
-        return [];
-    }
-}
-function sortCronRunEntries(entries) {
-    return [...entries].sort((a, b) => {
-        const aTs = Number(a.ts || a.runAtMs || 0);
-        const bTs = Number(b.ts || b.runAtMs || 0);
-        return bTs - aTs;
-    });
-}
-async function mergeManualRunStateIntoJobs(jobs) {
-    return Promise.all(jobs.map(async (job) => {
-        const jobId = typeof job.id === 'string'
-            ? job.id
-            : typeof job.jobId === 'string'
-                ? job.jobId
-                : '';
-        if (!jobId)
-            return job;
-        const latestManualEntry = sortCronRunEntries(await readManualCronRunEntries(jobId))[0];
-        const latestManualTs = Number(latestManualEntry?.ts || latestManualEntry?.runAtMs || 0);
-        if (!latestManualTs)
-            return job;
-        const state = (job.state ?? {});
-        const gatewayLastRunTs = typeof state.lastRunAtMs === 'number' ? state.lastRunAtMs : 0;
-        if (gatewayLastRunTs >= latestManualTs)
-            return job;
-        return {
-            ...job,
-            state: {
-                ...state,
-                lastRunAtMs: latestManualTs,
-            },
-        };
-    }));
-}
-function replaceCronJobsInResult(result, jobs) {
-    const r = result;
-    const syncContent = (nextResult) => {
-        if (!Array.isArray(r?.content))
-            return nextResult;
-        const nextContent = r.content.map((item) => {
-            if (item?.type !== 'text' || typeof item.text !== 'string')
-                return item;
-            try {
-                const parsed = JSON.parse(item.text);
-                if (!Array.isArray(parsed.jobs))
-                    return item;
-                return {
-                    ...item,
-                    text: JSON.stringify({ ...parsed, jobs }, null, 2),
-                };
-            }
-            catch {
-                return item;
-            }
-        });
-        return {
-            ...nextResult,
-            content: nextContent,
-        };
-    };
-    if (Array.isArray(r?.jobs)) {
-        return syncContent({ ...r, jobs });
-    }
-    if (Array.isArray(r?.details?.jobs)) {
-        return syncContent({
-            ...r,
-            details: {
-                ...r.details,
-                jobs,
-            },
-        });
-    }
-    if (Array.isArray(result)) {
-        return jobs;
-    }
-    return result;
-}
-async function getGatewayCronRunEntries(jobId) {
-    try {
-        const gatewayResult = await invokeGatewayTool('cron', {
-            action: 'runs',
-            jobId,
-            limit: 10,
-        });
-        return getCronRunEntriesFromResult(gatewayResult);
-    }
-    catch (err) {
-        console.warn('[crons] gateway runs unavailable, falling back to manual history only:', err.message);
-        return [];
-    }
-}
 function deriveAgentIdFromSessionKey(sessionKey) {
     if (!sessionKey)
         return undefined;
@@ -210,172 +68,176 @@ function normalizeCronTarget(job) {
         return job;
     return { ...job, agentId };
 }
-function isIsolatedAgentTurnCron(job) {
-    const payload = (job.payload || {});
-    return job.sessionTarget === 'isolated'
-        && payload.kind === 'agentTurn'
-        && typeof payload.message === 'string'
-        && payload.message.trim().length > 0;
+function normalizeDelivery(value) {
+    if (!value)
+        return undefined;
+    const next = {};
+    if (value.mode === 'announce' || value.mode === 'none')
+        next.mode = value.mode;
+    if (typeof value.channel === 'string' && value.channel.trim())
+        next.channel = value.channel.trim();
+    if (typeof value.to === 'string' && value.to.trim())
+        next.to = value.to.trim();
+    if (typeof value.bestEffort === 'boolean')
+        next.bestEffort = value.bestEffort;
+    return Object.keys(next).length > 0 ? next : undefined;
 }
-function buildCronSpawnLabel(job) {
-    const base = typeof job.name === 'string' && job.name.trim()
-        ? job.name.trim()
-        : `cron ${String(job.id || job.jobId || '').slice(0, 8)}`;
-    const stamp = new Date().toISOString().slice(11, 16);
-    return `Cron · ${base} · ${stamp}`;
+function normalizedPayload(job, requirePayload) {
+    if (job.payload && typeof job.payload === 'object') {
+        return job.payload;
+    }
+    if (typeof job.prompt === 'string' && job.prompt.trim()) {
+        return {
+            kind: 'agentTurn',
+            message: job.prompt.trim(),
+            ...(typeof job.model === 'string' && job.model.trim() ? { model: job.model.trim() } : {}),
+            ...(typeof job.thinkingLevel === 'string' && job.thinkingLevel.trim() ? { thinking: job.thinkingLevel.trim() } : {}),
+        };
+    }
+    if (!requirePayload) {
+        return { kind: 'systemEvent', text: '' };
+    }
+    throw new Error('Cron payload is required');
+}
+function normalizedSchedule(job, requireSchedule) {
+    if (job.schedule && typeof job.schedule === 'object') {
+        return job.schedule;
+    }
+    if (!requireSchedule) {
+        return { kind: 'every', everyMs: 60 * 60 * 1000 };
+    }
+    throw new Error('Cron schedule is required');
+}
+function buildJobInput(rawJob, requireCoreFields) {
+    const job = normalizeCronTarget(rawJob);
+    const payload = normalizedPayload(job, requireCoreFields);
+    const schedule = normalizedSchedule(job, requireCoreFields);
+    const delivery = normalizeDelivery(job.delivery || (typeof job.channel === 'string' && job.channel.trim()
+        ? { mode: 'announce', channel: job.channel.trim() }
+        : undefined));
+    return {
+        ...(typeof job.name === 'string' && job.name.trim() ? { name: job.name.trim() } : {}),
+        enabled: job.enabled !== false,
+        schedule,
+        payload,
+        delivery,
+        ...(job.sessionTarget === 'main' || job.sessionTarget === 'isolated' ? { sessionTarget: job.sessionTarget } : {}),
+        ...(typeof job.sessionKey === 'string' && job.sessionKey.trim() ? { sessionKey: job.sessionKey.trim() } : {}),
+        ...(typeof job.agentId === 'string' && job.agentId.trim() ? { agentId: job.agentId.trim() } : {}),
+        ...(typeof job.notify === 'boolean' ? { notify: job.notify } : {}),
+    };
+}
+function buildPatchInput(rawPatch) {
+    const patch = normalizeCronTarget(rawPatch);
+    const next = {};
+    if (typeof patch.name === 'string')
+        next.name = patch.name.trim();
+    if (typeof patch.enabled === 'boolean')
+        next.enabled = patch.enabled;
+    if (patch.schedule && typeof patch.schedule === 'object')
+        next.schedule = patch.schedule;
+    if (patch.payload && typeof patch.payload === 'object')
+        next.payload = patch.payload;
+    if (patch.delivery && typeof patch.delivery === 'object')
+        next.delivery = normalizeDelivery(patch.delivery);
+    if (patch.sessionTarget === 'main' || patch.sessionTarget === 'isolated')
+        next.sessionTarget = patch.sessionTarget;
+    if (typeof patch.sessionKey === 'string')
+        next.sessionKey = patch.sessionKey.trim();
+    if (typeof patch.agentId === 'string')
+        next.agentId = patch.agentId.trim();
+    if (typeof patch.notify === 'boolean')
+        next.notify = patch.notify;
+    if (!next.payload && typeof patch.prompt === 'string' && patch.prompt.trim()) {
+        next.payload = {
+            kind: 'agentTurn',
+            message: patch.prompt.trim(),
+            ...(typeof patch.model === 'string' && patch.model.trim() ? { model: patch.model.trim() } : {}),
+            ...(typeof patch.thinkingLevel === 'string' && patch.thinkingLevel.trim() ? { thinking: patch.thinkingLevel.trim() } : {}),
+        };
+    }
+    if (!next.delivery && typeof patch.channel === 'string' && patch.channel.trim()) {
+        next.delivery = { mode: 'announce', channel: patch.channel.trim() };
+    }
+    return next;
 }
 app.get('/api/crons', rateLimitGeneral, async (c) => {
     try {
-        const result = await invokeGatewayTool('cron', {
-            action: 'list',
-            includeDisabled: true,
-        });
-        const jobs = getCronJobsFromResult(result);
-        const mergedJobs = jobs.length > 0 ? await mergeManualRunStateIntoJobs(jobs) : jobs;
-        return c.json({ ok: true, result: replaceCronJobsInResult(result, mergedJobs) });
+        const jobs = await robinCronManager.listJobs();
+        return c.json({ ok: true, result: { jobs } });
     }
     catch (err) {
         console.error('[crons] list error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.post('/api/crons', rateLimitGeneral, async (c) => {
     try {
-        const raw = await c.req.json();
-        const parsed = cronJobSchema.safeParse(raw);
+        const parsed = cronJobSchema.safeParse(await c.req.json());
         if (!parsed.success)
             return c.json({ ok: false, error: parsed.error.issues[0]?.message || 'Invalid body' }, 400);
-        const body = parsed.data;
-        const normalizedJob = normalizeCronTarget(body.job);
-        const result = await invokeGatewayTool('cron', {
-            action: 'add',
-            job: normalizedJob,
-        });
-        return c.json({ ok: true, result });
+        const job = await robinCronManager.addJob(buildJobInput(parsed.data.job, true));
+        return c.json({ ok: true, result: job });
     }
     catch (err) {
         console.error('[crons] add error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.patch('/api/crons/:id', rateLimitGeneral, async (c) => {
-    const id = c.req.param('id');
+    const jobId = c.req.param('id') || '';
     try {
-        const raw = await c.req.json();
-        const parsed = cronPatchSchema.safeParse(raw);
+        const parsed = cronPatchSchema.safeParse(await c.req.json());
         if (!parsed.success)
             return c.json({ ok: false, error: parsed.error.issues[0]?.message || 'Invalid body' }, 400);
-        const body = parsed.data;
-        const normalizedPatch = normalizeCronTarget(body.patch);
-        const result = await invokeGatewayTool('cron', {
-            action: 'update',
-            jobId: id,
-            patch: normalizedPatch,
-        });
-        return c.json({ ok: true, result });
+        const patch = buildPatchInput(parsed.data.patch);
+        const job = await robinCronManager.updateJob(jobId, patch);
+        return c.json({ ok: true, result: job });
     }
     catch (err) {
         console.error('[crons] update error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.delete('/api/crons/:id', rateLimitGeneral, async (c) => {
-    const id = c.req.param('id');
+    const jobId = c.req.param('id') || '';
     try {
-        const result = await invokeGatewayTool('cron', {
-            action: 'remove',
-            jobId: id,
-        });
+        const result = await robinCronManager.removeJob(jobId);
         return c.json({ ok: true, result });
     }
     catch (err) {
         console.error('[crons] remove error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.post('/api/crons/:id/toggle', rateLimitGeneral, async (c) => {
-    const id = c.req.param('id');
-    // Get current state first, then flip
+    const jobId = c.req.param('id') || '';
     try {
-        const body = await c.req.json().catch(() => ({ enabled: true }));
-        const result = await invokeGatewayTool('cron', {
-            action: 'update',
-            jobId: id,
-            patch: { enabled: body.enabled },
-        });
-        return c.json({ ok: true, result });
+        const body = await c.req.json().catch(() => ({}));
+        const enabled = body.enabled !== false;
+        const job = await robinCronManager.updateJob(jobId, { enabled });
+        return c.json({ ok: true, result: job });
     }
     catch (err) {
         console.error('[crons] toggle error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.post('/api/crons/:id/run', rateLimitGeneral, async (c) => {
-    const id = c.req.param('id');
+    const jobId = c.req.param('id') || '';
     try {
-        const listResult = await invokeGatewayTool('cron', {
-            action: 'list',
-            includeDisabled: true,
-        }, GATEWAY_RUN_TIMEOUT_MS);
-        const jobs = getCronJobsFromResult(listResult);
-        const job = jobs.find((entry) => (entry.id || entry.jobId) === id);
-        if (job && isIsolatedAgentTurnCron(job)) {
-            const payload = job.payload;
-            const runAtMs = Date.now();
-            const spawnArgs = {
-                task: String(payload.message || '').trim(),
-                mode: 'run',
-                label: buildCronSpawnLabel(job),
-            };
-            if (typeof payload.model === 'string' && payload.model.trim()) {
-                spawnArgs.model = payload.model.trim();
-            }
-            if (typeof payload.thinking === 'string' && payload.thinking.trim()) {
-                spawnArgs.thinking = payload.thinking.trim();
-            }
-            if (typeof job.agentId === 'string' && job.agentId.trim()) {
-                spawnArgs.agentId = job.agentId.trim();
-            }
-            const result = await invokeGatewayTool('sessions_spawn', spawnArgs, GATEWAY_RUN_TIMEOUT_MS);
-            const details = result?.details ?? {};
-            try {
-                await appendManualCronRunEntry(id, {
-                    ts: runAtMs,
-                    jobId: id,
-                    action: 'spawned',
-                    status: 'ok',
-                    summary: 'Manual run started in a separate cron session.',
-                    runAtMs,
-                    nextRunAtMs: typeof job.state?.nextRunAtMs === 'number'
-                        ? job.state.nextRunAtMs
-                        : undefined,
-                    childSessionKey: typeof details.childSessionKey === 'string' ? details.childSessionKey : undefined,
-                    runId: typeof details.runId === 'string' ? details.runId : undefined,
-                    manual: true,
-                });
-            }
-            catch (ledgerErr) {
-                console.warn('[crons] manual run history write failed:', ledgerErr.message);
-            }
-            return c.json({ ok: true, result });
-        }
-        const result = await invokeGatewayTool('cron', {
-            action: 'run',
-            jobId: id,
-        }, GATEWAY_RUN_TIMEOUT_MS);
+        const result = await robinCronManager.runNow(jobId);
         return c.json({ ok: true, result });
     }
     catch (err) {
         console.error('[crons] run error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 app.get('/api/crons/:id/runs', rateLimitGeneral, async (c) => {
-    const id = c.req.param('id');
+    const jobId = c.req.param('id') || '';
     try {
-        const gatewayEntries = await getGatewayCronRunEntries(id);
-        const manualEntries = await readManualCronRunEntries(id);
-        const entries = sortCronRunEntries([...gatewayEntries, ...manualEntries]).slice(0, 10);
+        const entries = await robinCronManager.readRuns(jobId);
         return c.json({
             ok: true,
             result: {
@@ -390,7 +252,7 @@ app.get('/api/crons/:id/runs', rateLimitGeneral, async (c) => {
     }
     catch (err) {
         console.error('[crons] runs error:', err.message);
-        return c.json({ ok: false, error: err.message }, 502);
+        return c.json({ ok: false, error: err.message }, 500);
     }
 });
 export default app;

@@ -1,5 +1,5 @@
 /**
- * Claude Code usage limits — spawns Claude CLI via node-pty, sends `/usage`,
+ * Robin-Ops usage limits — spawns the embedded CLI via node-pty, sends `/usage`,
  * and parses the output.
  *
  * The flow:
@@ -8,8 +8,8 @@
  *  3. Send `/usage` + Enter
  *  4. Parse the ANSI-stripped output for session and weekly usage percentages
  *
- * Exported {@link getClaudeUsage} returns raw usage data consumed by the
- * `/api/claude-code-limits` route, which normalises reset timestamps.
+ * Exported {@link getRobinOpsUsage} returns raw usage data consumed by the
+ * `/api/robin-ops-limits` route, with `/api/claude-code-limits` kept as a legacy alias.
  * @module
  */
 
@@ -51,8 +51,8 @@ function stripAnsi(s: string): string {
     .replace(/\r/g, '');
 }
 
-function resolveClaudeBin(): string {
-  // Check common Claude CLI install locations in priority order.
+function resolveCliBin(): string {
+  // Check common embedded CLI install locations in priority order.
   // The server process (especially under systemd/launchd) often has a
   // minimal PATH that doesn't include these directories.
   const candidates = [
@@ -89,9 +89,9 @@ async function pollFor(
   return false;
 }
 
-/** Check if the buffer contains Claude's ready prompt (❯ or >) */
+/** Check if the buffer contains the embedded CLI ready prompt (❯ or >) */
 function hasReadyPrompt(clean: string): boolean {
-  // Claude shows ❯ (U+276F) or > when ready for input
+  // The embedded CLI shows ❯ (U+276F) or > when ready for input
   return clean.includes('❯') || /^>\s*$/m.test(clean);
 }
 
@@ -107,14 +107,14 @@ function hasTrustPrompt(clean: string): boolean {
 
 // ── Main ─────────────────────────────────────────────────────────────
 
-export async function getClaudeUsage(): Promise<RawClaudeLimits> {
-  const claudeBin = resolveClaudeBin();
+export async function getRobinOpsUsage(): Promise<RawClaudeLimits> {
+  const cliBin = resolveCliBin();
   let pty: nodePty.IPty | null = null;
   let buffer = '';
 
   try {
     // Ensure ~/.local/bin is in PATH — under systemd the default PATH is
-    // minimal and Claude CLI prints a "not in PATH" warning instead of
+    // minimal and the embedded CLI prints a "not in PATH" warning instead of
     // starting the interactive REPL.
     const spawnEnv = { ...process.env } as Record<string, string>;
     const localBin = join(homedir(), '.local', 'bin');
@@ -122,7 +122,7 @@ export async function getClaudeUsage(): Promise<RawClaudeLimits> {
       spawnEnv.PATH = `${localBin}:${spawnEnv.PATH}`;
     }
 
-    pty = nodePty.spawn(claudeBin, [], {
+    pty = nodePty.spawn(cliBin, [], {
       name: 'xterm-256color',
       cols: 200,
       rows: 50,
@@ -144,7 +144,7 @@ export async function getClaudeUsage(): Promise<RawClaudeLimits> {
     );
 
     if (!gotInitial) {
-      return { available: false, error: 'Timeout waiting for Claude to start' };
+      return { available: false, error: 'Timeout waiting for Robin-Ops CLI to start' };
     }
 
     // Step 2: If trust prompt, accept it and wait for ready prompt
@@ -152,7 +152,7 @@ export async function getClaudeUsage(): Promise<RawClaudeLimits> {
       pty.write('\r');
       const gotReady = await pollFor(getBuffer, hasReadyPrompt, 15_000);
       if (!gotReady) {
-        return { available: false, error: 'Timeout waiting for Claude after trust prompt' };
+        return { available: false, error: 'Timeout waiting for Robin-Ops CLI after trust prompt' };
       }
     }
 
@@ -169,8 +169,8 @@ export async function getClaudeUsage(): Promise<RawClaudeLimits> {
     );
 
     if (!gotUsage) {
-      console.error('Claude usage: no usage data found in output. Buffer (stripped):', stripAnsi(buffer).slice(-2000));
-      return { available: false, error: 'No usage data found in Claude output' };
+      console.error('Robin-Ops usage: no usage data found in output. Buffer (stripped):', stripAnsi(buffer).slice(-2000));
+      return { available: false, error: 'No usage data found in Robin-Ops CLI output' };
     }
 
     // Parse the collected output
@@ -237,7 +237,7 @@ export async function getClaudeUsage(): Promise<RawClaudeLimits> {
           : null,
     };
   } catch (error) {
-    console.error('Error fetching Claude usage via PTY:', error);
+    console.error('Error fetching Robin-Ops usage via PTY:', error);
     return {
       available: false,
       error: error instanceof Error ? error.message : 'Unknown error',

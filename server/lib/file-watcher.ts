@@ -73,12 +73,12 @@ function discoverWorkspaces(): AgentWorkspace[] {
   const mainWorkspace = resolveAgentWorkspace('main');
   workspaces.set(mainWorkspace.agentId, mainWorkspace);
 
-  const openclawDir = path.join(config.home, '.openclaw');
-  if (!existsSync(openclawDir)) {
+  const robinDir = path.join(config.home, '.robin');
+  if (!existsSync(robinDir)) {
     return [...workspaces.values()];
   }
 
-  for (const entry of readdirSync(openclawDir, { withFileTypes: true })) {
+  for (const entry of readdirSync(robinDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || !entry.name.startsWith(WORKSPACE_PREFIX)) continue;
 
     const rawAgentId = entry.name.slice(WORKSPACE_PREFIX.length);
@@ -189,11 +189,11 @@ function refreshWorkspaceWatchers(): void {
 }
 
 function startRootWorkspaceWatcher(): void {
-  const openclawDir = path.join(config.home, '.openclaw');
-  if (rootDirWatcher || !existsSync(openclawDir)) return;
+  const robinDir = path.join(config.home, '.robin');
+  if (rootDirWatcher || !existsSync(robinDir)) return;
 
   try {
-    rootDirWatcher = watch(openclawDir, (_eventType, filename) => {
+    rootDirWatcher = watch(robinDir, (_eventType, filename) => {
       const file = getWatchFilename(filename);
       if (!file) return;
       if (file === 'workspace' || file.startsWith(WORKSPACE_PREFIX)) {
