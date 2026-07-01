@@ -147,7 +147,8 @@
       "Bash(timeout 15 bash -c 'grep -ri \"\"openclaw\"\" --include=\"\"*.ts\"\" \"\"C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN\"\" 2>/dev/null')",
       "Bash(xargs sed:*)",
       "Bash(kill -9 1896 2002 1209)",
-      "Bash(cmd //c 'taskkill /F /IM node.exe')"
+      "Bash(cmd //c 'taskkill /F /IM node.exe')",
+      "Bash(npx vite:*)"
     ]
   }
 }

@@ -353,4 +353,6 @@ export const opsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  checkHealth: () =>
+    request<{ ok: true; status: 'healthy' | 'degraded' | 'unhealthy'; message?: string }>('/api/health'),
 };

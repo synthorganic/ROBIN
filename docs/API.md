@@ -1202,7 +1202,7 @@ ROBIN scopes this by creating a temporary gateway config whose `agents.defaults.
       "eligible": true,
       "disabled": false,
       "blockedByAllowlist": false,
-      "source": "/home/user/.openclaw/skills/web-search",
+      "source": "/home/user/.robin/skills/web-search",
       "bundled": true,
       "homepage": "https://github.com/example/skill"
     }
@@ -1251,7 +1251,7 @@ Returns the workspace directory tree. Excludes `node_modules`, `.git`, `dist`, `
   ],
   "workspaceInfo": {
     "isCustomWorkspace": false,
-    "rootPath": "/home/user/.openclaw/workspace"
+    "rootPath": "/home/user/.robin/workspace"
   }
 }
 ```
@@ -1391,12 +1391,12 @@ Serves local image files with strict security controls. See [SECURITY.md](./SECU
 
 ```
 GET /api/files?path=/tmp/screenshot.png
-GET /api/files?path=~/.openclaw/workspace/memory/image.jpg
+GET /api/files?path=~/.robin/workspace/memory/image.jpg
 ```
 
 **Allowed file types:** `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`
 
-**Allowed directory prefixes:** `/tmp`, `~/.openclaw`, the configured `MEMORY_DIR`
+**Allowed directory prefixes:** `/tmp`, `~/.robin`, the configured `MEMORY_DIR`
 
 **Response:** Raw image binary with appropriate `Content-Type` header and 1-hour cache.
 

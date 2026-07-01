@@ -103,7 +103,7 @@ interface SourceDefinition {
 }
 
 interface OpsAppProps {
-  onLogout: () => Promise<void>;
+  onLogout?: () => Promise<void>;
 }
 
 const SIGNAL_FAMILIES: Array<{
@@ -728,6 +728,13 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [activeTab, setActiveTab] = useState<OpsTab>('map');
   // Old railMode state removed - chat now always appears in right-panel
   const [loading, setLoading] = useState(true);
+  const [runtimeStatus, setRuntimeStatus] = useState<'loading' | 'healthy' | 'degraded' | 'unhealthy'>('loading');
+  const [healthMessage, setHealthMessage] = useState<string | undefined>();
+  // Reserved for future degraded service UI - unused but available
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void runtimeStatus;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void healthMessage;
   const [session, setSession] = useState<AgentSession | null>(null);
   const [bridge, setBridge] = useState<BridgeStatus>(emptyBridge());
   const [terminals, setTerminals] = useState<Record<TerminalState['id'], TerminalState>>({
@@ -983,16 +990,30 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     }
   }, [agentTransport, applyTerminalStates]);
 
+  // Health check at startup - ROBIN gateway HTTP check, no WebSocket
+  const checkHealth = useCallback(async () => {
+    try {
+      const result = await opsApi.checkHealth();
+      setRuntimeStatus(result.status);
+      setHealthMessage(result.message);
+    } catch (err) {
+      setRuntimeStatus('unhealthy');
+      setHealthMessage(`Health check failed: ${formatError(err)}`);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     void (async () => {
+      await checkHealth();
+      if (!mounted) return;
       await loadShellData('bootstrap');
       if (!mounted) return;
     })();
     return () => {
       mounted = false;
     };
-  }, [loadShellData]);
+  }, [loadShellData, checkHealth]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -1915,9 +1936,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
               <button onClick={() => { void refreshShell(); }} className="ops-button ghost" type="button">
                 <RefreshCw size={16} /> Refresh
               </button>
-              <button onClick={() => { void onLogout(); }} className="ops-button ghost" type="button">
-                <LogOut size={16} /> Logout
-              </button>
+              {onLogout && (
+                <button onClick={() => { void onLogout(); }} className="ops-button ghost" type="button">
+                  <LogOut size={16} /> Logout
+                </button>
+              )}
             </div>
           </div>
         </header>

@@ -13,7 +13,7 @@ Browser (localhost) → ROBIN local (127.0.0.1:3080) → Gateway cloud (<host>:1
 - ROBIN installed on your laptop
 - Cloud Gateway reachable from your laptop
 - Gateway token from the cloud host
-- Access to cloud host config (`~/.openclaw/openclaw.json`)
+- Access to cloud host config (`~/.robin/gateway.json`)
 
 ## Recommended network approach
 

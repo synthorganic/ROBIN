@@ -1,13 +1,16 @@
 /**
  * Shared gateway RPC client.
  *
- * Makes direct WebSocket RPC calls to the ROBIN gateway for workspace
- * file access. Uses a single persistent connection that multiplexes all
- * RPC calls, avoiding the overhead and session conflicts of per-request
- * connections.
+ * NOT USED IN ROBIN MODE.
  *
- * Used as a fallback when the workspace directory is not locally accessible
- * (e.g. ROBIN on DGX host, workspace in OpenShell sandbox).
+ * ROBIN uses direct HTTP API calls via /api/ endpoints. The gateway-rpc module
+ * exists only as a fallback for legacy OpenClaw workspace access patterns.
+ *
+ * All ROBIN runtime methods (sessions, chat, files, tools) are handled directly
+ * by the local ops-agent and HTTP API routes. If this code path is hit, it means
+ * something is incorrectly routing through gateway-rpc instead of using the
+ * local ROBIN API layer.
+ *
  * @module
  */
 
@@ -338,11 +341,13 @@ async function ensureConnection(): Promise<void> {
 // ── Core RPC call ────────────────────────────────────────────────────
 
 /**
- * Execute a gateway RPC call via HTTP fallback (for local gateway-v1).
+ * Execute a gateway RPC call via HTTP fallback.
  *
- * Gateway-v1 only exposes /tools/invoke for file/exec tools. Session and chat
- * management methods are handled locally here so the server boots cleanly even
- * without a full WebSocket gateway.
+ * NOT USED IN ROBIN MODE. Throws hard error for all methods.
+ *
+ * ROBIN uses direct HTTP API calls via /api/ routes. Session management,
+ * chat operations, and file access are handled locally by ops-agent.
+ * Any call to this method indicates incorrect routing through gateway-rpc.
  */
 async function httpRpcCall(
   method: string,
@@ -353,38 +358,11 @@ async function httpRpcCall(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (config.gatewayToken) headers['Authorization'] = `Bearer ${config.gatewayToken}`;
 
-  // ── Methods that have no gateway-v1 equivalent — return safe defaults ──
+  // ── Methods that have no gateway-v1 equivalent — hard error instead of silent fallback ──
 
-  // Session listing: return a single local session so the UI doesn't error
-  if (method === 'sessions.list') {
-    return { sessions: [{ sessionKey: 'local:ops:main', key: 'local:ops:main', label: 'Local Agent', state: 'idle' }] };
-  }
-
-  // Session create / send / delete — no-op stubs for local mode (kanban subagent fallback)
-  if (method === 'sessions.create') {
-    return { sessionKey: `local-sub-${randomUUID().slice(0, 8)}`, ok: true };
-  }
-  if (method === 'sessions.send' || method === 'sessions.delete') {
-    return { ok: true };
-  }
-
-  // Chat history: empty for local mode (history lives in ops-agent.ts memory)
-  if (method === 'chat.history') {
-    return { messages: [] };
-  }
-
-  // Chat send / abort — no-op for local mode (handled by ops-agent directly)
-  if (method === 'chat.send' || method === 'chat.abort') {
-    return { ok: true, runId: `local-${randomUUID().slice(0, 8)}` };
-  }
-
-  // Agent file operations — no-op stubs for local mode
-  if (method.startsWith('agents.files.')) {
-    const sub = method.split('.')[2];
-    if (sub === 'list') return { files: [] };
-    if (sub === 'get') return { file: { missing: true, name: String(params.name || ''), content: '' } };
-    if (sub === 'set') return { ok: true };
-  }
+  throw new Error(
+    `Gateway RPC method ${method} is unavailable in ROBIN runtime mode. Use the ROBIN ops agent transport instead.`
+  );
 
   // ── Everything else — try /tools/invoke on gateway-v1 ──
 
