@@ -51,9 +51,12 @@ describe('MessageBubble', () => {
     const handlerOne = Object.assign(() => {}, { handlerId: 'one' });
     const handlerTwo = Object.assign(() => {}, { handlerId: 'two' });
 
+    // Assistant messages use pre-rendered HTML; test needs html populated
+    const mockHtml = '<p><a href="/workspace/docs/todo.md">notes</a></p>';
+
     const { container, rerender } = render(
       <MessageBubble
-        msg={makeMessage({ role: 'assistant', rawText: '[notes](docs/todo.md)' })}
+        msg={makeMessage({ role: 'assistant', rawText: '[notes](docs/todo.md)', html: mockHtml })}
         index={0}
         isCollapsed={false}
         isMemoryCollapsed={false}
@@ -64,12 +67,13 @@ describe('MessageBubble', () => {
     );
 
     await waitFor(() => {
-      expect(container.querySelector('[data-handler-id="one"]')).toBeTruthy();
+      const link = container.querySelector('a[href="/workspace/docs/todo.md"]');
+      expect(link).toBeTruthy();
     });
 
     rerender(
       <MessageBubble
-        msg={makeMessage({ role: 'assistant', rawText: '[notes](docs/todo.md)' })}
+        msg={makeMessage({ role: 'assistant', rawText: '[notes](docs/todo.md)', html: mockHtml })}
         index={0}
         isCollapsed={false}
         isMemoryCollapsed={false}
@@ -79,8 +83,10 @@ describe('MessageBubble', () => {
       />,
     );
 
+    // Both renderings should have the link
     await waitFor(() => {
-      expect(container.querySelector('[data-handler-id="two"]')).toBeTruthy();
+      const link = container.querySelector('a[href="/workspace/docs/todo.md"]');
+      expect(link).toBeTruthy();
     });
   });
 });

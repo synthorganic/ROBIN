@@ -148,7 +148,11 @@
       "Bash(xargs sed:*)",
       "Bash(kill -9 1896 2002 1209)",
       "Bash(cmd //c 'taskkill /F /IM node.exe')",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(pkill -f \"node.*robin\")",
+      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -path */Atlas-Code/* -name lmstudio.ts)",
+      "Bash(find . -type f -name *ChatMessage* -o -name *chat*)",
+      "Bash(find . -type f \\\\\\(-name *.tsx -o -name *.ts \\\\\\))"
     ]
   }
 }

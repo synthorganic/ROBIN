@@ -16,6 +16,7 @@ export interface OpsAgentMessage {
   createdAt: string;
   reasoning?: string[];
   toolCalls?: OpsAgentToolCall[];
+  tool_call_phase?: 'request' | 'result' | 'final';
 }
 
 export interface OpsAgentToolCall {
@@ -287,7 +288,7 @@ class OpsAgentService {
         baseUrl: options?.localApiBaseUrl,
         apiKey: options?.localApiKey,
         temperature: 0.2,
-        tools: iteration === 1 ? tools : undefined, // Only send tools on first call
+        tools, // Always send tools for multi-turn tool calling
       });
 
       const choice = completion.choices[0]?.message;
@@ -301,6 +302,7 @@ class OpsAgentService {
           text: choice?.content?.trim() || '',
           createdAt: new Date().toISOString(),
           ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
+          tool_call_phase: 'final',
         };
         conversationHistory = [...conversationHistory, assistantMessage];
         this.localHistory.set(resolvedKey, conversationHistory);
@@ -310,48 +312,61 @@ class OpsAgentService {
         return this.snapshotFromLocal(resolvedKey);
       }
 
-      // Model wants to call tools — parse them and execute
-      const toolCalls = rawToolCalls.map((call) => ({
+      // Model wants to call tools — preserve raw tool calls with ids for proper tool_call_id matching
+      const rawToolCallsWithIds = rawToolCalls.map((call) => ({
+        id: call.id,
         type: call.type || 'tool_call',
         name: call.function.name,
         arguments: call.function.arguments,
       }));
 
       // Add assistant message with tool calls to conversation
+      // tool_call_phase: 'request' indicates this is a tool request, not a final answer
       const assistantMessage: OpsAgentMessage = {
         id: `local-assistant-${randomUUID().slice(0, 10)}`,
         role: 'assistant',
-        text: choice?.content?.trim() || (toolCalls.length ? 'Tool call requested.' : ''),
+        text: choice?.content?.trim() || '',
         createdAt: new Date().toISOString(),
         ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
-        toolCalls,
+        toolCalls: rawToolCallsWithIds,
+        tool_call_phase: 'request',
       };
       conversationHistory = [...conversationHistory, assistantMessage];
 
-      // Broadcast intermediate status showing which tools are being used
-      const toolNames = toolCalls.map(tc => tc.name).join(', ');
+      // Don't broadcast intermediate tool calls as full replies - broadcast status only
+      const toolNames = rawToolCallsWithIds.map(tc => tc.name).join(', ');
       broadcast('ops.agent.status', { sessionKey: resolvedKey, status: `executing: ${toolNames}`, ts: Date.now() });
 
       // Execute each tool call and collect results
       const toolResults = await Promise.all(
-        toolCalls.map(async (tc) => {
+        rawToolCallsWithIds.map(async (tc) => {
           try {
             const result = await this.executeToolCall(tc.name, tc.arguments);
-            return { name: tc.name, output: result };
+            return { id: tc.id, name: tc.name, output: result };
           } catch (err) {
-            return { name: tc.name, output: `Error executing ${tc.name}: ${(err as Error).message}` };
+            return { id: tc.id, name: tc.name, output: `Error executing ${tc.name}: ${(err as Error).message}` };
           }
         }),
       );
 
       // Add tool results back to the conversation for the next iteration
+      // tool_call_id must match the original tool_call.id from the assistant message
       const toolResultMessages = toolResults.map((result) => ({
         role: 'tool' as const,
         content: result.output,
         name: result.name,
+        tool_call_id: result.id,
       }));
 
-      messages = [...messages, { role: 'assistant', content: assistantMessage.text || '', name: 'assistant' }, ...toolResultMessages];
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content: choice?.content ?? null,
+          tool_calls: rawToolCalls,
+        },
+        ...toolResultMessages,
+      ];
     }
 
     // If we hit max iterations, return what we have
@@ -522,7 +537,7 @@ class OpsAgentService {
           : message.text,
       })),
     ];
-    return messages.filter((message) => message.content.trim());
+    return messages.filter((message) => (message.content as string)?.trim());
   }
 
   private async listSessions(): Promise<Record<string, unknown>[]> {
@@ -580,11 +595,15 @@ class OpsAgentService {
   }
 
   private snapshotFromLocal(sessionKey: string): OpsAgentSessionSnapshot {
+    const history = this.localHistory.get(sessionKey) ?? [];
+    // Filter out tool_call_phase: 'request' messages from the API response
+    // These are intermediate tool requests, not final answers
+    const visibleHistory = history.filter(msg => msg.tool_call_phase !== 'request');
     return {
       id: sessionKey,
       label: 'Local API',
       status: 'LOCAL',
-      history: this.localHistory.get(sessionKey) ?? [],
+      history: visibleHistory,
       updatedAt: new Date().toISOString(),
     };
   }

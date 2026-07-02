@@ -43,21 +43,65 @@ export function renderMarkdown(text: string, opts: { highlight?: boolean } = {})
   const cached = getMarkdownCache(cacheKey);
   if (cached) return cached;
 
-  let s = esc(text);
+  let s = text;
+
+  // Process fenced code blocks first (before escaping) to avoid escaping inside code
   s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const highlighted = highlight ? highlightCode(code, lang) : code;
     const langLabel = lang ? `<span class="code-lang">${esc(lang)}</span>` : '';
     return `<pre class="hljs">${langLabel}<code>${highlighted}</code></pre>`;
   });
+
+  // Then process other markdown patterns
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
   s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   s = s.replace(/^[-*] (.+)$/gm, '• $1');
   s = s.replace(/\n/g, '<br>');
+
+  // Restore <br> in code blocks (they were converted above)
   s = s.replace(/<pre class="hljs">([\s\S]*?)<\/code><\/pre>/g, (_, inner) =>
     '<pre class="hljs">' + inner.replace(/<br>/g, '\n') + '</code></pre>'
   );
+
+  // Wrap text in <p> tags. Split by <pre> blocks and wrap non-pre content in <p>
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const preRegex = /<pre class="hljs">[\s\S]*?<\/code><\/pre>/g;
+
+  while ((match = preRegex.exec(s)) !== null) {
+    const preStart = match.index;
+    const preEnd = preRegex.lastIndex;
+
+    // Wrap content before this pre block
+    if (preStart > lastIndex) {
+      const beforePre = s.slice(lastIndex, preStart);
+      if (beforePre.trim()) {
+        parts.push(`<p>${beforePre}</p>`);
+      } else if (beforePre) {
+        // Preserve whitespace-only text in <p>
+        parts.push(`<p>${beforePre}</p>`);
+      }
+    }
+
+    // Add the pre block itself (it's already safe, no need to escape)
+    parts.push(match[0]);
+    lastIndex = preEnd;
+  }
+
+  // Wrap remaining content
+  if (lastIndex < s.length) {
+    const remaining = s.slice(lastIndex);
+    if (remaining.trim()) {
+      parts.push(`<p>${remaining}</p>`);
+    } else if (remaining) {
+      parts.push(`<p>${remaining}</p>`);
+    }
+  }
+
+  s = parts.join('');
 
   setMarkdownCache(cacheKey, s);
   return s;

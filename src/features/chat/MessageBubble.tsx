@@ -4,6 +4,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { isMessageCollapsible } from './types';
 import { decodeHtmlEntities } from '@/lib/formatting';
 import { isStructuredMarkdown } from '@/lib/text/isStructuredMarkdown';
+import { sanitizeHtml } from '@/lib/sanitize';
 import type { ChatMsg } from './types';
 
 // Lazy-load markdown renderer (includes highlight.js)
@@ -189,7 +190,7 @@ function MessageBubbleInner({ msg, index, isCollapsed, isMemoryCollapsed, memory
         {!isCollapsed && (
           <div className="ml-3 border-l border-primary/12 px-3 pb-2 pt-1 text-[0.8rem] text-foreground/70 msg-body-intermediate">
             <Suspense fallback={<span className="text-muted-foreground text-xs">…</span>}>
-              <MarkdownRenderer content={msg.rawText} searchQuery={searchQuery} onOpenWorkspacePath={onOpenWorkspacePath} />
+              <div className="msg-body text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html) }} />
             </Suspense>
           </div>
         )}
@@ -219,7 +220,7 @@ function MessageBubbleInner({ msg, index, isCollapsed, isMemoryCollapsed, memory
           ) : (
             <div className="text-muted-foreground/70 text-[0.8rem] flex-1 min-w-0 msg-body-intermediate">
               <Suspense fallback={<span className="text-muted-foreground text-xs">…</span>}>
-                <MarkdownRenderer content={displayContent} searchQuery={searchQuery} suppressImages={isAssistant} onOpenWorkspacePath={onOpenWorkspacePath} />
+                <div className="msg-body text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html) }} />
               </Suspense>
             </div>
           )}
@@ -283,9 +284,14 @@ function MessageBubbleInner({ msg, index, isCollapsed, isMemoryCollapsed, memory
                 Voice
               </span>
             )}
-            {displayContent && (
+            {!isUser && (
               <Suspense fallback={<div className="text-muted-foreground text-xs">Loading…</div>}>
-                <MarkdownRenderer content={displayContent} searchQuery={searchQuery} suppressImages={isAssistant} onOpenWorkspacePath={onOpenWorkspacePath} />
+                <div className="msg-body text-foreground" dangerouslySetInnerHTML={{ __html: sanitizeHtml(msg.html) }} />
+              </Suspense>
+            )}
+            {isUser && displayContent && (
+              <Suspense fallback={<div className="text-muted-foreground text-xs">Loading…</div>}>
+                <MarkdownRenderer content={displayContent} searchQuery={searchQuery} onOpenWorkspacePath={onOpenWorkspacePath} />
               </Suspense>
             )}
           </div>

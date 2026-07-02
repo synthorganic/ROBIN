@@ -22,21 +22,21 @@ export interface LMStudioModel {
   created?: number;
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content: string;
-  name?: string;
-}
-
-export interface ToolCallFunction {
-  name: string;
-  arguments: string;
-}
-
 export interface ToolCall {
   id: string;
-  function: ToolCallFunction;
   type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content?: string | null;
+  name?: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
 }
 
 export interface ChatCompletionChoiceMessage {
@@ -63,7 +63,7 @@ export interface ChatCompletionResponse {
   choices: Array<{
     index: number;
     message: ChatCompletionChoiceMessage;
-    finish_reason: 'stop' | 'length' | 'tool_calls';
+    finish_reason?: 'stop' | 'length' | 'tool_use' | 'tool_calls';
   }>;
   usage?: {
     prompt_tokens: number;
@@ -284,6 +284,31 @@ class LMStudioService {
       console.error('[LMStudio Chat] Completion failed:', error);
       throw error;
     }
+  }
+}
+
+// ─── Finish reason normalization (matches Atlas-Code) ──────────────────────────
+// Normalizes LMStudio finish reasons to a consistent set of values
+
+export function mapFinishReason(
+  finishReason: string | null | undefined,
+  hasToolCalls: boolean,
+): string | null {
+  switch (finishReason) {
+    case 'tool_calls':
+    case 'function_call':
+      return 'tool_use'
+    case 'length':
+      return 'max_tokens'
+    case 'stop':
+      return 'end_turn'
+    case 'content_filter':
+      return 'end_turn'
+    case null:
+    case undefined:
+      return hasToolCalls ? 'tool_use' : 'end_turn'
+    default:
+      return finishReason
   }
 }
 

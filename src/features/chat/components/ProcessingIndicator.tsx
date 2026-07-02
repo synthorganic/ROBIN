@@ -1,9 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ProcessingStage, ActivityLogEntry } from '@/contexts/ChatContext';
 import { HeartbeatPulse } from './HeartbeatPulse';
 import { ThinkingDots } from './ThinkingDots';
 import { ActivityLog } from './ActivityLog';
 import { formatElapsed } from '../utils';
+
+// ROBIN Ops Spinner Verbs - for active processing states
+const ROBIN_SPINNER_VERBS = [
+  'Synergizing', 'Operationalizing', 'De-risking', 'Mapping', 'Tightening',
+  'Consulting', 'Aligning', 'Triangulating', 'Sleuthing', 'Correlating',
+  'Observing', 'Indexing', 'Surfacing', 'Scheming', 'Redacting',
+  'Hardening', 'Modeling', 'Deconflicting', 'Operationalizing',
+  'Summoning', 'Appeasing', 'Rotating', 'Fingerprinting raccoons', 'Auditing',
+  'Polishing the panopticon', 'Waterboarding the JSON', 'Teaching Excel fear',
+  'Encrypting', 'Disambiguating', 'Backtracing', 'Staring into procurement',
+  'Proselytizing the data', 'Reading the runes', 'Consulting the owl',
+  'Whispering to the ontology', 'Performing graph liturgy', 'Blessing the data lake',
+  'Baptizing the pipeline', 'Invoking the dashboard', 'Monitoring',
+  'Watching', 'Locking', 'Checking', 'Closing', 'Sanitizing', 'Containing',
+  'Redacting', 'Escalating', 'Deconflicting', 'Hardening',
+];
+
+// Spinner verb rotation interval
+const SPINNER_VERB_INTERVAL_MS = 3500;
 
 interface ProcessingIndicatorProps {
   stage?: ProcessingStage;
@@ -19,7 +38,7 @@ interface ProcessingIndicatorProps {
  * Processing status indicator shown during generation.
  *
  * Layout:
- * - Row 1: [HeartbeatPulse] [◆] [STAGE LABEL] [──] [ELAPSED] [ThinkingDots]
+ * - Row 1: [HeartbeatPulse] [◆] [STAGE LABEL] [──] [ELAPSED] [ThinkingDots] [Spinner Verb]
  * - Row 2: currentToolDescription or "Reasoning..." (indented, smaller, muted)
  * - Separator: thin dotted line (only if activityLog has entries)
  * - Activity log: scrolling feed of recent tool actions
@@ -47,6 +66,34 @@ export function ProcessingIndicator({
     : null;
   const isStale = secondsSinceEvent !== null && secondsSinceEvent > 30;
 
+  // Spinner verb state - rotates while processing
+  const isProcessing = stage === 'thinking' || stage === 'tool_use';
+
+  const [spinnerVerbIndex, setSpinnerVerbIndex] = useState(0);
+  const spinnerTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start/stop spinner verb rotation when processing stage changes
+  useEffect(() => {
+    if (isProcessing && !spinnerTimerRef.current) {
+      // Rotate verb immediately, then at intervals
+      setSpinnerVerbIndex(prev => (prev + 1) % ROBIN_SPINNER_VERBS.length);
+      spinnerTimerRef.current = setInterval(
+        () => setSpinnerVerbIndex(prev => (prev + 1) % ROBIN_SPINNER_VERBS.length),
+        SPINNER_VERB_INTERVAL_MS
+      );
+    } else if (!isProcessing && spinnerTimerRef.current) {
+      clearInterval(spinnerTimerRef.current);
+      spinnerTimerRef.current = null;
+    }
+
+    return () => {
+      if (spinnerTimerRef.current) {
+        clearInterval(spinnerTimerRef.current);
+        spinnerTimerRef.current = null;
+      }
+    };
+  }, [isProcessing]);
+
   // Description line: tool description during tool_use, "Reasoning..." during thinking
   const descriptionText =
     currentToolDescription ??
@@ -54,7 +101,7 @@ export function ProcessingIndicator({
 
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      {/* Row 1: heartbeat + stage label + elapsed + dots */}
+      {/* Row 1: heartbeat + stage label + spinner verb + elapsed + dots */}
       <div className="flex items-center gap-3">
         <span className="flex items-center gap-2 text-[0.8rem] font-semibold text-foreground">
           <HeartbeatPulse lastEventTimestamp={lastEventTimestamp} stage={stage} />
@@ -70,6 +117,9 @@ export function ProcessingIndicator({
           )}
           <span className="mx-1 text-muted-foreground">──</span>
           <span className="font-mono tabular-nums text-muted-foreground">{formatElapsed(elapsedMs)}</span>
+        </span>
+        <span className={`text-[0.667rem] font-medium ${stage === 'tool_use' ? 'text-green/80' : 'text-primary/80'}`}>
+          {isProcessing ? ROBIN_SPINNER_VERBS[spinnerVerbIndex] + '...' : ''}
         </span>
         <ThinkingDots stage={stage} />
       </div>
