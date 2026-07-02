@@ -526,13 +526,9 @@ class OpsAgentService {
   }
 
   private async listSessions(): Promise<Record<string, unknown>[]> {
-    const response = await gatewayRpcCall('sessions.list', {
-      activeMinutes: 24 * 60,
-      limit: SESSION_LIMIT,
-    }) as {
-      sessions?: Record<string, unknown>[];
-    };
-    return response.sessions ?? [];
+    // ROBIN doesn't use gateway RPC for session management
+    // All sessions are managed locally via opsApi
+    return [];
   }
 
   private async augmentMessage(text: string, options?: OpsAgentSendOptions) {

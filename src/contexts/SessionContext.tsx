@@ -222,13 +222,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const listAuthoritativeSessions = useCallback(async () => {
+    // ROBIN mode: gateway-rpc doesn't support sessions.list, use empty list as fallback
+    // All sessions are managed via ops-api in ROBIN mode
     if (connectionState !== 'connected') return sessionsRef.current;
     try {
-      const [res, hiddenCronSessions] = await Promise.all([
-        rpc('sessions.list', { limit: FULL_SESSIONS_LIMIT }) as Promise<SessionsListResponse>,
+      // Skip sessions.list since it's not available in ROBIN - use empty list
+      const res = { sessions: [] } as SessionsListResponse;
+      const [_, hiddenCronSessions] = await Promise.all([
+        Promise.resolve(res),
         fetchHiddenCronSessions(24 * 60, FULL_SESSIONS_LIMIT),
       ]);
-      return mergeSessionLists(res?.sessions ?? [], hiddenCronSessions);
+      return mergeSessionLists(res.sessions ?? [], hiddenCronSessions);
     } catch (err) {
       console.debug('[SessionContext] Failed to fetch authoritative session list:', err);
       return sessionsRef.current;

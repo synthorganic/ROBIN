@@ -758,9 +758,9 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [agentTransport, setAgentTransport] = useState<AgentTransport>(() => (
-    localStorage.getItem('ops-agent-transport') === 'local' ? 'local' : 'gateway'
-  ));
+  // ROBIN mode - default to 'local' for direct HTTP API
+  // Gateway transport is deprecated and will fail with clear error
+  const [agentTransport, setAgentTransport] = useState<AgentTransport>('local');
   const [localApiStatus, setLocalApiStatus] = useState<LocalApiStatus | null>(null);
   const [localApiBaseUrl, setLocalApiBaseUrl] = useState('http://127.0.0.1:1234');
   const [localApiKeyInput, setLocalApiKeyInput] = useState('');
