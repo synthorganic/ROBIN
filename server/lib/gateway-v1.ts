@@ -186,7 +186,8 @@ export function createGatewayApp(): Hono {
           break;
         }
         case 'files_read': {
-          const pathArg = body.args?.path;
+          // Support both 'path' (ROBIN native) and 'file_path' (Atlas Code compatibility)
+          const pathArg = body.args?.path ?? body.args?.file_path;
           if (!pathArg) {
             return c.json({ ok: false, error: 'Missing required argument: path' }, 400);
           }
@@ -195,7 +196,8 @@ export function createGatewayApp(): Hono {
           break;
         }
         case 'files_info': {
-          const pathArg = body.args?.path;
+          // Support both 'path' (ROBIN native) and 'file_path' (Atlas Code compatibility)
+          const pathArg = body.args?.path ?? body.args?.file_path;
           if (!pathArg) {
             return c.json({ ok: false, error: 'Missing required argument: path' }, 400);
           }
@@ -204,7 +206,8 @@ export function createGatewayApp(): Hono {
           break;
         }
         case 'files_read_docx': {
-          const pathArg = body.args?.path;
+          // Support both 'path' (ROBIN native) and 'file_path' (Atlas Code compatibility)
+          const pathArg = body.args?.path ?? body.args?.file_path;
           if (!pathArg) {
             return c.json({ ok: false, error: 'Missing required argument: path' }, 400);
           }
@@ -213,7 +216,8 @@ export function createGatewayApp(): Hono {
           break;
         }
         case 'memories_get': {
-          const pathArg = body.args?.path || '.robin/memories';
+          // Support both 'path' (ROBIN native) and 'file_path' (Atlas Code compatibility)
+          const pathArg = body.args?.path ?? body.args?.file_path ?? '.robin/memories';
           const fileResult = await readFile(String(pathArg));
           result = { success: fileResult.success, error: fileResult.error || null, content: fileResult.content };
           break;
@@ -361,22 +365,22 @@ export function createGatewayApp(): Hono {
       },
       {
         name: 'files_read',
-        description: 'Read the contents of a text file. Use this to read document content, source code, or any readable text file (<10MB). For .docx files, use files_read_docx instead.',
+        description: 'Read the contents of a text file. Use this to read document content, source code, or any readable text file (<10MB). Supports both `path` and `file_path` arguments.',
         args_schema: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: 'The absolute path to the file' }
+            path: { type: 'string', description: 'The absolute path to the file (also accepts file_path for compatibility)' }
           },
           required: ['path']
         }
       },
       {
         name: 'files_read_docx',
-        description: 'Extract text content from a .docx document. Use this for Word documents that require parsing (ZIP/XML format). Returns plain text only - use files_info or bash/powershell for other operations.',
+        description: 'Extract text content from a .docx document. Use this for Word documents that require parsing (ZIP/XML format). Returns plain text only - supports both `path` and `file_path` arguments.',
         args_schema: {
           type: 'object',
           properties: {
-            path: { type: 'string', description: 'The absolute path to the .docx file' }
+            path: { type: 'string', description: 'The absolute path to the .docx file (also accepts file_path for compatibility)' }
           },
           required: ['path']
         }

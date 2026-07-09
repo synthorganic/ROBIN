@@ -5,6 +5,7 @@ export interface AgentMessage {
   createdAt: string;
   reasoning?: string[];
   toolCalls?: AgentToolCall[];
+  tool_call_phase?: 'request' | 'result' | 'final';
 }
 
 export interface AgentToolCall {

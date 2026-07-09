@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { gatewayRpcCall } from './gateway-rpc.js';
 import { broadcast } from '../routes/events.js';
+import { lmStudioService, type ChatMessage } from './lmstudio-service.js';
 import { opsTerminalManager } from './ops-terminals.js';
 import { opsDocumentStore } from './ops-documents.js';
 import { buildOpsAgentToolContext } from './ops-agent-tool-catalog.js';
-import { lmStudioService, type ChatMessage } from './lmstudio-service.js';
 import { config } from './config.js';
-import os from 'node:os';
 import path from 'node:path';
 
 export interface OpsAgentMessage {
@@ -58,12 +57,73 @@ const LOCAL_SESSION_KEY = 'local:ops:main';
 const LOCAL_SYSTEM_PROMPT = [
   'You are ROBIN, an operational analysis agent inside the Inertiai Ops interface.',
   'Use the supplied ROBIN document and tool catalog context when it is relevant.',
-  'If a mapped tool is needed, name the exact tool and arguments you would use. Local API mode cannot execute external tools by itself.',
   '',
-  'For immediate PowerShell or bash command execution without creating recurring cron jobs:',
-  '- Use POST /api/execute/powershell for PowerShell commands',
-  '- Use POST /api/execute/bash for shell/bash commands',
-  '- These routes accept: command (required), timeoutMs, description parameters',
+  'TOOL USAGE FORMAT:',
+  'When you need to use a tool, write your response in this EXACT format:',
+  '',
+  '```tool_call',
+  'TOOL: <exact_tool_name>',
+  'ARGUMENTS:',
+  '{',
+  '  "<param1>": "<value1>"',
+  '}',
+  '```',
+  '',
+  '⚠️ CRITICAL: Use EXACTLY these tool names (case-sensitive, no abbreviations): ⚠️',
+  '- bash          (NOT "shell", "terminal", or "command")',
+  '- powershell    (NOT "ps", "pwsh", or "powershell.exe")',
+  '- files_list    (NOT "list", "dir", or "ls")',
+  '- files_read    (NOT "Read", "read_file", or "file_read")',
+  '- files_read_docx (NOT "Read", "docx", or "extract_docx")',
+  '- files_info    (NOT "stat" or "metadata")',
+  '- memories_get  (NOT "memory" or "get_memories")',
+  '',
+  'Available tools with parameters:',
+  '- bash: Run shell commands. Required: { "command": "your bash command here" }',
+  '- powershell: Run PowerShell commands. Required: { "command": "your PowerShell command here" }',
+  '- files_list: List directory contents. Optional: { "directory": ".", "pattern": "*.ts" }',
+  '- files_read: Read a text file. Required: { "path": "C:/path/to/file.txt" } OR { "file_path": "..." }',
+  '- files_read_docx: Extract text from Word docs. Required: { "path": "C:/path/to/file.docx" }',
+  '- files_info: Get file metadata. Required: { "path": "C:/path/to/file.txt" }',
+  '- memories_get: Retrieve stored memories. Optional: { "path": ".robin/memories" }',
+  '',
+  'CORRECT EXAMPLE - Reading a DOCX file:',
+  '```tool_call',
+  'TOOL: files_read_docx',
+  'ARGUMENTS:',
+  '{',
+  '  "path": "C:/Users/docs/report.docx"',
+  '}',
+  '```',
+  '',
+  'CORRECT EXAMPLE - Reading a text file:',
+  '```tool_call',
+  'TOOL: files_read',
+  'ARGUMENTS:',
+  '{',
+  '  "path": "C:/Users/README.md"',
+  '}',
+  '```',
+  '',
+  'CORRECT EXAMPLE - Running a bash command:',
+  '```tool_call',
+  'TOOL: bash',
+  'ARGUMENTS:',
+  '{',
+  '  "command": "ls -la"',
+  '}',
+  '```',
+  '',
+  'WRONG EXAMPLE (DO NOT DO THIS):',
+  '```tool_call',
+  'TOOL: Read          ❌ WRONG! Use "files_read" instead',
+  'ARGUMENTS:',
+  '{',
+  '  "path": "..."',
+  '}',
+  '```',
+  '',
+  'IMPORTANT: Always use the exact tool names listed above. Do NOT abbreviate or modify them.',
 ].join('\n');
 
 function wait(ms: number) {
@@ -165,7 +225,18 @@ function messageTimestamp(raw: Record<string, unknown>) {
 }
 
 function hashHistory(history: OpsAgentMessage[]) {
-  return JSON.stringify(history.map((message) => [message.role, message.text, message.createdAt]));
+  return JSON.stringify(history.map((message) => ({
+    role: message.role,
+    text: message.text,
+    createdAt: message.createdAt,
+    reasoning: message.reasoning ?? [],
+    toolCalls: (message.toolCalls ?? []).map((toolCall) => ({
+      type: toolCall.type,
+      name: toolCall.name,
+      arguments: toolCall.arguments ?? '',
+    })),
+    toolCallPhase: message.tool_call_phase ?? null,
+  })));
 }
 
 class OpsAgentService {
@@ -266,7 +337,7 @@ class OpsAgentService {
       text,
       createdAt: new Date().toISOString(),
     };
-    let conversationHistory = [...currentHistory, userMessage];
+    const conversationHistory = [...currentHistory, userMessage];
     this.localHistory.set(resolvedKey, conversationHistory);
     broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
     broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'thinking', ts: Date.now() });
@@ -282,29 +353,101 @@ class OpsAgentService {
     while (iteration < MAX_TOOL_ITERATIONS) {
       iteration++;
 
+      // Get initial assistant message - first broadcast user's message
+      const assistantMsgId = `local-assistant-${randomUUID().slice(0, 10)}`;
+      const assistantMsg: OpsAgentMessage = {
+        id: assistantMsgId,
+        role: 'assistant',
+        text: '',
+        createdAt: new Date().toISOString(),
+        // tool_call_phase: 'thinking' is invalid, use undefined to indicate placeholder
+      };
+      conversationHistory.push(assistantMsg);
+      this.localHistory.set(resolvedKey, conversationHistory);
+      broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
+
+      // Track content as it streams in
+      let streamedContent = '';
+      const assistantMessageId = assistantMsgId;
+      let announcedStreaming = false;
+
       const completion = await lmStudioService.createChatCompletion({
         messages,
         modelId: options?.localModelId,
         baseUrl: options?.localApiBaseUrl,
         apiKey: options?.localApiKey,
         temperature: 0.2,
+        stream: true, // Enable streaming for real-time token delivery
         tools, // Always send tools for multi-turn tool calling
+        onChunk: (content) => {
+          if (!announcedStreaming) {
+            announcedStreaming = true;
+            broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'streaming', ts: Date.now() });
+          }
+          streamedContent += content;
+          // Update the assistant message with current streamed text
+          const msgIdx = conversationHistory.findIndex(m => m.id === assistantMessageId);
+          if (msgIdx !== -1) {
+            conversationHistory[msgIdx].text = streamedContent;
+            this.localHistory.set(resolvedKey, conversationHistory);
+            broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
+          }
+        },
       });
 
       const choice = completion.choices[0]?.message;
-      const rawToolCalls = choice?.tool_calls;
+
+      // Try to parse tool calls from text-based format first
+      let rawToolCalls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> = [];
+      const contentText = (choice?.content || streamedContent) || '';
+
+      // Parse ```tool_call ... ``` blocks for text-based tool calling
+      const toolCallRegex = /```tool_call\s*\nTOOL:\s*(\w+)\s*\nARGUMENTS:\s*\n(\{[\s\S]*?\})/g;
+      let match;
+      while ((match = toolCallRegex.exec(contentText)) !== null) {
+        const toolName = match[1];
+        try {
+          const argsObj = JSON.parse(match[2]);
+          rawToolCalls.push({
+            id: `tool-${randomUUID().slice(0, 8)}`,
+            type: 'function',
+            function: {
+              name: toolName,
+              arguments: match[2],
+            },
+          });
+        } catch (e) {
+          console.error('[ops-agent] Failed to parse tool arguments:', e);
+        }
+      }
+
+      // Fallback to native tool_calls if text parsing found nothing
+      if (rawToolCalls.length === 0 && choice?.tool_calls) {
+        rawToolCalls = choice.tool_calls.map((call) => ({
+          id: call.id || `tool-${randomUUID().slice(0, 8)}`,
+          type: call.type || 'function',
+          function: {
+            name: call.function.name,
+            arguments: call.function.arguments,
+          },
+        }));
+      }
+
+      // Remove the placeholder message if it exists (we've been streaming to it)
+      const msgIdx = conversationHistory.findIndex(m => m.id === assistantMessageId);
+      if (msgIdx !== -1) {
+        // Preserve streamed content - only update if no tools were called
+        // When tools are called, the model may not have produced final text
+        if (!rawToolCalls || rawToolCalls.length === 0) {
+          conversationHistory[msgIdx].text = (choice?.content || '').trim() || streamedContent;
+        } else {
+          // For tool calls, always preserve the text (either streamed or empty for tool call display)
+          conversationHistory[msgIdx].text = streamedContent;
+        }
+      }
 
       if (!rawToolCalls || rawToolCalls.length === 0) {
         // No more tool calls — this is the final answer
-        const assistantMessage: OpsAgentMessage = {
-          id: `local-assistant-${randomUUID().slice(0, 10)}`,
-          role: 'assistant',
-          text: choice?.content?.trim() || '',
-          createdAt: new Date().toISOString(),
-          ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
-          tool_call_phase: 'final',
-        };
-        conversationHistory = [...conversationHistory, assistantMessage];
         this.localHistory.set(resolvedKey, conversationHistory);
         opsTerminalManager.appendLog(`[agent:local] ${resolvedKey} <- ${text.slice(0, 160)}`);
         broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
@@ -320,31 +463,60 @@ class OpsAgentService {
         arguments: call.function.arguments,
       }));
 
-      // Add assistant message with tool calls to conversation
-      // tool_call_phase: 'request' indicates this is a tool request, not a final answer
-      const assistantMessage: OpsAgentMessage = {
-        id: `local-assistant-${randomUUID().slice(0, 10)}`,
-        role: 'assistant',
-        text: choice?.content?.trim() || '',
-        createdAt: new Date().toISOString(),
-        ...(choice?.reasoning_content ? { reasoning: [choice.reasoning_content] } : {}),
-        toolCalls: rawToolCallsWithIds,
-        tool_call_phase: 'request',
-      };
-      conversationHistory = [...conversationHistory, assistantMessage];
+      // Update the assistant message with tool calls
+      const assistantMessageIdx = conversationHistory.findIndex(m => m.id === assistantMessageId);
+      if (assistantMessageIdx !== -1) {
+        conversationHistory[assistantMessageIdx].toolCalls = rawToolCallsWithIds;
+        conversationHistory[assistantMessageIdx].tool_call_phase = 'request';
+        // Preserve streamed content instead of overwriting with empty content from tool call responses
+        conversationHistory[assistantMessageIdx].text = streamedContent || (choice?.content || '').trim();
+      }
+      // Broadcast updated history with tool calls so UI updates
+      this.localHistory.set(resolvedKey, conversationHistory);
+      broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
 
       // Don't broadcast intermediate tool calls as full replies - broadcast status only
-      const toolNames = rawToolCallsWithIds.map(tc => tc.name).join(', ');
-      broadcast('ops.agent.status', { sessionKey: resolvedKey, status: `executing: ${toolNames}`, ts: Date.now() });
+      broadcast('ops.agent.status', { sessionKey: resolvedKey, status: 'tool_use', ts: Date.now() });
 
       // Execute each tool call and collect results
       const toolResults = await Promise.all(
         rawToolCallsWithIds.map(async (tc) => {
           try {
             const result = await this.executeToolCall(tc.name, tc.arguments);
+            const toolMessage: OpsAgentMessage = {
+              id: `local-tool-${randomUUID().slice(0, 10)}`,
+              role: 'tool',
+              text: result,
+              createdAt: new Date().toISOString(),
+              toolCalls: [{
+                type: tc.type || 'tool_call',
+                name: tc.name,
+                arguments: tc.arguments,
+              }],
+              tool_call_phase: 'result',
+            };
+            conversationHistory.push(toolMessage);
+            this.localHistory.set(resolvedKey, conversationHistory);
+            broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
             return { id: tc.id, name: tc.name, output: result };
           } catch (err) {
-            return { id: tc.id, name: tc.name, output: `Error executing ${tc.name}: ${(err as Error).message}` };
+            const output = `Error executing ${tc.name}: ${(err as Error).message}`;
+            const toolMessage: OpsAgentMessage = {
+              id: `local-tool-${randomUUID().slice(0, 10)}`,
+              role: 'tool',
+              text: output,
+              createdAt: new Date().toISOString(),
+              toolCalls: [{
+                type: tc.type || 'tool_call',
+                name: tc.name,
+                arguments: tc.arguments,
+              }],
+              tool_call_phase: 'result',
+            };
+            conversationHistory.push(toolMessage);
+            this.localHistory.set(resolvedKey, conversationHistory);
+            broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
+            return { id: tc.id, name: tc.name, output };
           }
         }),
       );
@@ -377,107 +549,9 @@ class OpsAgentService {
 
   /** Build structured tool definitions for the LLM API (OpenAI-compatible format). */
   private buildLocalTools(): Array<{ type: string; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
-    return [
-      {
-        type: 'function',
-        function: {
-          name: 'bash',
-          description: 'Execute a bash/shell command. Use for Linux/macOS terminal commands, file operations, and system tasks.',
-          parameters: {
-            type: 'object',
-            properties: {
-              command: { type: 'string', description: 'The bash command to execute' },
-              timeoutMs: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
-            },
-            required: ['command'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'powershell',
-          description: 'Execute a PowerShell command. Use for Windows-specific tasks, registry operations, and .NET framework interactions.',
-          parameters: {
-            type: 'object',
-            properties: {
-              command: { type: 'string', description: 'The PowerShell command to execute' },
-              timeoutMs: { type: 'number', description: 'Timeout in milliseconds (default: 60000)' },
-            },
-            required: ['command'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'files_list',
-          description: 'List files and directories in a specified path.',
-          parameters: {
-            type: 'object',
-            properties: {
-              directory: { type: 'string', description: 'The directory path to list (default: current working directory)' },
-              pattern: { type: 'string', description: 'Optional regex pattern to filter files by name' },
-            },
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'files_read',
-          description: 'Read the contents of a text file. For .docx files, use files_read_docx instead.',
-          parameters: {
-            type: 'object',
-            properties: {
-              path: { type: 'string', description: 'The absolute path to the file' },
-            },
-            required: ['path'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'files_read_docx',
-          description: 'Extract text content from a .docx Word document.',
-          parameters: {
-            type: 'object',
-            properties: {
-              path: { type: 'string', description: 'The absolute path to the .docx file' },
-            },
-            required: ['path'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'files_info',
-          description: 'Get file metadata (size, modification time, etc.) without reading content.',
-          parameters: {
-            type: 'object',
-            properties: {
-              path: { type: 'string', description: 'The absolute path to the file' },
-            },
-            required: ['path'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'memories_get',
-          description: 'Retrieve stored memories from the workspace.',
-          parameters: {
-            type: 'object',
-            properties: {
-              path: { type: 'string', description: 'Path to the memory file' },
-            },
-          },
-        },
-      },
-    ];
+    // For models with weak native tool calling, we'll use text-based parsing
+    // This returns an empty array to disable automatic tool passing
+    return [];
   }
 
   /** Execute a single tool call via the gateway-v1 /tools/invoke endpoint. */
@@ -596,14 +670,11 @@ class OpsAgentService {
 
   private snapshotFromLocal(sessionKey: string): OpsAgentSessionSnapshot {
     const history = this.localHistory.get(sessionKey) ?? [];
-    // Filter out tool_call_phase: 'request' messages from the API response
-    // These are intermediate tool requests, not final answers
-    const visibleHistory = history.filter(msg => msg.tool_call_phase !== 'request');
     return {
       id: sessionKey,
       label: 'Local API',
       status: 'LOCAL',
-      history: visibleHistory,
+      history,
       updatedAt: new Date().toISOString(),
     };
   }

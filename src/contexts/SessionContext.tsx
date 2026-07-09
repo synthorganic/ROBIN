@@ -779,7 +779,8 @@ When using ROBIN Gateway v1 (local operations), you have access to the following
 
 ### File System Access
 - **files_list**: List files in a directory with optional pattern filtering.
-- **files_read**: Read text file contents (max 10MB). For binary files like .docx, use PowerShell to extract content.
+- **files_read**: Read text file contents (max 10MB). Automatically extracts text from .docx files using internal ZIP/XML parsing.
+- **files_read_docx**: Extract text content from a .docx document (alternative to files_read for Word files).
 - **files_info**: Get file metadata without reading content.
 
 ### Additional Features
@@ -788,7 +789,7 @@ When using ROBIN Gateway v1 (local operations), you have access to the following
 
 ## Important Notes
 
-1. When working with binary files (.docx, .xlsx, etc.), first use PowerShell to extract text content before processing.
+1. Use **files_read** or **files_read_docx** to read document content. Both automatically extract text from .docx files.
 2. All file paths should be absolute when using file tools.
 3. Commands execute in the project directory (${process.cwd()})`
         await rpc('sessions.patch', {
@@ -836,7 +837,7 @@ DO NOT use:
 - ❌ Read, write, edit (these are legacy gateway-style names)
 - ❌ workspace path shortcuts
 
-Only use: files_read, files_list, files_info, bash, powershell, memories_get, sessions_spawn`,
+Only use: files_read, files_read_docx, files_list, files_info, bash, powershell, memories_get, sessions_spawn`,
           deliver: false,
           idempotencyKey: `spawn-instruction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         });

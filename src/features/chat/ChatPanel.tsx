@@ -54,7 +54,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   messages,
   onSend, onAbort, isGenerating, stream,
   processingStage,
-  lastEventTimestamp = 0, currentToolDescription = null, activityLog = [],
+  lastEventTimestamp = 0, activityLog = [],
   onWakeWordState, onReset, searchOpen, onSearchClose, id, agentName = 'Agent',
   loadMore, hasMore = false, onToggleFileBrowser, isFileBrowserCollapsed = true,
   onToggleMobileTopBar, isMobileTopBarHidden = false,
@@ -344,7 +344,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             stage={processingStage}
             elapsedMs={processingTime}
             lastEventTimestamp={lastEventTimestamp}
-            currentToolDescription={currentToolDescription}
             activityLog={activityLog}
             isRecovering={Boolean(stream.isRecovering)}
             recoveryReason={stream.recoveryReason}

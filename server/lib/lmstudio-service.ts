@@ -55,6 +55,22 @@ export interface ToolDefinition {
   };
 }
 
+export interface ChatCompletionChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    delta: {
+      content?: string;
+      role?: string;
+      tool_calls?: ToolCall[];
+    };
+    finish_reason?: string | null;
+  }>;
+}
+
 export interface ChatCompletionResponse {
   id: string;
   object: string;
@@ -238,6 +254,7 @@ class LMStudioService {
     baseUrl?: string;
     apiKey?: string;
     tools?: ToolDefinition[];
+    onChunk?: (content: string) => void;
   }): Promise<ChatCompletionResponse> {
     const {
       messages,
@@ -248,6 +265,7 @@ class LMStudioService {
       baseUrl,
       apiKey,
       tools,
+      onChunk,
     } = request;
     const resolved = this.resolveConfig({ baseUrl, apiKey, defaultModelId: modelId });
     const selectedModel = modelId || resolved.defaultModelId;
@@ -274,6 +292,11 @@ class LMStudioService {
         body: JSON.stringify(body),
       });
 
+      if (stream) {
+        // Handle streaming response
+        return await this.handleStreamResponse(res, selectedModel, onChunk);
+      }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(parseErrorMessage(data) || 'LMStudio API error');
@@ -284,6 +307,124 @@ class LMStudioService {
       console.error('[LMStudio Chat] Completion failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Handle streaming response from LMStudio API.
+   * Parses NDJSON stream chunks and accumulates content.
+   * Calls onChunk callback with content delta for each valid chunk if provided.
+   */
+  private async handleStreamResponse(
+    res: Response,
+    selectedModel: string,
+    onChunk?: (content: string) => void
+  ): Promise<ChatCompletionResponse> {
+    const chunks: ChatCompletionChunk[] = [];
+    let fullContent = '';
+    let toolCalls: ToolCall[] = [];
+    let role: string | undefined;
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete lines
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep partial line in buffer
+
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (!cleaned.startsWith('data: ')) continue;
+        const dataStr = cleaned.slice(6); // Remove 'data: ' prefix
+        if (dataStr === '[DONE]') continue;
+
+        try {
+          const chunk = JSON.parse(dataStr) as ChatCompletionChunk;
+          chunks.push(chunk);
+
+          // Extract content from delta
+          const delta = chunk.choices[0]?.delta;
+          if (delta?.content) {
+            fullContent += delta.content;
+            // Call callback with streaming content for real-time updates
+            onChunk?.(delta.content);
+          }
+          if (delta?.role && !role) {
+            role = delta.role;
+          }
+
+          // Accumulate tool calls
+          if (delta?.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const existing = toolCalls.find(t => t.id === tc.id);
+              if (existing) {
+                existing.function.arguments += tc.function?.arguments || '';
+              } else if (tc.function) {
+                toolCalls.push({
+                  id: tc.id || '',
+                  type: tc.type || 'function',
+                  function: {
+                    name: tc.function.name || '',
+                    arguments: tc.function.arguments || '',
+                  },
+                });
+              }
+            }
+          }
+        } catch {
+          // Ignore parse errors (may be incomplete chunks)
+        }
+      }
+    }
+
+    // Final flush of any remaining buffer
+    if (buffer.trim().startsWith('data: ')) {
+      const dataStr = buffer.trim().slice(6);
+      if (dataStr !== '[DONE]') {
+        try {
+          const chunk = JSON.parse(dataStr) as ChatCompletionChunk;
+          chunks.push(chunk);
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+
+    // Build final response from accumulated chunks
+    const finishReason = chunks[chunks.length - 1]?.choices[0]?.finish_reason;
+    const validFinishReason =
+      finishReason && (finishReason === 'stop' || finishReason === 'length' || finishReason === 'tool_use' || finishReason === 'tool_calls')
+        ? (finishReason as 'stop' | 'length' | 'tool_use' | 'tool_calls')
+        : undefined;
+
+    return {
+      id: chunks[0]?.id || `chat-${Date.now()}`,
+      object: 'chat.completion',
+      created: chunks[0]?.created || Math.floor(Date.now() / 1000),
+      model: selectedModel,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: fullContent || null,
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          },
+          finish_reason: validFinishReason || 'stop',
+        },
+      ],
+      usage: chunks[0]?.choices ? undefined : undefined,
+    };
   }
 }
 

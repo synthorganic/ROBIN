@@ -44,6 +44,7 @@ import FuzzyText from './FuzzyText';
 import LeafletMap from './LeafletMap';
 import MapAssetInspector from './MapAssetInspector';
 import TextType from './TextType';
+import SpinnerVerb from '../chat/components/SpinnerVerb';
 import {
   opsApi,
   type AgentMessage,
@@ -785,6 +786,8 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
   const [viewportFilterEnabled, setViewportFilterEnabled] = useState(false);
   const [mapViewportBounds, setMapViewportBounds] = useState<MapViewportBounds | null>(null);
   const [clickedCoords, setClickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStage, setProcessingStage] = useState<'thinking' | 'tool_use' | 'streaming' | null>(null);
   const [visibleFamilies, setVisibleFamilies] = useState<Record<SignalFamily, boolean>>({
     logistics: true,
     biological: true,
@@ -1027,6 +1030,24 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       const payload = JSON.parse(event.data) as { data?: { status?: string } };
       if (!payload.data?.status) return;
       setSession((current) => (current ? { ...current, status: payload.data?.status ?? current.status } : current));
+      // Track processing state from status
+      // Don't reset on streaming - let SpinnerVerb stay visible during tool calls
+      // Reset only on idle or listening status
+      const status = payload.data.status;
+      if (status === 'thinking' || status === 'submitted') {
+        setIsProcessing(true);
+        setProcessingStage('thinking');
+      } else if (status === 'tool_use' || status.startsWith('executing:')) {
+        setIsProcessing(true);
+        setProcessingStage('tool_use');
+      } else if (status === 'streaming') {
+        // Keep processing state but don't change the stage
+        // SpinnerVerb will continue showing
+      } else if (status === 'idle' || status === 'listening') {
+        // Reset processing state only on idle/listening
+        setIsProcessing(false);
+        setProcessingStage(null);
+      }
     });
     return () => eventSource.close();
   }, [sessionId]);
@@ -1876,7 +1897,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     const toolCalls = message.role === 'tool'
       ? (message.toolCalls?.length ? message.toolCalls : [{ type: 'tool', name: 'Tool result', arguments: message.text }])
       : (message.toolCalls ?? []);
-    const visibleText = inline.reply || (message.role === 'assistant' && reasoning.length ? 'Reasoning trace received without final answer.' : message.text);
+    const visibleText = inline.reply && inline.reply.trim() ? inline.reply : (message.role === 'assistant' && reasoning.length ? 'Reasoning trace received without final answer.' : message.text);
 
     return (
       <article key={message.id} className="ops-agent-message" data-role={message.role}>
@@ -1885,8 +1906,13 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
           <time>{formatClock(message.createdAt)}</time>
         </div>
         {message.role === 'assistant' ? (
-          <TextType key={message.id} text={visibleText} as="div" className="ops-agent-message-text" />
-        ) : message.role === 'tool' ? null : (
+          <TextType key={message.id} text={visibleText} speed={8} as="div" className="ops-agent-message-text" />
+        ) : message.role === 'tool' ? (
+          // Show tool result in chat body
+          <div className="ops-agent-message-text">
+            {message.text && <p>{message.text}</p>}
+          </div>
+        ) : (
           <div className="ops-agent-message-text">{visibleText}</div>
         )}
         {renderAgentTrace(reasoning, toolCalls)}
@@ -2591,7 +2617,18 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
                     <div className="ops-panel-header">
                       <h2>ROBIN Agent Chat</h2>
                       <div className="ops-action-row">
-                        <span className="ops-mini-badge">{session?.status ?? 'offline'}</span>
+                        {isProcessing ? (
+                          processingStage === 'streaming' ? (
+                            <span className="ops-mini-badge">replying...</span>
+                          ) : (
+                            <SpinnerVerb
+                              stage={processingStage === 'thinking' ? 'thinking' : processingStage === 'tool_use' ? 'tool_use' : 'streaming'}
+                              color="primary"
+                            />
+                          )
+                        ) : (
+                          <span className="ops-mini-badge">{session?.status ?? 'offline'}</span>
+                        )}
                         <button className="ops-button ghost" onClick={() => { void refreshShell(); }} type="button">
                           <RefreshCw size={16} /> Refresh
                         </button>
@@ -2949,72 +2986,74 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
             )}
           </main>
         )}
+
+        {/* Robin Chat Panel - Right Side (hidden on agent tab) */}
+        {activeTab !== 'agent' && (
+          <aside className="ops-robin-chat-panel">
+            <div className="ops-chat-feed" ref={chatScrollerRef}>
+              {messageFeed.length === 0 ? (
+                <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
+              ) : (
+                messageFeed.map((message) => (
+                  <article
+                    key={message.id}
+                    className={`ops-chat-card ops-chat-card-${message.role}`}
+                  >
+                    <div className="ops-chat-card-head">
+                      <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
+                      <time>{formatClock(message.createdAt)}</time>
+                    </div>
+                    <div className="ops-chat-card-body">
+                      {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="ops-compose-section">
+              <div className="ops-compose-input">
+                <textarea
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      void sendPrompt();
+                    }
+                  }}
+                  placeholder="Ask ROBIN anything..."
+                  className="ops-chat-textarea"
+                  disabled={sending || !sessionId}
+                />
+              </div>
+              <div className="ops-compose-actions">
+                <button
+                  type="button"
+                  className="ops-icon-button"
+                  title="Attach document (placeholder)"
+                  disabled={sending || !sessionId}
+                >
+                  <Paperclip size={16} />
+                </button>
+                <button
+                  onClick={sendPrompt}
+                  disabled={agentSendDisabled}
+                  className="ops-button primary"
+                  type="button"
+                >
+                  {sending ? <LoaderCircle className="spinning" size={16} /> : <Send size={16} />}
+                  {sending ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
+
+            <div className="ops-chat-footer">
+              <span>{latestUser ? `Last operator prompt ${formatRelative(session?.updatedAt)}` : 'No operator prompt yet'}</span>
+            </div>
+          </aside>
+        )}
       </div>
-
-      {/* Robin Chat Panel - Right Side */}
-      <aside className="ops-robin-chat-panel">
-        <div className="ops-chat-feed" ref={chatScrollerRef}>
-          {messageFeed.length === 0 ? (
-            <div className="ops-helper">No session traffic yet. Send a prompt to start the operator log.</div>
-          ) : (
-            messageFeed.map((message) => (
-              <article
-                key={message.id}
-                className={`ops-chat-card ops-chat-card-${message.role}`}
-              >
-                <div className="ops-chat-card-head">
-                  <strong>{message.role === 'assistant' ? 'ROBIN Assistant' : 'You'}</strong>
-                  <time>{formatClock(message.createdAt)}</time>
-                </div>
-                <div className="ops-chat-card-body">
-                  {message.role === 'assistant' ? <FuzzyText>{message.text}</FuzzyText> : message.text}
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-
-        <div className="ops-compose-section">
-          <div className="ops-compose-input">
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  void sendPrompt();
-                }
-              }}
-              placeholder="Ask ROBIN anything..."
-              className="ops-chat-textarea"
-              disabled={sending || !sessionId}
-            />
-          </div>
-          <div className="ops-compose-actions">
-            <button
-              type="button"
-              className="ops-icon-button"
-              title="Attach document (placeholder)"
-              disabled={sending || !sessionId}
-            >
-              <Paperclip size={16} />
-            </button>
-            <button
-              onClick={sendPrompt}
-              disabled={agentSendDisabled}
-              className="ops-button primary"
-              type="button"
-            >
-              {sending ? <LoaderCircle className="spinning" size={16} /> : <Send size={16} />}
-              {sending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
-        </div>
-
-        <div className="ops-chat-footer">
-          <span>{latestUser ? `Last operator prompt ${formatRelative(session?.updatedAt)}` : 'No operator prompt yet'}</span>
-        </div>
-      </aside>
     </div>
   );
 }

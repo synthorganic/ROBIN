@@ -233,23 +233,40 @@ export async function extractDocxText(filePath: string): Promise<{ success: bool
     const escapedPath = filePath.replace(/"/g, '\\"').replace(/\\/g, '\\\\');
 
     const powershellScript = `
-$filePath = "${escapedPath}"
-if (!(Test-Path $filePath)) {{ return [PSCustomObject]@{{ success = $false; error = "File not found: $filePath" }} }}
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$tempDir = Join-Path $env:TEMP "docx-extract-$([guid]::NewGuid())"
-Expand-Archive -Path $filePath -DestinationPath $tempDir -Force
+\$filePath = "${escapedPath}"
+if (!(Test-Path \$filePath)) {{ return [PSCustomObject]@{{ success = \$false; error = "File not found: \$filePath" }} }}
 
-$xmlPath = Join-Path $tempDir "word\\document.xml"
-if (!(Test-Path $xmlPath)) {{
-  Remove-Item $tempDir -Recurse
-  return [PSCustomObject]@{{ success = $false; error = "Could not find word/document.xml in .docx" }}
-}}
+\$zip = [System.IO.Compression.ZipFile]::OpenRead(\$filePath)
+try {
+  \$entry = \$zip.Entries | Where-Object { \$_.FullName -eq 'word/document.xml' }
+  if (!\$entry) {
+    return [PSCustomObject]@{ success = \$false; error = "Could not find word/document.xml in .docx" }
+  }
 
-[xml]$xml = Get-Content $xmlPath
-$nodes = $xml.SelectNodes("//w:t")
-$text = ($nodes | ForEach-Object {{ $_.InnerText }}) -join " "
-Remove-Item $tempDir -Recurse
-[PSCustomObject]@{{ success = $true; content = $text }}
+  \$stream = \$entry.Open()
+  \$reader = New-Object System.IO.StreamReader(\$stream)
+  \$xmlContent = \$reader.ReadToEnd()
+  \$reader.Close()
+  \$stream.Close()
+
+  # Create XML document with namespace manager
+  \$doc = New-Object System.Xml.XmlDocument
+  \$nsmgr = New-Object System.Xml.XmlNamespaceManager(\$doc.NameTable)
+  \$nsmgr.AddNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
+
+  \$doc.LoadXml(\$xmlContent)
+
+  # Use namespace manager in XPath
+  \$nodes = \$doc.SelectNodes('//w:t', \$nsmgr)
+  \$text = (\$nodes | ForEach-Object { \$_.InnerText }) -join " "
+
+  [PSCustomObject]@{ success = \$true; content = \$text }
+} finally {
+  \$zip.Dispose()
+}
 `;
 
     const result = await executePowerShell(powershellScript, { timeoutMs: 60_000 });

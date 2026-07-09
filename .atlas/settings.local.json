@@ -152,7 +152,17 @@
       "Bash(pkill -f \"node.*robin\")",
       "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -path */Atlas-Code/* -name lmstudio.ts)",
       "Bash(find . -type f -name *ChatMessage* -o -name *chat*)",
-      "Bash(find . -type f \\\\\\(-name *.tsx -o -name *.ts \\\\\\))"
+      "Bash(find . -type f \\\\\\(-name *.tsx -o -name *.ts \\\\\\))",
+      "Bash(timeout 5 bash -c 'until curl -s http://localhost:5173 > /dev/null 2>&1; do sleep 0.5; done; echo \"Dev server ready\"')",
+      "Bash(timeout 10 bash -c 'until curl -s http://localhost:3080 > /dev/null 2>&1; do sleep 0.5; done; echo \"\"Dev server ready\"\"')",
+      "Bash(find . -type f -name *.docx -o -name *.doc)",
+      "Bash(find . -name *.log -type f)",
+      "Bash(find . -name *lm-studio* -o -name *lmstudio*)",
+      "Bash(powershell -Command \"\n\\\\$filePath = 'C:/Users/benmc/Downloads/dispute_letter.docx'\nWrite-Host 'Testing PowerShell extraction...'\nWrite-Host 'File exists:', \\(Test-Path \\\\$filePath\\)\n\nif \\(Test-Path \\\\$filePath\\) {\n    \\\\$tempDir = Join-Path \\\\$env:TEMP 'docx-extract-test'\n    Expand-Archive -Path \\\\$filePath -DestinationPath \\\\$tempDir -Force\n    \n    \\\\$xmlPath = Join-Path \\\\$tempDir 'word\\\\document.xml'\n    Write-Host 'XML path exists:', \\(Test-Path \\\\$xmlPath\\)\n    \n    if \\(Test-Path \\\\$xmlPath\\) {\n        [xml]\\\\$xml = Get-Content \\\\$xmlPath\n        \\\\$nodes = \\\\$xml.SelectNodes\\('//w:t'\\)\n        Write-Host 'Number of w:t nodes:', \\\\$nodes.Count\n        \n        \\\\$text = \\(\\\\$nodes | ForEach-Object { \\\\$_.InnerText }\\) -join ' '\n        Write-Host 'Extracted text \\(first 500 chars\\):'\n        Write-Host \\\\$text.Substring\\(0, [Math]::Min\\(500, \\\\$text.Length\\)\\)\n    }\n    \n    Remove-Item \\\\$tempDir -Recurse\n}\n\")",
+      "Bash(mkdir -p ~/.robin/inertiai-ops/documents/General)",
+      "Bash(cp \"C:\\\\Users\\\\benmc\\\\Downloads\\\\dispute_letter.docx\" ~/.robin/inertiai-ops/documents/General/dispute_letter_test.docx)",
+      "Bash(node -e \"console.log\\(encodeURIComponent\\(''local:ops:main''\\)\\)\")",
+      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -type d -name *gateway*)"
     ]
   }
 }
