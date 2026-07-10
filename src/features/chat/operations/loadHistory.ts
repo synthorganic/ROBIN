@@ -96,6 +96,13 @@ export function filterMessage(m: ChatMessage): boolean {
     if (/^Successfully wrote \d+ bytes to .+\.$/.test(trimmedText)) return false;
   }
 
+  // Hide verbose tool-call envelopes that are already rendered as ToolCallBlock / grouped tools.
+  if (m.role === 'tool' || m.role === 'toolResult') {
+    const trimmedText = text.trim();
+    if (/^TOOL:\s+\S+/i.test(trimmedText)) return false;
+    if (/^Tool calls/i.test(trimmedText)) return false;
+  }
+
   return true;
 }
 

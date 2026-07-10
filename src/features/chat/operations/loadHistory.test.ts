@@ -75,6 +75,18 @@ describe('filterMessage', () => {
       content: 'File contents:\nfunction hello() {}',
     })).toBe(true);
   });
+
+  it('hides verbose TOOL envelope messages already rendered as tools', () => {
+    expect(filterMessage({
+      role: 'tool',
+      content: 'TOOL: files_read_docx\nARGUMENTS:\n{\n  "path": "/documents/file.docx"\n}',
+    })).toBe(false);
+
+    expect(filterMessage({
+      role: 'toolResult',
+      content: 'Tool calls\n1\nTool\n05:26 AM\nTool calls\n1',
+    })).toBe(false);
+  });
 });
 
 describe('splitToolCallMessage', () => {

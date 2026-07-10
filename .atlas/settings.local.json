@@ -162,7 +162,8 @@
       "Bash(mkdir -p ~/.robin/inertiai-ops/documents/General)",
       "Bash(cp \"C:\\\\Users\\\\benmc\\\\Downloads\\\\dispute_letter.docx\" ~/.robin/inertiai-ops/documents/General/dispute_letter_test.docx)",
       "Bash(node -e \"console.log\\(encodeURIComponent\\(''local:ops:main''\\)\\)\")",
-      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -type d -name *gateway*)"
+      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -type d -name *gateway*)",
+      "Bash(python3:*)"
     ]
   }
 }
