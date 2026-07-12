@@ -2222,6 +2222,18 @@
   margin-left: auto;
 }
 
+.ops-agent-trace-panel > summary small {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: rgba(202, 194, 170, 0.78);
+  font-size: 0.66rem;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .ops-animated-trace-list {
   display: grid;
   gap: 7px;

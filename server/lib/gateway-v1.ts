@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { config as serverConfig } from './config.js';
 import type { ExecuteResult } from './gateway-execution.js';
-import { executeBash, executePowerShell, extractDocxText } from './gateway-execution.js';
+import { executeBash, executePowerShell } from './gateway-execution.js';
 import type { ExecuteCommandOptions } from './gateway-execution.js';
 import { listFiles, readFile, fileInfo } from './gateway-files.js';
 
@@ -211,7 +211,7 @@ export function createGatewayApp(): Hono {
           if (!pathArg) {
             return c.json({ ok: false, error: 'Missing required argument: path' }, 400);
           }
-          const docxResult = await extractDocxText(String(pathArg));
+          const docxResult = await readFile(String(pathArg));
           result = { success: docxResult.success, error: docxResult.error || null, content: docxResult.content };
           break;
         }
@@ -298,7 +298,7 @@ export function createGatewayApp(): Hono {
         return c.json({ ok: false, error: 'Missing required field: path' }, 400);
       }
 
-      const result = await extractDocxText(body.path);
+      const result = await readFile(body.path);
       return c.json({
         ok: result.success,
         content: result.content || '',

@@ -12,6 +12,7 @@ export interface AgentToolCall {
   type: string;
   name: string;
   arguments?: string;
+  summary?: string;
 }
 
 export interface AgentSession {

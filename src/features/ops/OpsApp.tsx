@@ -689,6 +689,46 @@ function clampTraceText(value: string) {
   return value.trim().replace(/\n{3,}/g, '\n\n').slice(0, 2400);
 }
 
+function parseToolArguments(rawArgs?: string) {
+  if (!rawArgs) return null;
+  try {
+    const parsed = JSON.parse(rawArgs) as Record<string, unknown>;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function summarizeToolCall(call: AgentToolCall) {
+  const explicitSummary = call.summary?.trim();
+  if (explicitSummary) return explicitSummary;
+
+  const args = parseToolArguments(call.arguments);
+  const pathValue = typeof args?.path === 'string'
+    ? args.path
+    : typeof args?.file_path === 'string'
+      ? args.file_path
+      : '';
+  const fileName = pathValue ? pathValue.split(/[\\/]/).filter(Boolean).pop() ?? pathValue : '';
+
+  switch (call.name) {
+    case 'files_read_docx':
+      return fileName ? `Read ${fileName}` : 'Read Word document';
+    case 'files_read':
+      return fileName ? `Read ${fileName}` : 'Read file';
+    case 'files_list':
+      return 'List files';
+    case 'files_info':
+      return fileName ? `Inspect ${fileName}` : 'Inspect file';
+    case 'powershell':
+      return 'Run PowerShell command';
+    case 'bash':
+      return 'Run shell command';
+    default:
+      return call.name.replace(/_/g, ' ');
+  }
+}
+
 function splitInlineReasoning(rawText: string) {
   const reasoning: string[] = [];
   const reply = String(rawText || '')
@@ -719,7 +759,7 @@ function toolCallsToTraceItems(toolCalls: AgentToolCall[] = []): AnimatedTraceIt
     const args = call.arguments?.trim();
     return {
       id: `tool-${index}`,
-      label: `${type} ${index + 1}`,
+      label: summarizeToolCall(call),
       text: clampTraceText(args ? `${name}\n${args}` : name),
     };
   });
@@ -1860,9 +1900,12 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
     [session?.history],
   );
 
-  function renderAgentTrace(reasoning: string[], toolCalls: AgentToolCall[]) {
+  function renderAgentTrace(reasoning: string[], toolCalls: AgentToolCall[], options?: { showToolCalls?: boolean }) {
     const reasoningItems = reasoningToTraceItems(reasoning);
-    const toolItems = toolCallsToTraceItems(toolCalls);
+    const toolItems = options?.showToolCalls === false ? [] : toolCallsToTraceItems(toolCalls);
+    const toolSummary = toolCalls.length > 0
+      ? Array.from(new Set(toolCalls.map((call) => summarizeToolCall(call)).filter(Boolean))).join(' · ')
+      : '';
     if (!reasoningItems.length && !toolItems.length) return null;
 
     return (
@@ -1882,6 +1925,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
             <summary>
               <Wrench size={14} />
               Tool calls
+              {toolSummary ? <small>{toolSummary}</small> : null}
               <span>{toolItems.length}</span>
             </summary>
             <AnimatedTraceList items={toolItems} className="ops-agent-trace-list tool" />
@@ -1898,6 +1942,11 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
       ? (message.toolCalls?.length ? message.toolCalls : [{ type: 'tool', name: 'Tool result', arguments: message.text }])
       : (message.toolCalls ?? []);
     const visibleText = inline.reply && inline.reply.trim() ? inline.reply : (message.role === 'assistant' && reasoning.length ? 'Reasoning trace received without final answer.' : message.text);
+    const shouldShowToolTrace = message.role === 'tool';
+
+    if (message.role === 'assistant' && message.tool_call_phase === 'request' && !visibleText.trim() && reasoning.length === 0) {
+      return null;
+    }
 
     return (
       <article key={message.id} className="ops-agent-message" data-role={message.role}>
@@ -1915,7 +1964,7 @@ export default function OpsApp({ onLogout }: OpsAppProps) {
         ) : (
           <div className="ops-agent-message-text">{visibleText}</div>
         )}
-        {renderAgentTrace(reasoning, toolCalls)}
+        {renderAgentTrace(reasoning, toolCalls, { showToolCalls: shouldShowToolTrace })}
       </article>
     );
   }

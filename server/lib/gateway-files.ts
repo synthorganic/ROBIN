@@ -6,74 +6,19 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { extractDocumentTextFromFile } from './document-text.js';
 
 /**
- * Extract text content from a .docx file using PowerShell ZIP/XML parsing.
+ * Extract text content from a .docx file using Node.js (shared service).
  */
 async function extractDocxText(filePath: string): Promise<{ success: boolean; content?: string; error?: string }> {
-  try {
-    const escapedPath = filePath.replace(/"/g, '\\"').replace(/\\/g, '\\\\');
+  const result = await extractDocumentTextFromFile({ filePath });
 
-    const powershellScript = `
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-\$filePath = "${escapedPath}"
-if (!(Test-Path \$filePath)) { return [PSCustomObject]@{ success = \$false; error = "File not found: \$filePath" } }
-
-\$zip = [System.IO.Compression.ZipFile]::OpenRead(\$filePath)
-try {
-  \$entry = \$zip.Entries | Where-Object { \$_.FullName -eq 'word/document.xml' }
-  if (!\$entry) {
-    return [PSCustomObject]@{ success = \$false; error = "Could not find word/document.xml in .docx" }
+  if (result.ok) {
+    return { success: true, content: result.text };
   }
 
-  \$stream = \$entry.Open()
-  \$reader = New-Object System.IO.StreamReader(\$stream)
-  \$xmlContent = \$reader.ReadToEnd()
-  \$reader.Close()
-  \$stream.Close()
-
-  # Create XML document with namespace manager
-  \$doc = New-Object System.Xml.XmlDocument
-  \$nsmgr = New-Object System.Xml.XmlNamespaceManager(\$doc.NameTable)
-  \$nsmgr.AddNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
-
-  \$doc.LoadXml(\$xmlContent)
-
-  # Use namespace manager in XPath
-  \$nodes = \$doc.SelectNodes('//w:t', \$nsmgr)
-  \$text = (\$nodes | ForEach-Object { \$_.InnerText }) -join " "
-
-  [PSCustomObject]@{ success = \$true; content = \$text }
-} finally {
-  \$zip.Dispose()
-}
-`;
-
-    const { executePowerShell } = await import('./gateway-execution.js');
-
-    const result = await executePowerShell(powershellScript, { timeoutMs: 60_000 });
-
-    if (result.success) {
-      // Parse the JSON output from PowerShell
-      try {
-        const jsonStart = result.stdout.indexOf('{');
-        const jsonEnd = result.stdout.lastIndexOf('}') + 1;
-        if (jsonStart !== -1 && jsonEnd > jsonStart) {
-          const jsonStr = result.stdout.substring(jsonStart, jsonEnd);
-          const parsed = JSON.parse(jsonStr);
-          return { success: true, content: parsed.content };
-        }
-      } catch {
-        // Fallback to raw stdout
-      }
-    }
-
-    return { success: false, error: result.stderr || 'Failed to extract .docx content' };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
+  return { success: false, error: result.error || 'Failed to extract document content' };
 }
 
 export interface ListFilesOptions {

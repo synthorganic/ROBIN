@@ -168,7 +168,11 @@
       "Bash(git -C 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN' show bf5e6b2:server/lib/gateway-rpc.ts)",
       "Bash(npm install:*)",
       "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN' -name *.ts -o -name *.tsx)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(find 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN/mcp' -name *.ts)",
+      "Bash(find 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN/vendor' -name *.json)",
+      "Bash(find 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN/vendor/cli-agent' -maxdepth 3 -name *.json)",
+      "Bash(find 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN' -name *mcp*.json)"
     ]
   }
 }

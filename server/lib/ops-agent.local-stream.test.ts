@@ -133,4 +133,204 @@ describe('opsAgentService local streaming', () => {
       expect.objectContaining({ role: 'assistant', text: 'Done' }),
     ]));
   });
+
+  it('strips streamed tool-call markup from assistant text and preserves the summary', async () => {
+    const broadcast = vi.fn();
+    const appendLog = vi.fn();
+    let completionCallCount = 0;
+    const createChatCompletion = vi.fn(async ({ onChunk }: { onChunk?: (content: string) => void }) => {
+      completionCallCount += 1;
+      if (completionCallCount === 1) {
+        const toolBlock = [
+          'Inspecting the document.',
+          '',
+          '```tool_call',
+          'TOOL: files_read_docx',
+          'SUMMARY: Read the dispute letter',
+          'ARGUMENTS:',
+          '{',
+          '  "path": "C:/docs/dispute-letter.docx"',
+          '}',
+          '```',
+        ].join('\n');
+        onChunk?.(toolBlock);
+        return {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: toolBlock,
+              },
+            },
+          ],
+        };
+      }
+
+      onChunk?.('Done');
+      return {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Done',
+            },
+          },
+        ],
+      };
+    });
+
+    vi.doMock('./gateway-rpc.js', () => ({ gatewayRpcCall: vi.fn() }));
+    vi.doMock('../routes/events.js', () => ({ broadcast }));
+    vi.doMock('./ops-terminals.js', () => ({
+      opsTerminalManager: {
+        appendLog,
+      },
+    }));
+    vi.doMock('./lmstudio-service.js', () => ({
+      lmStudioService: {
+        createChatCompletion,
+      },
+    }));
+    vi.doMock('./ops-documents.js', () => ({
+      opsDocumentStore: {
+        agentContext: vi.fn(async () => ''),
+      },
+    }));
+    vi.doMock('./ops-agent-tool-catalog.js', () => ({
+      buildOpsAgentToolContext: vi.fn(async () => ''),
+    }));
+    vi.doMock('./config.js', () => ({
+      config: {
+        gatewayUrl: 'http://127.0.0.1:18789',
+        gatewayToken: '',
+        home: 'C:\\Users\\benmc',
+      },
+    }));
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, result: { success: true, output: 'Letter text' } }),
+    })));
+
+    const { opsAgentService } = await import('./ops-agent.js');
+    const snapshot = await opsAgentService.sendMessage('local:ops:main', 'Read the letter', { transport: 'local' });
+
+    expect(broadcast).toHaveBeenCalledWith('ops.agent.history', expect.objectContaining({
+      sessionKey: 'local:ops:main',
+      history: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          text: 'Inspecting the document.',
+          tool_call_phase: 'request',
+          toolCalls: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'files_read_docx',
+              summary: 'Read the dispute letter',
+            }),
+          ]),
+        }),
+      ]),
+    }));
+
+    expect(snapshot.history).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', text: 'Inspecting the document.' }),
+      expect.objectContaining({ role: 'tool', text: 'Letter text' }),
+      expect.objectContaining({ role: 'assistant', text: 'Done' }),
+    ]));
+  });
+
+  it('surfaces tool errors instead of dropping them as empty output', async () => {
+    const broadcast = vi.fn();
+    const appendLog = vi.fn();
+    let completionCallCount = 0;
+    const createChatCompletion = vi.fn(async ({ onChunk }: { onChunk?: (content: string) => void }) => {
+      completionCallCount += 1;
+      if (completionCallCount === 1) {
+        onChunk?.('Working');
+        return {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: '',
+                tool_calls: [
+                  {
+                    id: 'tool-1',
+                    type: 'function',
+                    function: {
+                      name: 'files_read_docx',
+                      arguments: '{"path":"C:/docs/dispute-letter.docx"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      }
+
+      onChunk?.('Done');
+      return {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Done',
+            },
+          },
+        ],
+      };
+    });
+
+    vi.doMock('./gateway-rpc.js', () => ({ gatewayRpcCall: vi.fn() }));
+    vi.doMock('../routes/events.js', () => ({ broadcast }));
+    vi.doMock('./ops-terminals.js', () => ({
+      opsTerminalManager: {
+        appendLog,
+      },
+    }));
+    vi.doMock('./lmstudio-service.js', () => ({
+      lmStudioService: {
+        createChatCompletion,
+      },
+    }));
+    vi.doMock('./ops-documents.js', () => ({
+      opsDocumentStore: {
+        agentContext: vi.fn(async () => ''),
+      },
+    }));
+    vi.doMock('./ops-agent-tool-catalog.js', () => ({
+      buildOpsAgentToolContext: vi.fn(async () => ''),
+    }));
+    vi.doMock('./config.js', () => ({
+      config: {
+        gatewayUrl: 'http://127.0.0.1:18789',
+        gatewayToken: '',
+        home: 'C:\\Users\\benmc',
+      },
+    }));
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, result: { success: false, output: '', error: 'DOCX parsing failed' } }),
+    })));
+
+    const { opsAgentService } = await import('./ops-agent.js');
+    const snapshot = await opsAgentService.sendMessage('local:ops:main', 'Read the letter', { transport: 'local' });
+
+    expect(broadcast).toHaveBeenCalledWith('ops.agent.history', expect.objectContaining({
+      sessionKey: 'local:ops:main',
+      history: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'tool',
+          text: 'DOCX parsing failed',
+          tool_call_phase: 'result',
+        }),
+      ]),
+    }));
+
+    expect(snapshot.history).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'tool', text: 'DOCX parsing failed' }),
+    ]));
+  });
 });

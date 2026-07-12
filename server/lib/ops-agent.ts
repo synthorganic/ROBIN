@@ -22,6 +22,7 @@ export interface OpsAgentToolCall {
   type: string;
   name: string;
   arguments?: string;
+  summary?: string;
 }
 
 export interface OpsAgentSessionSnapshot {
@@ -63,6 +64,7 @@ const LOCAL_SYSTEM_PROMPT = [
   '',
   '```tool_call',
   'TOOL: <exact_tool_name>',
+  'SUMMARY: <short plain-English action summary, 3-8 words>',
   'ARGUMENTS:',
   '{',
   '  "<param1>": "<value1>"',
@@ -83,13 +85,14 @@ const LOCAL_SYSTEM_PROMPT = [
   '- powershell: Run PowerShell commands. Required: { "command": "your PowerShell command here" }',
   '- files_list: List directory contents. Optional: { "directory": ".", "pattern": "*.ts" }',
   '- files_read: Read a text file. Required: { "path": "C:/path/to/file.txt" } OR { "file_path": "..." }',
-  '- files_read_docx: Extract text from Word docs. Required: { "path": "C:/path/to/file.docx" }',
+  '- files_read_docx: Extract text from Word docs. Required: { "path": "C:/path/to/file.docx" }. Prefer this for .docx files.',
   '- files_info: Get file metadata. Required: { "path": "C:/path/to/file.txt" }',
   '- memories_get: Retrieve stored memories. Optional: { "path": ".robin/memories" }',
   '',
   'CORRECT EXAMPLE - Reading a DOCX file:',
   '```tool_call',
   'TOOL: files_read_docx',
+  'SUMMARY: Read the dispute letter',
   'ARGUMENTS:',
   '{',
   '  "path": "C:/Users/docs/report.docx"',
@@ -99,6 +102,7 @@ const LOCAL_SYSTEM_PROMPT = [
   'CORRECT EXAMPLE - Reading a text file:',
   '```tool_call',
   'TOOL: files_read',
+  'SUMMARY: Open the README',
   'ARGUMENTS:',
   '{',
   '  "path": "C:/Users/README.md"',
@@ -108,6 +112,7 @@ const LOCAL_SYSTEM_PROMPT = [
   'CORRECT EXAMPLE - Running a bash command:',
   '```tool_call',
   'TOOL: bash',
+  'SUMMARY: List the current folder',
   'ARGUMENTS:',
   '{',
   '  "command": "ls -la"',
@@ -117,14 +122,173 @@ const LOCAL_SYSTEM_PROMPT = [
   'WRONG EXAMPLE (DO NOT DO THIS):',
   '```tool_call',
   'TOOL: Read          ❌ WRONG! Use "files_read" instead',
+  'SUMMARY: Read a file',
   'ARGUMENTS:',
   '{',
   '  "path": "..."',
   '}',
   '```',
   '',
+  'Do not emit XML-style tool tags such as <tool_call>. Use the fenced format above only.',
+  'Do not put descriptions inside ARGUMENTS. Put the short action summary on the SUMMARY line.',
   'IMPORTANT: Always use the exact tool names listed above. Do NOT abbreviate or modify them.',
 ].join('\n');
+
+interface ParsedTextToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+  summary?: string;
+}
+
+const TOOL_CALL_BLOCK_REGEX = /```tool_call\s*\r?\n([\s\S]*?)```/gi;
+const TOOL_CALL_XML_BLOCK_REGEX = /<tool_call>\s*([\s\S]*?)<\/tool_call>/gi;
+
+function normalizeToolCallSummary(value: string | undefined) {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  return normalized || undefined;
+}
+
+function parseJsonToolArguments(rawArgs: string, summary?: string) {
+  const parsed = JSON.parse(rawArgs) as Record<string, unknown>;
+  const next = { ...parsed };
+  let resolvedSummary = normalizeToolCallSummary(summary);
+
+  if (!resolvedSummary && typeof next.description === 'string') {
+    resolvedSummary = normalizeToolCallSummary(next.description);
+  }
+  if ('description' in next) delete next.description;
+
+  return {
+    arguments: JSON.stringify(next, null, 2),
+    summary: resolvedSummary,
+  };
+}
+
+function parseFencedToolCalls(content: string): ParsedTextToolCall[] {
+  const parsedCalls: ParsedTextToolCall[] = [];
+
+  for (const match of content.matchAll(TOOL_CALL_BLOCK_REGEX)) {
+    const block = match[1] ?? '';
+    const toolName = block.match(/^\s*TOOL:\s*(.+?)\s*$/im)?.[1]?.trim();
+    if (!toolName) continue;
+
+    const summary = normalizeToolCallSummary(block.match(/^\s*SUMMARY:\s*(.+?)\s*$/im)?.[1]);
+    const argsStart = block.search(/^\s*ARGUMENTS:\s*$/im);
+    if (argsStart === -1) continue;
+
+    const argsMatch = block.slice(argsStart).match(/^\s*ARGUMENTS:\s*[\r\n]+([\s\S]*?)\s*$/i);
+    if (!argsMatch?.[1]) continue;
+
+    try {
+      const parsedArgs = parseJsonToolArguments(argsMatch[1].trim(), summary);
+      parsedCalls.push({
+        id: `tool-${randomUUID().slice(0, 8)}`,
+        type: 'function',
+        function: {
+          name: toolName,
+          arguments: parsedArgs.arguments,
+        },
+        summary: parsedArgs.summary,
+      });
+    } catch (error) {
+      console.error('[ops-agent] Failed to parse fenced tool arguments:', error);
+    }
+  }
+
+  return parsedCalls;
+}
+
+function parseXmlToolCalls(content: string): ParsedTextToolCall[] {
+  const parsedCalls: ParsedTextToolCall[] = [];
+
+  for (const match of content.matchAll(TOOL_CALL_XML_BLOCK_REGEX)) {
+    const block = match[1] ?? '';
+    const toolName = block.match(/<function>\s*([^<]+?)\s*<\/function>/i)?.[1]?.trim();
+    if (!toolName) continue;
+
+    const args: Record<string, string> = {};
+    let summary = normalizeToolCallSummary(block.match(/<summary>\s*([\s\S]*?)\s*<\/summary>/i)?.[1]);
+
+    for (const paramMatch of block.matchAll(/<parameter=([\w.-]+)>\s*([\s\S]*?)\s*<\/parameter>/gi)) {
+      const key = paramMatch[1]?.trim();
+      const value = paramMatch[2]?.trim();
+      if (!key || !value) continue;
+      if (key === 'description' && !summary) {
+        summary = normalizeToolCallSummary(value);
+        continue;
+      }
+      args[key] = value;
+    }
+
+    parsedCalls.push({
+      id: `tool-${randomUUID().slice(0, 8)}`,
+      type: 'function',
+      function: {
+        name: toolName,
+        arguments: JSON.stringify(args, null, 2),
+      },
+      summary,
+    });
+  }
+
+  return parsedCalls;
+}
+
+function parseTextToolCalls(content: string) {
+  return [...parseFencedToolCalls(content), ...parseXmlToolCalls(content)];
+}
+
+function isStandaloneJsonSnippet(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed != null && typeof parsed === 'object';
+  } catch {
+    return false;
+  }
+}
+
+function isToolMarkupOnly(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (isStandaloneJsonSnippet(trimmed)) return true;
+  if (/^(TOOL:\s*.+|SUMMARY:\s*.+|ARGUMENTS:\s*|```tool_call|```|<tool_call>|<\/tool_call>)$/im.test(trimmed)) {
+    return trimmed.split(/\r?\n/).every((line) => {
+      const part = line.trim();
+      return !part
+        || /^TOOL:\s*.+$/i.test(part)
+        || /^SUMMARY:\s*.+$/i.test(part)
+        || /^ARGUMENTS:\s*$/i.test(part)
+        || part === '```tool_call'
+        || part === '```'
+        || part === '<tool_call>'
+        || part === '</tool_call>';
+    });
+  }
+  return false;
+}
+
+function stripToolCallBlocks(rawText: string) {
+  if (!rawText) return '';
+
+  let sanitized = rawText
+    .replace(/```tool_call[\s\S]*?```/gi, '')
+    .replace(/```tool_call[\s\S]*$/i, '')
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+    .replace(/<tool_call>[\s\S]*$/i, '')
+    .trim();
+
+  if (isToolMarkupOnly(sanitized)) {
+    sanitized = '';
+  }
+
+  return sanitized;
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -202,6 +366,7 @@ function parseContent(content: unknown): Pick<OpsAgentMessage, 'text' | 'reasoni
         type: type || 'tool',
         name: String(block.name ?? 'tool'),
         arguments: stringifyArguments(block.input ?? block.arguments),
+        summary: normalizeToolCallSummary(typeof block.summary === 'string' ? block.summary : undefined),
       });
       continue;
     }
@@ -234,6 +399,7 @@ function hashHistory(history: OpsAgentMessage[]) {
       type: toolCall.type,
       name: toolCall.name,
       arguments: toolCall.arguments ?? '',
+      summary: toolCall.summary ?? '',
     })),
     toolCallPhase: message.tool_call_phase ?? null,
   })));
@@ -388,7 +554,7 @@ class OpsAgentService {
           // Update the assistant message with current streamed text
           const msgIdx = conversationHistory.findIndex(m => m.id === assistantMessageId);
           if (msgIdx !== -1) {
-            conversationHistory[msgIdx].text = streamedContent;
+            conversationHistory[msgIdx].text = stripToolCallBlocks(streamedContent);
             this.localHistory.set(resolvedKey, conversationHistory);
             broadcast('ops.agent.history', { sessionKey: resolvedKey, history: conversationHistory, ts: Date.now() });
           }
@@ -398,28 +564,10 @@ class OpsAgentService {
       const choice = completion.choices[0]?.message;
 
       // Try to parse tool calls from text-based format first
-      let rawToolCalls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> = [];
+      let rawToolCalls: ParsedTextToolCall[] = [];
       const contentText = (choice?.content || streamedContent) || '';
 
-      // Parse ```tool_call ... ``` blocks for text-based tool calling
-      const toolCallRegex = /```tool_call\s*\nTOOL:\s*(\w+)\s*\nARGUMENTS:\s*\n(\{[\s\S]*?\})/g;
-      let match;
-      while ((match = toolCallRegex.exec(contentText)) !== null) {
-        const toolName = match[1];
-        try {
-          const argsObj = JSON.parse(match[2]);
-          rawToolCalls.push({
-            id: `tool-${randomUUID().slice(0, 8)}`,
-            type: 'function',
-            function: {
-              name: toolName,
-              arguments: match[2],
-            },
-          });
-        } catch (e) {
-          console.error('[ops-agent] Failed to parse tool arguments:', e);
-        }
-      }
+      rawToolCalls = parseTextToolCalls(contentText);
 
       // Fallback to native tool_calls if text parsing found nothing
       if (rawToolCalls.length === 0 && choice?.tool_calls) {
@@ -439,10 +587,9 @@ class OpsAgentService {
         // Preserve streamed content - only update if no tools were called
         // When tools are called, the model may not have produced final text
         if (!rawToolCalls || rawToolCalls.length === 0) {
-          conversationHistory[msgIdx].text = (choice?.content || '').trim() || streamedContent;
+          conversationHistory[msgIdx].text = stripToolCallBlocks((choice?.content || '').trim() || streamedContent);
         } else {
-          // For tool calls, always preserve the text (either streamed or empty for tool call display)
-          conversationHistory[msgIdx].text = streamedContent;
+          conversationHistory[msgIdx].text = stripToolCallBlocks(streamedContent || (choice?.content || '').trim());
         }
       }
 
@@ -461,6 +608,7 @@ class OpsAgentService {
         type: call.type || 'tool_call',
         name: call.function.name,
         arguments: call.function.arguments,
+        summary: call.summary,
       }));
 
       // Update the assistant message with tool calls
@@ -468,8 +616,7 @@ class OpsAgentService {
       if (assistantMessageIdx !== -1) {
         conversationHistory[assistantMessageIdx].toolCalls = rawToolCallsWithIds;
         conversationHistory[assistantMessageIdx].tool_call_phase = 'request';
-        // Preserve streamed content instead of overwriting with empty content from tool call responses
-        conversationHistory[assistantMessageIdx].text = streamedContent || (choice?.content || '').trim();
+        conversationHistory[assistantMessageIdx].text = stripToolCallBlocks(streamedContent || (choice?.content || '').trim());
       }
       // Broadcast updated history with tool calls so UI updates
       this.localHistory.set(resolvedKey, conversationHistory);
@@ -492,6 +639,7 @@ class OpsAgentService {
                 type: tc.type || 'tool_call',
                 name: tc.name,
                 arguments: tc.arguments,
+                summary: tc.summary,
               }],
               tool_call_phase: 'result',
             };
@@ -510,6 +658,7 @@ class OpsAgentService {
                 type: tc.type || 'tool_call',
                 name: tc.name,
                 arguments: tc.arguments,
+                summary: tc.summary,
               }],
               tool_call_phase: 'result',
             };
@@ -589,6 +738,11 @@ class OpsAgentService {
     // Extract output from the result
     const toolResult = result.result as Record<string, unknown> | undefined;
     if (toolResult && typeof toolResult === 'object') {
+      if ('success' in toolResult && toolResult.success === false) {
+        return typeof toolResult.error === 'string' && toolResult.error.trim()
+          ? toolResult.error
+          : `Tool ${name} failed`;
+      }
       if ('output' in toolResult && typeof toolResult.output === 'string') return toolResult.output;
       if ('content' in toolResult) return String(toolResult.content || '');
       if ('files' in toolResult && Array.isArray(toolResult.files)) return JSON.stringify(toolResult.files, null, 2);

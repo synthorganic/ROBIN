@@ -88,7 +88,7 @@ async function main() {
   });
 
   // Legacy SSE endpoint - now uses StreamableHTTP for all communication
-  app.get("/sse", async (req, res) => {
+  app.get("/sse", (_req, res) => {
     res.status(501).json({ error: "SSE transport is deprecated. Use /mcp with Streamable HTTP." });
   });
 
