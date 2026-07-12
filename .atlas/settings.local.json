@@ -163,7 +163,12 @@
       "Bash(cp \"C:\\\\Users\\\\benmc\\\\Downloads\\\\dispute_letter.docx\" ~/.robin/inertiai-ops/documents/General/dispute_letter_test.docx)",
       "Bash(node -e \"console.log\\(encodeURIComponent\\(''local:ops:main''\\)\\)\")",
       "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops' -type d -name *gateway*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git -C \"C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN\" log --oneline --all)",
+      "Bash(git -C 'C:/Users/benmc/synthorganic/Inertiai Ops/ROBIN' show bf5e6b2:server/lib/gateway-rpc.ts)",
+      "Bash(npm install:*)",
+      "Bash(find 'C:\\\\Users\\\\benmc\\\\synthorganic\\\\Inertiai Ops\\\\ROBIN' -name *.ts -o -name *.tsx)",
+      "Bash(copy:*)"
     ]
   }
 }

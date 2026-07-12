@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ROBIN MCP HTTP/SSE entrypoint — streamable transport and legacy SSE routes.
+ * ROBIN MCP HTTP/SSE entrypoint ï¿½ streamable transport and legacy SSE routes.
  *
  * Usage:
  *   node dist/http.js
@@ -10,7 +10,6 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   MCP_SERVER_NAME,
   createServer,
@@ -88,11 +87,9 @@ async function main() {
     res.status(200).json({ ok: true });
   });
 
+  // Legacy SSE endpoint - now uses StreamableHTTP for all communication
   app.get("/sse", async (req, res) => {
-    const server = createServer();
-    const transport = new SSEServerTransport();
-    await server.connect(transport);
-    await transport.handleRequest(req, res);
+    res.status(501).json({ error: "SSE transport is deprecated. Use /mcp with Streamable HTTP." });
   });
 
   app.get("/messages/:id", async (req, res) => {
@@ -110,7 +107,7 @@ async function main() {
   });
 
   const listener = app.listen(PORT, () => {
-    console.error(`ROBIN MCP (HTTP/SSE) started — port: ${PORT} — src: ${SRC_ROOT}`);
+    console.error(`ROBIN MCP (HTTP/SSE) started ï¿½ port: ${PORT} ï¿½ src: ${SRC_ROOT}`);
   });
 
   process.on("SIGTERM", () => {
