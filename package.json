@@ -65,7 +65,7 @@
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "diff-sequences": "^29.6.3",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.12",
     "dotenv": "^17.2.4",
     "graphify": "^1.0.0",
     "highlight.js": "^11.11.1",
